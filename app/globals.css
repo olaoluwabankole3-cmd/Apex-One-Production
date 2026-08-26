@@ -1,0 +1,128 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+* {
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+html,
+body {
+  background-color: #0a0a0b;
+  color: #f7f5f0;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-feature-settings: "ss01" on, "cv01" on;
+  letter-spacing: -0.01em;
+}
+
+::selection {
+  background: rgba(201, 169, 97, 0.35);
+  color: #f7f5f0;
+}
+
+/* Thin, elegant scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(201, 169, 97, 0.25);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(201, 169, 97, 0.45);
+}
+
+/* Glass panel base */
+.glass-panel {
+  background: linear-gradient(180deg, rgba(28, 28, 34, 0.72) 0%, rgba(20, 20, 24, 0.72) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.glass-panel-hover {
+  transition: border-color 0.35s ease, transform 0.35s ease, box-shadow 0.35s ease;
+}
+
+.glass-panel-hover:hover {
+  border-color: rgba(201, 169, 97, 0.35);
+  box-shadow: 0 0 40px -12px rgba(201, 169, 97, 0.25);
+}
+
+.text-gradient-gold {
+  background-image: linear-gradient(135deg, #e8cd8a 0%, #c9a961 55%, #8a7440 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Focus visibility for accessibility */
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid #c9a961;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Custom elegant styling for react-markdown inside chat messages */
+.markdown-body p {
+  margin-bottom: 0.75rem;
+}
+.markdown-body p:last-child {
+  margin-bottom: 0;
+}
+.markdown-body ul, .markdown-body ol {
+  margin-left: 1.25rem;
+  margin-bottom: 0.75rem;
+  list-style-type: decimal;
+}
+.markdown-body ul {
+  list-style-type: disc;
+}
+.markdown-body li {
+  margin-bottom: 0.25rem;
+}
+.markdown-body strong {
+  color: #c9a961;
+  font-weight: 600;
+}
+
+@keyframes typing-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

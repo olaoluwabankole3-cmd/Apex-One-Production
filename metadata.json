@@ -1,0 +1,8 @@
+{
+  "name": "Backend Test APEX ONE OS Template",
+  "description": "APEX ONE — Enterprise Intelligence Operating System with multi-tenant backend architecture, tenant isolation, value discovery, and execution engines.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
