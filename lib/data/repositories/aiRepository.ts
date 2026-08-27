@@ -20,7 +20,7 @@ export class ApiAIRepository implements AIRepository {
   async ask(prompt: string): Promise<string> {
     try {
       const res = await apiClient.post<{ success: boolean; data?: { text?: string; response?: string }; text?: string }>("/api/v1/ai/chat", {
-        message: prompt,
+        prompt,
       });
       const responseText = res?.data?.text || res?.data?.response || res?.text;
       if (responseText) return responseText;

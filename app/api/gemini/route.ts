@@ -51,14 +51,7 @@ export async function POST(req: NextRequest) {
       timestamp: new Date().toISOString(),
     });
 
-    let ai;
-    try {
-      ai = getAiClient();
-    } catch {
-      return NextResponse.json({
-        text: `The AI Intelligence Engine for **${orgName}** is initialized. Monitored Accounts: ${customers.length} (Total ARR: ${currency}${totalArr.toLocaleString()}), Active Identified Opportunities: ${opps.length} (Total: ${currency}${totalOpps.toLocaleString()}). To enable real-time generative responses, ensure \`GEMINI_API_KEY\` is configured in your environment settings.`,
-      });
-    }
+    const ai = getAiClient();
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
@@ -85,7 +78,7 @@ When replying to queries about executive intelligence, financial analysis, audit
     }
     console.error("Gemini API error:", error);
     return NextResponse.json(
-      { error: "An error occurred during generative intelligence execution.", code: "INTERNAL_ERROR" },
+      { error: error?.message || "An error occurred during generative intelligence execution.", code: "INTERNAL_ERROR" },
       { status: 500 }
     );
   }

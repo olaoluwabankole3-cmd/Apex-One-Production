@@ -61,52 +61,42 @@ function mapRecordToUnifiedCustomer(c: CustomerRecord): UnifiedCustomer {
     contactName: c.contactName,
     contactRole: c.contactRole,
     contactEmail: c.contactEmail,
-    industry: (c as any).industry || "Enterprise",
-    growthYoY: 0,
-    engagementLevel: c.healthScore,
-    contractStatus: "Active",
-    supportActivity: "Not available",
-    supportTickets: 0,
-    paymentBehavior: "Not available",
-    paymentStatus: "standard",
-    riskLevel: isAtRisk ? "At Risk" : "Healthy",
-    riskScore: Math.max(0, 100 - c.healthScore),
-    expansionPotential: "Low",
-    potentialArrNaira: arrNaira,
-    opportunityNaira: 0,
-    opportunityReason: "Not available",
-    riskReasons: isAtRisk ? ["Account health score below target threshold"] : [],
-    aiInsight: isAtRisk ? "Account health score is below the target threshold." : "",
-    recommendedAction: isAtRisk ? "Review account health" : "No action required",
+    industry: (c as any).industry ?? null,
+    growthYoY: (c as any).growthYoY ?? 0,
+    engagementLevel: (c as any).engagementLevel ?? c.healthScore,
+    contractStatus: (c as any).contractStatus ?? null,
+    supportActivity: (c as any).supportActivity ?? null,
+    supportTickets: (c as any).supportTickets ?? 0,
+    paymentBehavior: (c as any).paymentBehavior ?? null,
+    paymentStatus: (c as any).paymentStatus ?? "standard",
+    riskLevel: (c as any).riskLevel ?? (isAtRisk ? "At Risk" : "Healthy"),
+    riskScore: (c as any).riskScore ?? Math.max(0, 100 - c.healthScore),
+    expansionPotential: (c as any).expansionPotential ?? null,
+    potentialArrNaira: (c as any).potentialArrNaira ?? arrNaira,
+    opportunityNaira: (c as any).opportunityNaira ?? 0,
+    opportunityReason: (c as any).opportunityReason ?? null,
+    riskReasons: (c as any).riskReasons ?? [],
+    aiInsight: (c as any).aiInsight ?? null,
+    recommendedAction: (c as any).recommendedAction ?? null,
     tags: c.tags || [],
   };
 }
 
 export class ApiCustomerRepository implements CustomerRepository {
   async getCustomers(organizationId?: string): Promise<Customer[]> {
-    try {
-      const res = await apiClient.get<{ success: boolean; data: CustomerRecord[] }>("/api/v1/customers");
-      if (res && Array.isArray(res.data)) {
-        return res.data.map(mapRecordToCustomer);
-      }
-      return [];
-    } catch (err) {
-      console.error("Failed to fetch customers from API:", err);
-      return [];
+    const res = await apiClient.get<{ success: boolean; data: CustomerRecord[] }>("/api/v1/customers");
+    if (res && Array.isArray(res.data)) {
+      return res.data.map(mapRecordToCustomer);
     }
+    return [];
   }
 
   async getUnifiedCustomers(organizationId?: string): Promise<UnifiedCustomer[]> {
-    try {
-      const res = await apiClient.get<{ success: boolean; data: CustomerRecord[] }>("/api/v1/customers");
-      if (res && Array.isArray(res.data)) {
-        return res.data.map(mapRecordToUnifiedCustomer);
-      }
-      return [];
-    } catch (err) {
-      console.error("Failed to fetch unified customers from API:", err);
-      return [];
+    const res = await apiClient.get<{ success: boolean; data: CustomerRecord[] }>("/api/v1/customers");
+    if (res && Array.isArray(res.data)) {
+      return res.data.map(mapRecordToUnifiedCustomer);
     }
+    return [];
   }
 
   async getRelationshipHistory(customerId?: string): Promise<Record<string, RelationshipEvent[]>> {
@@ -121,10 +111,11 @@ export class ApiCustomerRepository implements CustomerRepository {
         return mapRecordToCustomer(res.data);
       }
       return undefined;
-    } catch (err) {
-      console.error(`Failed to fetch customer ${id} from API:`, err);
-      const list = await this.getCustomers();
-      return list.find(c => c.id === id);
+    } catch (err: any) {
+      if (err?.status === 404 || err?.message?.includes("404") || err?.message?.toLowerCase().includes("not found")) {
+        return undefined;
+      }
+      throw err;
     }
   }
 
@@ -135,10 +126,11 @@ export class ApiCustomerRepository implements CustomerRepository {
         return mapRecordToUnifiedCustomer(res.data);
       }
       return undefined;
-    } catch (err) {
-      console.error(`Failed to fetch unified customer ${id} from API:`, err);
-      const list = await this.getUnifiedCustomers();
-      return list.find(c => c.id === id);
+    } catch (err: any) {
+      if (err?.status === 404 || err?.message?.includes("404") || err?.message?.toLowerCase().includes("not found")) {
+        return undefined;
+      }
+      throw err;
     }
   }
 
@@ -172,7 +164,7 @@ export class ApiCustomerRepository implements CustomerRepository {
         subsidiary: c.subsidiary,
         arr: c.arr,
         riskScore: Math.max(0, 100 - c.healthScore),
-        reason: "Customer health score below baseline threshold",
+        reason: c.status === "at-risk" ? "Account flagged as at-risk" : "Health score below 70",
       }));
   }
 

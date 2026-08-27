@@ -412,23 +412,23 @@ export interface UnifiedCustomer {
   contactName: string;
   contactRole: string;
   contactEmail: string;
-  industry: string;
+  industry?: string | null;
   growthYoY: number;
   engagementLevel: number;
-  contractStatus: string;
-  supportActivity: string;
+  contractStatus?: string | null;
+  supportActivity?: string | null;
   supportTickets: number;
-  paymentBehavior: string;
+  paymentBehavior?: string | null;
   paymentStatus: "pristine" | "standard" | "delayed";
   riskLevel: string;
   riskScore: number;
-  expansionPotential: "High" | "Medium" | "Low";
+  expansionPotential?: "High" | "Medium" | "Low" | null;
   potentialArrNaira: number;
   opportunityNaira: number;
-  opportunityReason: string;
+  opportunityReason?: string | null;
   riskReasons: string[];
-  aiInsight: string;
-  recommendedAction: string;
+  aiInsight?: string | null;
+  recommendedAction?: string | null;
   tags?: string[];
 }
 

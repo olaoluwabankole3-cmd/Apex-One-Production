@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import HealthRing from "./HealthRing";
 import CustomersHeader from "./CustomersHeader";
-import { customerRepository } from "@/lib/data/repositories";
+import { customerRepository, aiRepository } from "@/lib/data/repositories";
 import { UnifiedCustomer, RelationshipEvent } from "@/lib/types";
 
 export default function CustomersWorkspace() {
@@ -108,47 +108,65 @@ export default function CustomersWorkspace() {
 
   // Portfolio level answers to our custom questions
   const auditFeedback = useMemo(() => {
+    if (!currentCustomers.length) return null;
     switch (auditFilter) {
-      case "important":
+      case "important": {
+        const strategic = currentCustomers.filter(c => c.tier === "Enterprise" || c.arrUSD >= 2.0);
+        const totalStrategicArr = strategic.reduce((sum, c) => sum + c.arrNaira, 0);
+        const totalArr = currentCustomers.reduce((sum, c) => sum + c.arrNaira, 0);
+        const pct = totalArr > 0 ? Math.round((totalStrategicArr / totalArr) * 100) : 0;
         return {
           title: "Tier-1 Strategic Customer Audit",
-          text: "AI Portfolio Audit: 3 Tier-1 institutional accounts (Ashford, Halden & Cross, Brightwell) representing 72% of portfolio ARR. Ashford & Vale displays exemplary growth dynamics (+24.8% YoY), while Halden & Cross requires urgent relationship intervention due to leadership gaps.",
+          text: `Portfolio Audit: ${strategic.length} Tier-1 account(s) represent ${pct}% of active ARR (₦${(totalStrategicArr / 1000).toFixed(2)}B total value).`,
           badge: "Strategic Core"
         };
-      case "changing":
+      }
+      case "changing": {
+        const changing = currentCustomers.filter(c => c.status === "onboarding" || c.status === "at-risk");
         return {
           title: "Sponsor & Implementation Drift Audit",
-          text: "AI Portfolio Audit: 2 accounts currently undergoing structural transition. Halden & Cross is navigating an executive sponsor exit, while Sterling & Ives is in active Phase 1 onboarding. Standard SLAs are temporarily expanded to absorb friction.",
+          text: `Portfolio Audit: ${changing.length} account(s) currently in onboarding or at-risk status requiring operational follow-up.`,
           badge: "Transitional State"
         };
-      case "risk":
+      }
+      case "risk": {
+        const atRisk = currentCustomers.filter(c => c.status === "at-risk" || c.healthScore < 70);
+        const exposure = atRisk.reduce((sum, c) => sum + c.arrNaira, 0);
         return {
           title: "Revenue & Platform Drift Exposure",
-          text: "AI Portfolio Audit: 4 accounts flagged with active risk profiles (Total Contract Exposure: ₦4.18B). Primary risk vectors are platform utilization decay (Meridian: -34% cargo nodes) and operational turnaround times (Solace Home: +2 days SLA lag).",
+          text: `Portfolio Audit: ${atRisk.length} account(s) flagged with active risk profiles (Total Exposure: ₦${(exposure / 1000).toFixed(2)}B).`,
           badge: "Exposure Risk"
         };
-      case "growing":
+      }
+      case "growing": {
+        const growing = currentCustomers.filter(c => c.growthYoY > 0);
         return {
           title: "Client Expansion & Growth Vectors",
-          text: "AI Portfolio Audit: 3 clients showcasing hyper-growth vectors. Ashford & Vale is leading with +24.8% YoY following family office expansions. Sterling & Ives exhibits high SMB elasticity (+42% YoY onboarding scaling).",
-          badge: "Hyper-Growth"
+          text: `Portfolio Audit: ${growing.length} expanding account(s) exhibiting positive growth velocity across subsidiaries.`,
+          badge: "Growth Vector"
         };
-      case "underutilized":
+      }
+      case "underutilized": {
+        const underutilized = currentCustomers.filter(c => c.healthScore < 65 || c.opportunityNaira > 0);
         return {
           title: "Latent Contract Value Audit",
-          text: "AI Portfolio Audit: Brightwell Regional Bank and Solace Home have high untapped expansion potential (Combined ₦1.14B latent value). Regional module discovery is low; requires focused technical workshops.",
+          text: `Portfolio Audit: ${underutilized.length} account(s) identify latent capacity or usage optimization opportunities.`,
           badge: "Latent Upsell"
         };
-      case "expansion":
+      }
+      case "expansion": {
+        const expansion = currentCustomers.filter(c => c.opportunityNaira > 0 || c.expansionPotential === "High");
+        const totalOpp = expansion.reduce((sum, c) => sum + (c.opportunityNaira || 0), 0);
         return {
           title: "Strategic Cross-Sell Pathways",
-          text: "AI Portfolio Audit: Total identified immediate expansion pipeline sits at ₦4,119M across the portfolio. Main drivers are Halden & Cross's automated custody transition (₦1,220M) and Ashford's global fund placement (₦1,130M).",
+          text: `Portfolio Audit: Identified pipeline sits at ₦${totalOpp.toFixed(1)}M across ${expansion.length} account(s).`,
           badge: "Expansion Primed"
         };
+      }
       default:
         return null;
     }
-  }, [auditFilter]);
+  }, [auditFilter, currentCustomers]);
 
   // Compute filtered & sorted customer list
   const processedCustomers = useMemo(() => {
@@ -159,7 +177,7 @@ export default function CustomersWorkspace() {
       const q = searchQuery.toLowerCase();
       result = result.filter(c => 
         c.name.toLowerCase().includes(q) || 
-        c.industry.toLowerCase().includes(q) ||
+        (c.industry || "").toLowerCase().includes(q) ||
         c.businessUnit.toLowerCase().includes(q) ||
         c.owner.toLowerCase().includes(q)
       );
@@ -176,7 +194,7 @@ export default function CustomersWorkspace() {
       } else if (segmentFilter === "At Risk") {
         result = result.filter(c => c.status === "at-risk");
       } else if (segmentFilter === "Dormant") {
-        result = []; // Mock has 0 dormant active accounts in active list
+        result = []; // 0 dormant accounts in active list
       }
     }
 
@@ -185,7 +203,7 @@ export default function CustomersWorkspace() {
       if (auditFilter === "important") {
         result = result.filter(c => c.tier === "Enterprise" || c.arrUSD >= 2.0);
       } else if (auditFilter === "changing") {
-        result = result.filter(c => c.status === "onboarding" || c.riskReasons.some(r => r.includes("sponsor") || r.includes("handover")));
+        result = result.filter(c => c.status === "onboarding" || (c.riskReasons || []).some(r => r.includes("sponsor") || r.includes("handover")));
       } else if (auditFilter === "risk") {
         result = result.filter(c => c.status === "at-risk");
       } else if (auditFilter === "growing") {
@@ -235,55 +253,63 @@ export default function CustomersWorkspace() {
   };
 
   // AI customer memory stream function
-  const askAITimelineMemory = () => {
+  const askAITimelineMemory = async () => {
+    if (!activeCustomer) return;
     setIsQueryingMemory(true);
     setMemoryAnswer("");
-    
-    // Simulate streaming execution analysis
-    setTimeout(() => {
-      let text = "";
-      if (activeCustomer.id === "cust-1") {
-        text = "Apex One Intelligence has analyzed Meridian Logistics Group's complete transactional and operational log over the 5-year cycle:\n\n" +
-               "• 2023: Onboarded seamlessly with a core 120-license package under Commercial Operations, representing ₦1,200M ARR.\n" +
-               "• 2024: Solidified integration with a customized hosting and API ledger addendum. Flat usage but steady contract adherence.\n" +
-               "• 2025: Successfully upsold cargo-tracking modules (+₦120M) with 100% SLA compliance. Lifetime Value projection elevated to ₦8.40B.\n" +
-               "• 2026: Platform sync drift triggered a severe 34% drop in active cargo reconciliation sessions. Support ticket escalations reached an all-time high of 18 incidents regarding billing ledger lags. Invoicing delay remains at 45 days.\n\n" +
-               "CONCLUSION: Current risk score (84) is operational, not commercial. Re-establishing the cargo-ledger synchronization is highly likely to salvage the pending 45-day contract renewal decision.";
-      } else if (activeCustomer.id === "cust-2") {
-        text = "Apex One Intelligence has synthesized Halden & Cross's capital custody history:\n\n" +
-               "• 2022: Initial onboarding under a specialized multi-tier asset allocation contract, valued at ₦2.03B ARR.\n" +
-               "• 2023: Expanded core processing platform access to 40 private-equity desk operators.\n" +
-               "• 2024: Operations audited clean with rapid real-time reporting speeds across Strategic Accounts.\n" +
-               "• 2025: Pushed custom advisory SLA tier agreements, strengthening institutional relationship.\n" +
-               "• 2026: Relationship stalled drastically in July 2026 when the primary champion exited. Invoicing is delayed 32 days due to management gaps, causing renewal decision delay.\n\n" +
-               "CONCLUSION: Client is structurally unutilized but financially healthy. A targeted briefing to Sarah Below's incoming leadership team is required to secure the ₦3,250M ARR potential.";
-      } else {
-        text = `Apex One Intelligence synthesized relationship memory for ${activeCustomer.name} across its historical anchor system. First onboarded in ${activeCustomer.since}, the account currently operates on a current value of ₦${activeCustomer.arrNaira}M ARR with a projected Lifetime Value of ₦${activeCustomer.ltvNaira}M. All historical systems show normal operational parameters outside of the identified risk-opportunity vectors.`;
-      }
+
+    try {
+      const text = await aiRepository.ask(
+        `Synthesize relationship memory for ${activeCustomer.name} (${activeCustomer.businessUnit}, ARR: ₦${activeCustomer.arrNaira}M, Status: ${activeCustomer.status}, Health Score: ${activeCustomer.healthScore}%). Summarize historical milestones and operational posture.`
+      );
       setMemoryAnswer(text);
+    } catch (err: any) {
+      setMemoryAnswer(err?.message || "AI intelligence service is currently unavailable.");
+    } finally {
       setIsQueryingMemory(false);
-    }, 1200);
+    }
   };
 
-  // Define static coordinates for interactive intelligence map nodes (within 550x450 coordinate system)
-  const mapCoordinates = {
-    center: { x: 275, y: 220, label: "Apex Sync Hub" },
-    businessUnits: {
+  // Define dynamic coordinates for interactive intelligence map nodes (within 550x450 coordinate system)
+  const mapCoordinates = useMemo(() => {
+    const center = { x: 275, y: 220, label: "Apex Sync Hub" };
+    const businessUnits = {
       "Enterprise Operations": { x: 140, y: 130, color: "#eab308" },
       "Strategic Accounts": { x: 410, y: 130, color: "#eab308" },
       "Commercial Operations": { x: 140, y: 310, color: "#eab308" },
       "Customer Operations": { x: 410, y: 310, color: "#eab308" }
-    },
-    customers: [
-      { id: "cust-4", unit: "Enterprise Operations", x: 40, y: 70 },
-      { id: "cust-6", unit: "Enterprise Operations", x: 40, y: 170 },
-      { id: "cust-2", unit: "Strategic Accounts", x: 510, y: 70 },
-      { id: "cust-5", unit: "Strategic Accounts", x: 510, y: 170 },
-      { id: "cust-1", unit: "Commercial Operations", x: 40, y: 370 },
-      { id: "cust-3", unit: "Customer Operations", x: 510, y: 270 },
-      { id: "cust-7", unit: "Customer Operations", x: 510, y: 370 }
-    ]
-  };
+    };
+
+    const buPositions: Record<string, { x: number; y: number }[]> = {
+      "Enterprise Operations": [{ x: 40, y: 70 }, { x: 40, y: 170 }],
+      "Strategic Accounts": [{ x: 510, y: 70 }, { x: 510, y: 170 }],
+      "Commercial Operations": [{ x: 40, y: 310 }, { x: 40, y: 390 }],
+      "Customer Operations": [{ x: 510, y: 310 }, { x: 510, y: 390 }]
+    };
+
+    const buCounters: Record<string, number> = {
+      "Enterprise Operations": 0,
+      "Strategic Accounts": 0,
+      "Commercial Operations": 0,
+      "Customer Operations": 0
+    };
+
+    const customers = currentCustomers.map((c) => {
+      const bu = c.businessUnit in businessUnits ? c.businessUnit : "Strategic Accounts";
+      const idx = buCounters[bu] || 0;
+      buCounters[bu] = idx + 1;
+      const positions = buPositions[bu] || [{ x: 40, y: 70 }];
+      const pos = positions[idx % positions.length] || { x: 40, y: 70 };
+      return {
+        id: c.id,
+        unit: bu,
+        x: pos.x,
+        y: pos.y + (Math.floor(idx / positions.length) * 20),
+      };
+    });
+
+    return { center, businessUnits, customers };
+  }, [currentCustomers]);
 
   return (
     <div className="space-y-6">
@@ -853,7 +879,7 @@ export default function CustomersWorkspace() {
                             <div>
                               <span className="text-[10px] font-mono text-gold/60 uppercase tracking-wider">{c.tier} · {c.businessUnit}</span>
                               <h4 className="font-display text-[14px] font-bold text-ivory mt-0.5">{c.name}</h4>
-                              <p className="text-[11px] text-ivory/40">{c.industry}</p>
+                              <p className="text-[11px] text-ivory/40">{c.industry || "Not available"}</p>
                             </div>
                             <span className={`rounded-full px-2 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider ${
                               c.status === "active" 
@@ -904,7 +930,7 @@ export default function CustomersWorkspace() {
 
                         <div className="mt-4 pt-3 border-t border-white/[0.05] flex items-center justify-between text-[10.5px]">
                           <span className="text-ivory/40">
-                            Contract: <span className="text-ivory/80 font-semibold">{c.contractStatus}</span>
+                            Contract: <span className="text-ivory/80 font-semibold">{c.contractStatus || "Not available"}</span>
                           </span>
                           <span className="text-gold/80 font-mono">
                             Owner: {c.owner}
@@ -938,7 +964,7 @@ export default function CustomersWorkspace() {
               </span>
               <div>
                 <h3 className="font-display text-[17px] font-bold text-ivory leading-tight">{activeCustomer.name}</h3>
-                <p className="text-[11.5px] text-ivory/40 mt-0.5">{activeCustomer.industry} · Client since {activeCustomer.since}</p>
+                <p className="text-[11.5px] text-ivory/40 mt-0.5">{activeCustomer.industry || "Not available"} · Client since {activeCustomer.since}</p>
                 
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <span className="rounded-full bg-white/[0.03] border border-white/[0.08] px-2 py-0.5 text-[9.5px] text-ivory/55 font-mono">
@@ -1159,7 +1185,7 @@ export default function CustomersWorkspace() {
 
             <div className="mt-3">
               <p className="text-[10px] font-mono text-gold uppercase tracking-wider font-semibold">Strategic Expansion Pathway:</p>
-              <p className="text-[11.5px] text-ivory/70 leading-relaxed font-mono mt-1">{activeCustomer.opportunityReason}</p>
+              <p className="text-[11.5px] text-ivory/70 leading-relaxed font-mono mt-1">{activeCustomer.opportunityReason || "No expansion pathway identified"}</p>
             </div>
           </div>
 
@@ -1173,12 +1199,16 @@ export default function CustomersWorkspace() {
             </div>
 
             <div className="mt-3.5 space-y-2">
-              {activeCustomer.riskReasons.map((reason, idx) => (
-                <div key={idx} className="flex gap-2 items-start text-[11.5px] font-mono text-ivory/70 leading-relaxed">
-                  <span className={`shrink-0 mt-1 h-1.5 w-1.5 rounded-full ${activeCustomer.status === "at-risk" ? "bg-crimson" : "bg-emerald"}`} />
-                  <span>{reason}</span>
-                </div>
-              ))}
+              {activeCustomer.riskReasons && activeCustomer.riskReasons.length > 0 ? (
+                activeCustomer.riskReasons.map((reason, idx) => (
+                  <div key={idx} className="flex gap-2 items-start text-[11.5px] font-mono text-ivory/70 leading-relaxed">
+                    <span className={`shrink-0 mt-1 h-1.5 w-1.5 rounded-full ${activeCustomer.status === "at-risk" ? "bg-crimson" : "bg-emerald"}`} />
+                    <span>{reason}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-[11.5px] font-mono text-ivory/40 italic">No specific risk motifs recorded</p>
+              )}
             </div>
           </div>
 
@@ -1192,16 +1222,20 @@ export default function CustomersWorkspace() {
             </div>
 
             <p className="mt-2.5 text-[12.5px] text-ivory/80 leading-relaxed font-mono">
-              &ldquo;{activeCustomer?.aiInsight}&rdquo;
+              {activeCustomer?.aiInsight ? (
+                <span>&ldquo;{activeCustomer.aiInsight}&rdquo;</span>
+              ) : (
+                <span className="text-ivory/50 italic">No automated AI recommendation currently logged.</span>
+              )}
             </p>
 
             <div className="mt-4 pt-3.5 border-t border-gold/20 flex flex-col gap-2">
               <span className="text-[9.5px] font-mono uppercase text-gold/60 tracking-wider">Deploy Actionable RM Directive:</span>
               <button 
-                onClick={() => triggerHud(`${activeCustomer?.name}: ${activeCustomer?.recommendedAction}`)}
+                onClick={() => triggerHud(`${activeCustomer?.name}: ${activeCustomer?.recommendedAction || "Review account status"}`)}
                 className="w-full flex items-center justify-between rounded-lg bg-gold/10 hover:bg-gold/20 border border-gold/35 px-3 py-2 text-[12px] font-mono text-gold font-bold transition-colors"
               >
-                <span>{activeCustomer?.recommendedAction}</span>
+                <span>{activeCustomer?.recommendedAction || "No active directive"}</span>
                 <ChevronRight size={14} />
               </button>
             </div>
