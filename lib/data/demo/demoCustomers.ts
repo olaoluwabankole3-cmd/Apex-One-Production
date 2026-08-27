@@ -15,20 +15,20 @@ export interface UnifiedCustomer {
   contactRole: string;
   contactEmail: string;
   industry?: string | null;
-  growthYoY: number; // percentage
-  engagementLevel: number; // percentage
+  growthYoY?: number | null; // percentage
+  engagementLevel?: number | null; // percentage
   contractStatus?: string | null;
   supportActivity?: string | null;
-  supportTickets: number;
+  supportTickets?: number | null;
   paymentBehavior?: string | null;
-  paymentStatus: "pristine" | "standard" | "delayed";
-  riskLevel: string;
-  riskScore: number; // 0 - 100
+  paymentStatus?: "pristine" | "standard" | "delayed" | null;
+  riskLevel?: string | null;
+  riskScore?: number | null; // 0 - 100
   expansionPotential?: "High" | "Medium" | "Low" | null;
-  potentialArrNaira: number;
-  opportunityNaira: number;
+  potentialArrNaira?: number | null;
+  opportunityNaira?: number | null;
   opportunityReason?: string | null;
-  riskReasons: string[];
+  riskReasons?: string[];
   aiInsight?: string | null;
   recommendedAction?: string | null;
   tags?: string[];

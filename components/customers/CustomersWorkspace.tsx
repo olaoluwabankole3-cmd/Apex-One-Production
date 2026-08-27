@@ -139,7 +139,7 @@ export default function CustomersWorkspace() {
         };
       }
       case "growing": {
-        const growing = currentCustomers.filter(c => c.growthYoY > 0);
+        const growing = currentCustomers.filter(c => c.growthYoY !== null && c.growthYoY !== undefined && c.growthYoY > 0);
         return {
           title: "Client Expansion & Growth Vectors",
           text: `Portfolio Audit: ${growing.length} expanding account(s) exhibiting positive growth velocity across subsidiaries.`,
@@ -147,7 +147,7 @@ export default function CustomersWorkspace() {
         };
       }
       case "underutilized": {
-        const underutilized = currentCustomers.filter(c => c.healthScore < 65 || c.opportunityNaira > 0);
+        const underutilized = currentCustomers.filter(c => c.healthScore < 65 || (c.opportunityNaira !== null && c.opportunityNaira !== undefined && c.opportunityNaira > 0));
         return {
           title: "Latent Contract Value Audit",
           text: `Portfolio Audit: ${underutilized.length} account(s) identify latent capacity or usage optimization opportunities.`,
@@ -155,7 +155,7 @@ export default function CustomersWorkspace() {
         };
       }
       case "expansion": {
-        const expansion = currentCustomers.filter(c => c.opportunityNaira > 0 || c.expansionPotential === "High");
+        const expansion = currentCustomers.filter(c => (c.opportunityNaira !== null && c.opportunityNaira !== undefined && c.opportunityNaira > 0) || c.expansionPotential === "High");
         const totalOpp = expansion.reduce((sum, c) => sum + (c.opportunityNaira || 0), 0);
         return {
           title: "Strategic Cross-Sell Pathways",
@@ -188,9 +188,9 @@ export default function CustomersWorkspace() {
       if (segmentFilter === "Strategic") {
         result = result.filter(c => c.tier === "Enterprise" && c.status !== "at-risk");
       } else if (segmentFilter === "Growth") {
-        result = result.filter(c => c.growthYoY > 15 && c.status !== "at-risk");
+        result = result.filter(c => c.growthYoY !== null && c.growthYoY !== undefined && c.growthYoY > 15 && c.status !== "at-risk");
       } else if (segmentFilter === "Stable") {
-        result = result.filter(c => c.status === "active" && c.growthYoY <= 15);
+        result = result.filter(c => c.status === "active" && (c.growthYoY === null || c.growthYoY === undefined || c.growthYoY <= 15));
       } else if (segmentFilter === "At Risk") {
         result = result.filter(c => c.status === "at-risk");
       } else if (segmentFilter === "Dormant") {
@@ -207,22 +207,22 @@ export default function CustomersWorkspace() {
       } else if (auditFilter === "risk") {
         result = result.filter(c => c.status === "at-risk");
       } else if (auditFilter === "growing") {
-        result = result.filter(c => c.growthYoY > 10);
+        result = result.filter(c => c.growthYoY !== null && c.growthYoY !== undefined && c.growthYoY > 10);
       } else if (auditFilter === "underutilized") {
-        result = result.filter(c => c.engagementLevel < 65 || c.opportunityNaira > 800);
+        result = result.filter(c => (c.engagementLevel !== null && c.engagementLevel !== undefined && c.engagementLevel < 65) || (c.opportunityNaira !== null && c.opportunityNaira !== undefined && c.opportunityNaira > 800));
       } else if (auditFilter === "expansion") {
-        result = result.filter(c => c.expansionPotential === "High" || c.opportunityNaira > 500);
+        result = result.filter(c => c.expansionPotential === "High" || (c.opportunityNaira !== null && c.opportunityNaira !== undefined && c.opportunityNaira > 500));
       }
     }
 
     // Sort the resulting list
     result.sort((a, b) => {
       if (sortField === "revenue") return b.arrNaira - a.arrNaira;
-      if (sortField === "growth") return b.growthYoY - a.growthYoY;
-      if (sortField === "risk") return b.riskScore - a.riskScore;
+      if (sortField === "growth") return (b.growthYoY ?? -Infinity) - (a.growthYoY ?? -Infinity);
+      if (sortField === "risk") return (b.riskScore ?? -Infinity) - (a.riskScore ?? -Infinity);
       if (sortField === "ltv") return b.ltvNaira - a.ltvNaira;
-      if (sortField === "opportunity") return b.opportunityNaira - a.opportunityNaira;
-      if (sortField === "engagement") return b.engagementLevel - a.engagementLevel;
+      if (sortField === "opportunity") return (b.opportunityNaira ?? 0) - (a.opportunityNaira ?? 0);
+      if (sortField === "engagement") return (b.engagementLevel ?? 0) - (a.engagementLevel ?? 0);
       return 0;
     });
 
@@ -472,10 +472,10 @@ export default function CustomersWorkspace() {
             </div>
             <div className="mt-3">
               <p className="font-display text-[16px] font-bold text-ivory">
-                {currentCustomers.length ? Math.round((currentCustomers.filter(c => c.growthYoY > 0).length / currentCustomers.length) * 100) : 0}%
+                {currentCustomers.length ? Math.round((currentCustomers.filter(c => c.growthYoY !== null && c.growthYoY !== undefined && c.growthYoY > 0).length / currentCustomers.length) * 100) : 0}%
               </p>
               <p className="text-[9.5px] text-ivory/40">
-                {currentCustomers.filter(c => c.growthYoY > 0).length} Expanding Accounts
+                {currentCustomers.filter(c => c.growthYoY !== null && c.growthYoY !== undefined && c.growthYoY > 0).length} Expanding Accounts
               </p>
             </div>
           </button>
@@ -908,22 +908,32 @@ export default function CustomersWorkspace() {
                           <div className="mt-3.5 space-y-2.5">
                             <div className="flex items-center justify-between text-[11.5px]">
                               <span className="text-ivory/45">Growth YoY:</span>
-                              <span className={`font-mono font-bold flex items-center gap-0.5 ${c.growthYoY >= 0 ? "text-emerald" : "text-crimson"}`}>
-                                {c.growthYoY >= 0 ? "+" : ""}{c.growthYoY}%
-                              </span>
+                              {c.growthYoY !== null && c.growthYoY !== undefined ? (
+                                <span className={`font-mono font-bold flex items-center gap-0.5 ${c.growthYoY >= 0 ? "text-emerald" : "text-crimson"}`}>
+                                  {c.growthYoY >= 0 ? "+" : ""}{c.growthYoY}%
+                                </span>
+                              ) : (
+                                <span className="font-mono text-ivory/40">Not available</span>
+                              )}
                             </div>
 
                             <div className="space-y-1">
                               <div className="flex items-center justify-between text-[11.5px]">
                                 <span className="text-ivory/45">Engagement Level:</span>
-                                <span className="font-mono text-ivory/80 font-bold">{c.engagementLevel}%</span>
+                                {c.engagementLevel !== null && c.engagementLevel !== undefined ? (
+                                  <span className="font-mono text-ivory/80 font-bold">{c.engagementLevel}%</span>
+                                ) : (
+                                  <span className="font-mono text-ivory/40">Not available</span>
+                                )}
                               </div>
-                              <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
-                                <div 
-                                  className={`h-full rounded-full ${c.engagementLevel >= 75 ? "bg-emerald" : c.engagementLevel >= 50 ? "bg-gold" : "bg-crimson"}`} 
-                                  style={{ width: `${c.engagementLevel}%` }}
-                                />
-                              </div>
+                              {c.engagementLevel !== null && c.engagementLevel !== undefined && (
+                                <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                                  <div 
+                                    className={`h-full rounded-full ${c.engagementLevel >= 75 ? "bg-emerald" : c.engagementLevel >= 50 ? "bg-gold" : "bg-crimson"}`} 
+                                    style={{ width: `${c.engagementLevel}%` }}
+                                  />
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1130,24 +1140,34 @@ export default function CustomersWorkspace() {
               <div className="space-y-1">
                 <div className="flex justify-between text-[11.5px]">
                   <span className="text-ivory/50">Relationship Engagement</span>
-                  <span className="font-mono text-ivory/80">{activeCustomer.engagementLevel}%</span>
+                  <span className="font-mono text-ivory/80">
+                    {activeCustomer.engagementLevel !== null && activeCustomer.engagementLevel !== undefined ? `${activeCustomer.engagementLevel}%` : "Not available"}
+                  </span>
                 </div>
-                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                  <div className="h-full bg-gold rounded-full" style={{ width: `${activeCustomer.engagementLevel}%` }} />
-                </div>
+                {activeCustomer.engagementLevel !== null && activeCustomer.engagementLevel !== undefined && (
+                  <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                    <div className="h-full bg-gold rounded-full" style={{ width: `${activeCustomer.engagementLevel}%` }} />
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">
                 <div className="flex justify-between text-[11.5px]">
                   <span className="text-ivory/50">Revenue YoY Growth</span>
-                  <span className="font-mono text-ivory/80">{activeCustomer.growthYoY >= 0 ? "Positive" : "Negative"} ({activeCustomer.growthYoY}%)</span>
+                  <span className="font-mono text-ivory/80">
+                    {activeCustomer.growthYoY !== null && activeCustomer.growthYoY !== undefined 
+                      ? `${activeCustomer.growthYoY >= 0 ? "Positive" : "Negative"} (${activeCustomer.growthYoY}%)` 
+                      : "Not available"}
+                  </span>
                 </div>
-                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full rounded-full ${activeCustomer.growthYoY >= 0 ? "bg-emerald" : "bg-crimson"}`} 
-                    style={{ width: `${Math.min(100, Math.max(10, activeCustomer.growthYoY + 50))}%` }} 
-                  />
-                </div>
+                {activeCustomer.growthYoY !== null && activeCustomer.growthYoY !== undefined && (
+                  <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full ${activeCustomer.growthYoY >= 0 ? "bg-emerald" : "bg-crimson"}`} 
+                      style={{ width: `${Math.min(100, Math.max(10, activeCustomer.growthYoY + 50))}%` }} 
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">
@@ -1175,11 +1195,15 @@ export default function CustomersWorkspace() {
               </div>
               <div>
                 <p className="text-[9.5px] font-mono text-ivory/40">POTENTIAL ARR</p>
-                <p className="font-display text-[14.5px] font-bold text-ivory mt-0.5">₦{activeCustomer.potentialArrNaira}M</p>
+                <p className="font-display text-[14.5px] font-bold text-ivory mt-0.5">
+                  {activeCustomer.potentialArrNaira !== null && activeCustomer.potentialArrNaira !== undefined ? `₦${activeCustomer.potentialArrNaira}M` : "—"}
+                </p>
               </div>
               <div>
                 <p className="text-[9.5px] font-mono text-ivory/40">UPSIZE PIPELINE</p>
-                <p className="font-display text-[14.5px] font-bold text-gold mt-0.5">₦{activeCustomer.opportunityNaira}M</p>
+                <p className="font-display text-[14.5px] font-bold text-gold mt-0.5">
+                  {activeCustomer.opportunityNaira !== null && activeCustomer.opportunityNaira !== undefined ? `₦${activeCustomer.opportunityNaira}M` : "—"}
+                </p>
               </div>
             </div>
 

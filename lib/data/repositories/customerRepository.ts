@@ -1,5 +1,4 @@
-import { Customer, TimelineEvent, CustomerNote, CustomerTask, CustomerMeeting, CustomerFile, AtRiskCustomer } from "@/lib/types";
-import { UnifiedCustomer, RelationshipEvent } from "@/lib/data/demo";
+import { Customer, TimelineEvent, CustomerNote, CustomerTask, CustomerMeeting, CustomerFile, AtRiskCustomer, UnifiedCustomer, RelationshipEvent } from "@/lib/types";
 import { apiClient } from "@/lib/apiClient";
 import { CustomerRecord } from "@/lib/backend/database/schema";
 
@@ -36,19 +35,32 @@ function mapRecordToCustomer(c: CustomerRecord): Customer {
     contactEmail: c.contactEmail,
     since: c.since,
     tags: c.tags || [],
+    riskScore: c.riskScore ?? null,
+    riskReason: c.riskReason ?? null,
   };
 }
 
 function mapRecordToUnifiedCustomer(c: CustomerRecord): UnifiedCustomer {
-  const isAtRisk = c.status === "at-risk" || c.healthScore < 70;
   const arrUSD = c.arr / 1000000; // in Millions USD
   const arrNaira = (c.arr * 1500) / 1000000; // in Millions NGN
   const status: UnifiedCustomer["status"] = c.status === "dormant" ? "at-risk" : c.status;
 
+  const validBusinessUnits: UnifiedCustomer["businessUnit"][] = [
+    "Enterprise Operations",
+    "Commercial Operations",
+    "Strategic Accounts",
+    "Customer Operations",
+  ];
+  const businessUnit: UnifiedCustomer["businessUnit"] = validBusinessUnits.includes(
+    c.subsidiary as UnifiedCustomer["businessUnit"]
+  )
+    ? (c.subsidiary as UnifiedCustomer["businessUnit"])
+    : "Strategic Accounts";
+
   return {
     id: c.id,
     name: c.name,
-    businessUnit: (c.subsidiary as any) || "Strategic Accounts",
+    businessUnit,
     tier: c.tier,
     status,
     healthScore: c.healthScore,
@@ -61,23 +73,23 @@ function mapRecordToUnifiedCustomer(c: CustomerRecord): UnifiedCustomer {
     contactName: c.contactName,
     contactRole: c.contactRole,
     contactEmail: c.contactEmail,
-    industry: (c as any).industry ?? null,
-    growthYoY: (c as any).growthYoY ?? 0,
-    engagementLevel: (c as any).engagementLevel ?? c.healthScore,
-    contractStatus: (c as any).contractStatus ?? null,
-    supportActivity: (c as any).supportActivity ?? null,
-    supportTickets: (c as any).supportTickets ?? 0,
-    paymentBehavior: (c as any).paymentBehavior ?? null,
-    paymentStatus: (c as any).paymentStatus ?? "standard",
-    riskLevel: (c as any).riskLevel ?? (isAtRisk ? "At Risk" : "Healthy"),
-    riskScore: (c as any).riskScore ?? Math.max(0, 100 - c.healthScore),
-    expansionPotential: (c as any).expansionPotential ?? null,
-    potentialArrNaira: (c as any).potentialArrNaira ?? arrNaira,
-    opportunityNaira: (c as any).opportunityNaira ?? 0,
-    opportunityReason: (c as any).opportunityReason ?? null,
-    riskReasons: (c as any).riskReasons ?? [],
-    aiInsight: (c as any).aiInsight ?? null,
-    recommendedAction: (c as any).recommendedAction ?? null,
+    industry: c.industry ?? null,
+    growthYoY: c.growthYoY ?? null,
+    engagementLevel: c.engagementLevel ?? null,
+    contractStatus: c.contractStatus ?? null,
+    supportActivity: c.supportActivity ?? null,
+    supportTickets: c.supportTickets ?? null,
+    paymentBehavior: c.paymentBehavior ?? null,
+    paymentStatus: c.paymentStatus ?? null,
+    riskLevel: c.riskLevel ?? null,
+    riskScore: c.riskScore ?? null,
+    expansionPotential: c.expansionPotential ?? null,
+    potentialArrNaira: c.potentialArrNaira ?? null,
+    opportunityNaira: c.opportunityNaira ?? null,
+    opportunityReason: c.opportunityReason ?? null,
+    riskReasons: c.riskReasons ?? [],
+    aiInsight: c.aiInsight ?? null,
+    recommendedAction: c.recommendedAction ?? null,
     tags: c.tags || [],
   };
 }
@@ -163,8 +175,14 @@ export class ApiCustomerRepository implements CustomerRepository {
         name: c.name,
         subsidiary: c.subsidiary,
         arr: c.arr,
-        riskScore: Math.max(0, 100 - c.healthScore),
-        reason: c.status === "at-risk" ? "Account flagged as at-risk" : "Health score below 70",
+        riskScore: c.riskScore ?? null,
+        reason: c.riskReason ?? null,
+        filterMatchReason:
+          c.status === "at-risk"
+            ? "Account status flagged at-risk"
+            : c.healthScore < 70
+            ? "Health score below 70 threshold"
+            : undefined,
       }));
   }
 

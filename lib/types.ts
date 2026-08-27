@@ -81,8 +81,9 @@ export interface AtRiskCustomer {
   name: string;
   subsidiary: string;
   arr: number;
-  riskScore: number;
-  reason: string;
+  riskScore?: number | null;
+  reason?: string | null;
+  filterMatchReason?: string;
 }
 
 export interface ReportSection {
@@ -110,6 +111,8 @@ export interface Customer {
   contactEmail: string;
   since: string;
   tags: string[];
+  riskScore?: number | null;
+  riskReason?: string | null;
 }
 
 export interface TimelineEvent {
@@ -413,20 +416,20 @@ export interface UnifiedCustomer {
   contactRole: string;
   contactEmail: string;
   industry?: string | null;
-  growthYoY: number;
-  engagementLevel: number;
+  growthYoY?: number | null;
+  engagementLevel?: number | null;
   contractStatus?: string | null;
   supportActivity?: string | null;
-  supportTickets: number;
+  supportTickets?: number | null;
   paymentBehavior?: string | null;
-  paymentStatus: "pristine" | "standard" | "delayed";
-  riskLevel: string;
-  riskScore: number;
+  paymentStatus?: "pristine" | "standard" | "delayed" | null;
+  riskLevel?: string | null;
+  riskScore?: number | null;
   expansionPotential?: "High" | "Medium" | "Low" | null;
-  potentialArrNaira: number;
-  opportunityNaira: number;
+  potentialArrNaira?: number | null;
+  opportunityNaira?: number | null;
   opportunityReason?: string | null;
-  riskReasons: string[];
+  riskReasons?: string[];
   aiInsight?: string | null;
   recommendedAction?: string | null;
   tags?: string[];

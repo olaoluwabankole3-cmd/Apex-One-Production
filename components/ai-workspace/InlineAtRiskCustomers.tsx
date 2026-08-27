@@ -7,7 +7,8 @@ import clsx from "clsx";
 import { customerRepository } from "@/lib/data/repositories";
 import { AtRiskCustomer } from "@/lib/types";
 
-function riskColor(score: number) {
+function riskColor(score?: number | null) {
+  if (score === null || score === undefined) return "text-ivory/40 bg-white/[0.04] border-white/10";
   if (score >= 75) return "text-crimson bg-crimson/10 border-crimson/25";
   if (score >= 60) return "text-amber bg-amber/10 border-amber/25";
   return "text-emerald bg-emerald/10 border-emerald/25";
@@ -69,7 +70,11 @@ export default function InlineAtRiskCustomers() {
               <p className="mt-0.5 text-[11.5px] text-ivory/40">
                 {c.subsidiary} · ${(c.arr / 1_000_000).toFixed(2)}M ARR
               </p>
-              <p className="mt-1 text-[11.5px] text-ivory/50">{c.reason}</p>
+              {c.reason ? (
+                <p className="mt-1 text-[11.5px] text-ivory/50">{c.reason}</p>
+              ) : c.filterMatchReason ? (
+                <p className="mt-1 text-[11.5px] text-ivory/40 italic">{c.filterMatchReason}</p>
+              ) : null}
             </div>
             <span
               className={clsx(
@@ -77,7 +82,7 @@ export default function InlineAtRiskCustomers() {
                 riskColor(c.riskScore)
               )}
             >
-              {c.riskScore}
+              {c.riskScore !== null && c.riskScore !== undefined ? c.riskScore : "—"}
             </span>
           </div>
         ))
