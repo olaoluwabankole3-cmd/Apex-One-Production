@@ -67,6 +67,20 @@ export function hashPassword(password: string, existingSalt?: string): PasswordH
 }
 
 /**
+ * Pre-computed dummy salt and hash used to normalize execution time
+ * for non-existent or invalid accounts, eliminating user enumeration timing side channels.
+ */
+const DUMMY_SALT = "0123456789abcdef0123456789abcdef";
+const DUMMY_HASH = crypto
+  .pbkdf2Sync("ApexOneDummyPasswordNormalizationSalt", DUMMY_SALT, PBKDF2_ITERATIONS, PBKDF2_KEYLEN, PBKDF2_DIGEST)
+  .toString("hex");
+
+export function dummyPasswordVerification(password: string): boolean {
+  verifyPassword(password || "dummy_fallback_input", DUMMY_HASH, DUMMY_SALT);
+  return false;
+}
+
+/**
  * Constant-time verification of a password against a stored salt and hash.
  * Prevents timing-attack side channels.
  * Returns false on missing, empty, or invalid inputs.

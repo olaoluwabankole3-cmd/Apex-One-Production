@@ -4,9 +4,16 @@
 
 import { db } from "../../database/store";
 import { defaultAuthProvider, defaultSessionStore } from "./authProvider";
+import { defaultAuthRateLimiter } from "./rateLimiter";
 import { createSessionToken, revokeSession, AuthSession } from "../../core/security";
 import { hashPassword, verifyPassword, validatePasswordPolicy } from "../../core/crypto";
-import { TenantContext, UnauthorizedError, NotFoundError, ForbiddenError, ValidationError } from "../../core/errors";
+import {
+  TenantContext,
+  UnauthorizedError,
+  NotFoundError,
+  ForbiddenError,
+  ValidationError,
+} from "../../core/errors";
 
 export interface LoginDto {
   email: string;
@@ -20,11 +27,21 @@ export interface ChangePasswordDto {
   newPassword: string;
 }
 
+export interface LoginOptions {
+  ipAddress?: string;
+  userAgent?: string;
+}
+
 export class AuthService {
   /**
-   * Authenticate a user, verify organization membership, and issue a tenant-scoped session token.
+   * Authenticate a user, verify organization membership, enforce rate limiting,
+   * and issue a tenant-scoped session token.
    */
-  public async login(dto: LoginDto, requestId: string): Promise<{ session: AuthSession; availableOrganizations: any[] }> {
+  public async login(
+    dto: LoginDto,
+    requestId: string,
+    options?: LoginOptions
+  ): Promise<{ session: AuthSession; availableOrganizations: any[] }> {
     if (!dto.email || typeof dto.email !== "string" || dto.email.trim().length === 0) {
       throw new ValidationError("Email address is required");
     }
@@ -33,12 +50,42 @@ export class AuthService {
       throw new ValidationError("Password is required");
     }
 
+    const normalizedEmail = dto.email.trim().toLowerCase();
+    const rateLimitKey = options?.ipAddress ? `${options.ipAddress}:${normalizedEmail}` : normalizedEmail;
+
+    // 1. Enforce rate limiting to protect against brute-force attacks
+    const rateLimitResult = await defaultAuthRateLimiter.isRateLimited(rateLimitKey);
+    if (rateLimitResult.limited) {
+      db.recordAuditLog({
+        organizationId: "system",
+        actorId: "unauthenticated",
+        actorEmail: normalizedEmail.substring(0, 80),
+        action: "auth:rate_limited",
+        resource: "Session",
+        resourceId: "rate_limit_lockout",
+        requestId,
+        status: "denied",
+        metadata: {
+          retryAfterSeconds: rateLimitResult.retryAfterSeconds,
+          totalAttempts: rateLimitResult.totalAttempts,
+          ip: options?.ipAddress,
+        },
+      });
+      throw new UnauthorizedError(
+        `Too many failed login attempts. Please try again in ${rateLimitResult.retryAfterSeconds ?? 900} seconds.`
+      );
+    }
+
     try {
       const authResult = await defaultAuthProvider.authenticateCredentials(
-        dto.email,
+        normalizedEmail,
         dto.password,
-        dto.targetOrganizationId
+        dto.targetOrganizationId,
+        options
       );
+
+      // Reset rate limiter on successful authentication
+      await defaultAuthRateLimiter.recordAttempt(rateLimitKey, true);
 
       db.recordAuditLog({
         organizationId: authResult.session.organizationId,
@@ -49,28 +96,36 @@ export class AuthService {
         resourceId: authResult.session.token.substring(0, 10) + "...",
         requestId,
         status: "success",
-        metadata: { role: authResult.session.role, organization: authResult.session.organizationName },
+        metadata: {
+          role: authResult.session.role,
+          organization: authResult.session.organizationName,
+          ip: options?.ipAddress,
+        },
       });
 
       return authResult;
     } catch (err: any) {
+      // Record failed attempt for rate limiting
+      await defaultAuthRateLimiter.recordAttempt(rateLimitKey, false);
+
       db.recordAuditLog({
         organizationId: "system",
         actorId: "unauthenticated",
-        actorEmail: (dto.email || "").substring(0, 80),
+        actorEmail: normalizedEmail.substring(0, 80),
         action: "auth:login_failed",
         resource: "Session",
         resourceId: "login_attempt",
         requestId,
         status: "denied",
-        metadata: { reason: "Authentication rejected" },
+        metadata: { reason: "Authentication rejected", ip: options?.ipAddress },
       });
       throw err;
     }
   }
 
   /**
-   * Change user password with cryptographic verification of current password and policy enforcement.
+   * Change user password with cryptographic verification of current password,
+   * enterprise policy validation, and complete invalidation of prior active sessions.
    */
   public async changePassword(dto: ChangePasswordDto, ctx: TenantContext): Promise<boolean> {
     if (!dto.userId || !dto.currentPassword || !dto.newPassword) {
@@ -108,7 +163,7 @@ export class AuthService {
     user.passwordSalt = newCredentials.salt;
     db.users.set(user.id, user);
 
-    // Invalidate all active sessions for the user to force re-authentication
+    // Invalidate all active sessions for the user to force re-authentication across all devices
     await defaultSessionStore.revokeUserSessions(user.id);
 
     db.recordAuditLog({
@@ -190,21 +245,22 @@ export class AuthService {
     return session;
   }
 
-  public async logout(token: string, ctx: TenantContext): Promise<boolean> {
+  public async logout(token: string, ctx?: TenantContext): Promise<boolean> {
     await revokeSession(token);
-    db.recordAuditLog({
-      organizationId: ctx.organizationId,
-      actorId: ctx.userId,
-      actorEmail: ctx.userEmail,
-      action: "auth:logout",
-      resource: "Session",
-      resourceId: token.substring(0, 10) + "...",
-      requestId: ctx.requestId,
-      status: "success",
-    });
+    if (ctx) {
+      db.recordAuditLog({
+        organizationId: ctx.organizationId,
+        actorId: ctx.userId,
+        actorEmail: ctx.userEmail,
+        action: "auth:logout",
+        resource: "Session",
+        resourceId: token.substring(0, 10) + "...",
+        requestId: ctx.requestId,
+        status: "success",
+      });
+    }
     return true;
   }
 }
 
 export const authService = new AuthService();
-

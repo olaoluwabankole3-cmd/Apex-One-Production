@@ -30,7 +30,7 @@ import {
 import HealthRing from "./HealthRing";
 import CustomersHeader from "./CustomersHeader";
 import { customerRepository } from "@/lib/data/repositories";
-import { UnifiedCustomer, RelationshipEvent } from "@/lib/data/demo";
+import { UnifiedCustomer, RelationshipEvent } from "@/lib/types";
 
 export default function CustomersWorkspace() {
   const [currentCustomers, setCurrentCustomers] = useState<UnifiedCustomer[]>([]);

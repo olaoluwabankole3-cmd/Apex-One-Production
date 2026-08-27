@@ -148,6 +148,10 @@ export interface AuthSession {
   permissions: PermissionCapability[];
   createdAt: string;
   expiresAt: string;
+  lastActivityAt?: string;
+  sessionVersion?: number;
+  ipAddress?: string;
+  userAgent?: string;
 }
 
 export async function createSessionToken(
@@ -156,7 +160,12 @@ export async function createSessionToken(
   role: string
 ): Promise<AuthSession> {
   const permissions = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS["Operations"];
-  return defaultSessionStore.createSession(user, org, role, permissions);
+  return defaultSessionStore.createSession({
+    user,
+    org,
+    role,
+    permissions,
+  });
 }
 
 export async function getSession(token: string): Promise<AuthSession | undefined> {
@@ -168,12 +177,31 @@ export async function revokeSession(token: string): Promise<boolean> {
 }
 
 /**
- * Resolve the authenticated Tenant Context from request headers.
+ * Helper to parse cookie string from headers
+ */
+function parseCookieHeader(cookieHeader?: string): Record<string, string> {
+  if (!cookieHeader || typeof cookieHeader !== "string") return {};
+  const cookies: Record<string, string> = {};
+  const pairs = cookieHeader.split(";");
+  for (const pair of pairs) {
+    const idx = pair.indexOf("=");
+    if (idx > 0) {
+      const key = pair.substring(0, idx).trim();
+      const val = pair.substring(idx + 1).trim();
+      cookies[key] = decodeURIComponent(val);
+    }
+  }
+  return cookies;
+}
+
+/**
+ * Resolve the authenticated Tenant Context from request headers or HttpOnly cookies.
  * 
  * Rules:
- * 1. Missing or invalid Bearer token strictly throws UnauthorizedError (401).
- * 2. No automatic demo fallback in production.
- * 3. Client headers cannot override the trusted organizationId established by authentication.
+ * 1. Checks Authorization: Bearer <token> first, then fallback to apex_session cookie.
+ * 2. Missing, invalid, or expired session token strictly throws UnauthorizedError (401).
+ * 3. In production mode, demo fallback is unconditionally disabled (even if DEMO_MODE=true).
+ * 4. Client headers or body cannot override the trusted organizationId established by authenticated session.
  */
 export async function resolveTenantContext(
   headers: Headers | Record<string, string | string[] | undefined>
@@ -181,19 +209,40 @@ export async function resolveTenantContext(
   const requestId = generateRequestId();
   const timestamp = new Date().toISOString();
 
-  // Extract authorization header
+  // 1. Extract authorization header or cookie
   let authHeader: string | undefined;
+  let cookieHeader: string | undefined;
+
   if (headers instanceof Headers) {
     authHeader = headers.get("authorization") || undefined;
+    cookieHeader = headers.get("cookie") || undefined;
   } else {
-    const raw = headers["authorization"] || headers["Authorization"];
-    authHeader = Array.isArray(raw) ? raw[0] : raw;
+    const rawAuth = headers["authorization"] || headers["Authorization"];
+    authHeader = Array.isArray(rawAuth) ? rawAuth[0] : rawAuth;
+    const rawCookie = headers["cookie"] || headers["Cookie"];
+    cookieHeader = Array.isArray(rawCookie) ? rawCookie[0] : rawCookie;
   }
 
-  // Strict check: if no Bearer token
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    // Only allow development-specific demo mode if explicitly activated via environment variables
+  let token: string | undefined;
+
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.replace("Bearer ", "").trim();
+    if (!token) {
+      throw new UnauthorizedError("Authentication required: Empty Bearer token");
+    }
+  } else if (cookieHeader) {
+    const parsedCookies = parseCookieHeader(cookieHeader);
+    if (parsedCookies["apex_session"]) {
+      token = parsedCookies["apex_session"].trim();
+    }
+  }
+
+  // If no token could be extracted
+  if (!token) {
+    // Production safeguard: Demo mode is NEVER allowed in production environment
+    const isProduction = process.env.NODE_ENV === "production" || process.env.APP_ENV === "production";
     const isExplicitDevDemo =
+      !isProduction &&
       (process.env.APP_ENV === "development" || process.env.NODE_ENV === "development") &&
       process.env.DEMO_MODE === "true";
 
@@ -209,12 +258,7 @@ export async function resolveTenantContext(
       };
     }
 
-    throw new UnauthorizedError("Authentication required: Missing or invalid Bearer token");
-  }
-
-  const token = authHeader.replace("Bearer ", "").trim();
-  if (!token) {
-    throw new UnauthorizedError("Authentication required: Empty Bearer token");
+    throw new UnauthorizedError("Authentication required: Missing Authorization Bearer token or session cookie");
   }
 
   const session = await defaultSessionStore.getSession(token);

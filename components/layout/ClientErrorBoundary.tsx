@@ -7,14 +7,19 @@ const isExtensionNoise = (val: unknown): boolean => {
   if (!val) return false;
   try {
     const str = typeof val === "string" ? val : JSON.stringify(val);
+    const lower = str.toLowerCase();
     return (
-      str.includes("sender-wallet") ||
-      str.includes("sender_getProviderState") ||
-      str.includes("Sender: Failed to get initial state") ||
-      str.includes("No account exist") ||
-      str.includes("sender-wallet-providerResult") ||
-      str.includes("chrome-extension://") ||
-      str.includes("moz-extension://")
+      lower.includes("sender-wallet") ||
+      lower.includes("sender_getproviderstate") ||
+      lower.includes("sender: failed to get initial state") ||
+      lower.includes("no account exist") ||
+      lower.includes("sender-wallet-providerresult") ||
+      lower.includes("chrome-extension://") ||
+      lower.includes("moz-extension://") ||
+      lower.includes("ethereum") ||
+      lower.includes("metamask") ||
+      lower.includes("solana") ||
+      lower.includes("phantom")
     );
   } catch {
     return false;

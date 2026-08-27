@@ -1,15 +1,43 @@
 "use client";
 
-import { DollarSign, TrendingUp, RefreshCw, UserMinus } from "lucide-react";
+import { useState, useEffect } from "react";
+import { DollarSign, TrendingUp, RefreshCw, UserMinus, Loader2 } from "lucide-react";
 import GlassCard from "@/components/ui/GlassCard";
 import AnimatedNumber from "@/components/dashboard/AnimatedNumber";
+import { revenueRepository } from "@/lib/data/repositories";
+import { AnalyticsSummaryStats } from "@/lib/types";
 
 export default function AnalyticsStats() {
+  const [data, setData] = useState<AnalyticsSummaryStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    revenueRepository.getAnalyticsStats()
+      .then((res) => {
+        if (isMounted) {
+          setData(res);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load analytics stats:", err);
+        if (isMounted) {
+          setData(null);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const stats = [
     {
       id: "revenue",
       label: "Total Revenue (Trailing 8mo)",
-      value: 1937.7,
+      value: data ? data.totalRevenue : 0,
       decimals: 1,
       prefix: "$",
       suffix: "M",
@@ -19,7 +47,7 @@ export default function AnalyticsStats() {
     {
       id: "netnew",
       label: "Net New ARR (QoQ)",
-      value: 24.8,
+      value: data ? data.netNewArr : 0,
       decimals: 1,
       prefix: "$",
       suffix: "M",
@@ -29,7 +57,7 @@ export default function AnalyticsStats() {
     {
       id: "nrr",
       label: "Net Revenue Retention",
-      value: 108.4,
+      value: data ? data.netRevenueRetention : 0,
       decimals: 1,
       prefix: "",
       suffix: "%",
@@ -39,7 +67,7 @@ export default function AnalyticsStats() {
     {
       id: "churn",
       label: "Gross Churn Rate",
-      value: 3.2,
+      value: data ? data.grossChurnRate : 0,
       decimals: 1,
       prefix: "",
       suffix: "%",
@@ -60,16 +88,24 @@ export default function AnalyticsStats() {
                 <Icon size={15} strokeWidth={1.75} />
               </span>
             </div>
-            <AnimatedNumber
-              value={stat.value}
-              decimals={stat.decimals}
-              prefix={stat.prefix}
-              suffix={stat.suffix}
-              className="mt-3 block font-display text-[26px] font-bold tabular-nums tracking-tight text-ivory"
-            />
+            {loading ? (
+              <div className="mt-3 flex items-center gap-2 py-1 text-ivory/40">
+                <Loader2 className="animate-spin" size={16} />
+                <span className="text-xs">Loading...</span>
+              </div>
+            ) : (
+              <AnimatedNumber
+                value={stat.value}
+                decimals={stat.decimals}
+                prefix={stat.prefix}
+                suffix={stat.suffix}
+                className="mt-3 block font-display text-[26px] font-bold tabular-nums tracking-tight text-ivory"
+              />
+            )}
           </GlassCard>
         );
       })}
     </div>
   );
 }
+

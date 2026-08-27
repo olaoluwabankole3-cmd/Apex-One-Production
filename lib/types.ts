@@ -274,6 +274,13 @@ export interface SegmentBreakdown {
   color: string;
 }
 
+export interface AnalyticsSummaryStats {
+  totalRevenue: number;
+  netNewArr: number;
+  netRevenueRetention: number;
+  grossChurnRate: number;
+}
+
 export type TimeRange = "30D" | "90D" | "YTD" | "12M";
 
 // ── Workflow Builder ─────────────────────────────────────────────────────
@@ -385,4 +392,49 @@ export interface IntegrationItem {
   lastSync?: string;
   eventsToday?: number;
   icon?: string;
+}
+
+// ── Unified Customer & Relationship Types ───────────────────────────────
+
+export interface UnifiedCustomer {
+  id: string;
+  name: string;
+  businessUnit: "Enterprise Operations" | "Commercial Operations" | "Strategic Accounts" | "Customer Operations";
+  tier: "Enterprise" | "Mid-Market" | "SMB";
+  status: "active" | "at-risk" | "onboarding";
+  healthScore: number;
+  arrNaira: number;
+  arrUSD: number;
+  ltvNaira: number;
+  ltvUSD: number;
+  since: string;
+  owner: string;
+  contactName: string;
+  contactRole: string;
+  contactEmail: string;
+  industry: string;
+  growthYoY: number;
+  engagementLevel: number;
+  contractStatus: string;
+  supportActivity: string;
+  supportTickets: number;
+  paymentBehavior: string;
+  paymentStatus: "pristine" | "standard" | "delayed";
+  riskLevel: string;
+  riskScore: number;
+  expansionPotential: "High" | "Medium" | "Low";
+  potentialArrNaira: number;
+  opportunityNaira: number;
+  opportunityReason: string;
+  riskReasons: string[];
+  aiInsight: string;
+  recommendedAction: string;
+  tags?: string[];
+}
+
+export interface RelationshipEvent {
+  year: number;
+  category: "sales" | "contracts" | "purchases" | "support" | "renewals" | "expansion" | "complaints" | "meetings";
+  title: string;
+  description: string;
 }

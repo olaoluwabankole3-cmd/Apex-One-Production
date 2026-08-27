@@ -1,4 +1,4 @@
-import { KpiDatum, RevenuePoint, PortfolioSlice, SubsidiaryRevenuePoint, RevenueBySubsidiaryPoint, CustomerGrowthPoint, SegmentBreakdown, SubsidiaryPerformance } from "@/lib/types";
+import { KpiDatum, RevenuePoint, PortfolioSlice, SubsidiaryRevenuePoint, RevenueBySubsidiaryPoint, CustomerGrowthPoint, SegmentBreakdown, SubsidiaryPerformance, AnalyticsSummaryStats } from "@/lib/types";
 import { demoKpis, demoRevenueSeries, demoPortfolioBreakdown, demoRevenueBySubsidiary, demoRevenueBySubsidiaryMonthly, demoCustomerGrowth, demoSegmentBreakdown } from "@/lib/data/demo";
 
 export interface RevenueRepository {
@@ -10,6 +10,7 @@ export interface RevenueRepository {
   getCustomerGrowth(organizationId?: string): Promise<CustomerGrowthPoint[]>;
   getSegmentBreakdown(organizationId?: string): Promise<SegmentBreakdown[]>;
   getSubsidiaryPerformance(organizationId?: string): Promise<SubsidiaryPerformance[]>;
+  getAnalyticsStats(organizationId?: string): Promise<AnalyticsSummaryStats>;
 }
 
 export class MockRevenueRepository implements RevenueRepository {
@@ -36,6 +37,14 @@ export class MockRevenueRepository implements RevenueRepository {
   }
   async getSubsidiaryPerformance(_organizationId?: string): Promise<SubsidiaryPerformance[]> {
     return [];
+  }
+  async getAnalyticsStats(_organizationId?: string): Promise<AnalyticsSummaryStats> {
+    return {
+      totalRevenue: 0,
+      netNewArr: 0,
+      netRevenueRetention: 0,
+      grossChurnRate: 0,
+    };
   }
 }
 
