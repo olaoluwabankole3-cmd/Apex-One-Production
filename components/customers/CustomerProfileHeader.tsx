@@ -49,7 +49,7 @@ export default function CustomerProfileHeader({ customer }: CustomerProfileHeade
               </span>
             </div>
             <p className="mt-1 text-[12.5px] text-ivory/45">
-              {customer.subsidiary} · {customer.tier} · Client since {customer.since}
+              {[customer.subsidiary, customer.tier, customer.since ? `Client since ${customer.since}` : null].filter(Boolean).join(" · ")}
             </p>
             <div className="mt-2.5 flex flex-wrap gap-1.5">
               {customer.tags.map((tag) => (

@@ -109,7 +109,7 @@ export interface Customer {
   contactName: string;
   contactRole: string;
   contactEmail: string;
-  since: string;
+  since?: string | null;
   tags: string[];
   riskScore?: number | null;
   riskReason?: string | null;
@@ -402,7 +402,7 @@ export interface IntegrationItem {
 export interface UnifiedCustomer {
   id: string;
   name: string;
-  businessUnit: "Enterprise Operations" | "Commercial Operations" | "Strategic Accounts" | "Customer Operations";
+  businessUnit?: "Enterprise Operations" | "Commercial Operations" | "Strategic Accounts" | "Customer Operations" | string | null;
   tier: "Enterprise" | "Mid-Market" | "SMB";
   status: "active" | "at-risk" | "onboarding";
   healthScore: number;
@@ -410,7 +410,7 @@ export interface UnifiedCustomer {
   arrUSD: number;
   ltvNaira: number;
   ltvUSD: number;
-  since: string;
+  since?: string | null;
   owner: string;
   contactName: string;
   contactRole: string;

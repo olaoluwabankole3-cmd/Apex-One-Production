@@ -4,23 +4,25 @@
 
 import { runTenantIsolationTestSuite } from "../lib/backend/tests/tenantIsolation.test";
 import { runFrontendAuthCompatibilityTestSuite } from "../lib/backend/tests/frontendAuthCompatibility.test";
+import { runCustomerDataTruthfulnessTestSuite } from "../lib/backend/tests/customerDataTruthfulness.test";
 
 async function main() {
   console.log("================================================================================");
-  console.log("APEX ONE PRODUCTION — TENANT ISOLATION & FRONTEND AUTH SECURITY TEST SUITE");
+  console.log("APEX ONE PRODUCTION — TENANT ISOLATION & DATA TRUTHFULNESS SECURITY TEST SUITE");
   console.log("================================================================================\n");
 
   const start = performance.now();
-  const [backendSummary, frontendSummary] = await Promise.all([
+  const [backendSummary, frontendSummary, customerSummary] = await Promise.all([
     runTenantIsolationTestSuite(),
     runFrontendAuthCompatibilityTestSuite(),
+    runCustomerDataTruthfulnessTestSuite(),
   ]);
   const duration = Math.round(performance.now() - start);
 
-  const allResults = [...backendSummary.results, ...frontendSummary.results];
-  const total = backendSummary.total + frontendSummary.total;
-  const passedCount = backendSummary.passedCount + frontendSummary.passedCount;
-  const failedCount = backendSummary.failedCount + frontendSummary.failedCount;
+  const allResults = [...backendSummary.results, ...frontendSummary.results, ...customerSummary.results];
+  const total = backendSummary.total + frontendSummary.total + customerSummary.total;
+  const passedCount = backendSummary.passedCount + frontendSummary.passedCount + customerSummary.passedCount;
+  const failedCount = backendSummary.failedCount + frontendSummary.failedCount + customerSummary.failedCount;
   const passed = failedCount === 0;
 
   // Group results by suite

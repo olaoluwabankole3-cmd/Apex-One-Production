@@ -43,7 +43,7 @@ export interface CustomerRecord {
   id: string;
   organizationId: string;
   name: string;
-  subsidiary: string;
+  subsidiary?: string | null;
   tier: "Enterprise" | "Mid-Market" | "SMB";
   status: "active" | "at-risk" | "onboarding" | "dormant";
   healthScore: number;
@@ -52,7 +52,7 @@ export interface CustomerRecord {
   contactName: string;
   contactRole: string;
   contactEmail: string;
-  since: string;
+  since?: string | null;
   tags: string[];
   createdAt: string;
   updatedAt: string;

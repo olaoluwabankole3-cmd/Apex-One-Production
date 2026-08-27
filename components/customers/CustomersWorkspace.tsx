@@ -178,7 +178,7 @@ export default function CustomersWorkspace() {
       result = result.filter(c => 
         c.name.toLowerCase().includes(q) || 
         (c.industry || "").toLowerCase().includes(q) ||
-        c.businessUnit.toLowerCase().includes(q) ||
+        (c.businessUnit || "").toLowerCase().includes(q) ||
         c.owner.toLowerCase().includes(q)
       );
     }
@@ -259,8 +259,9 @@ export default function CustomersWorkspace() {
     setMemoryAnswer("");
 
     try {
+      const buLabel = activeCustomer.businessUnit ? activeCustomer.businessUnit : "Unassigned BU";
       const text = await aiRepository.ask(
-        `Synthesize relationship memory for ${activeCustomer.name} (${activeCustomer.businessUnit}, ARR: ₦${activeCustomer.arrNaira}M, Status: ${activeCustomer.status}, Health Score: ${activeCustomer.healthScore}%). Summarize historical milestones and operational posture.`
+        `Synthesize relationship memory for ${activeCustomer.name} (${buLabel}, ARR: ₦${activeCustomer.arrNaira}M, Status: ${activeCustomer.status}, Health Score: ${activeCustomer.healthScore}%). Summarize historical milestones and operational posture.`
       );
       setMemoryAnswer(text);
     } catch (err: any) {
@@ -295,7 +296,7 @@ export default function CustomersWorkspace() {
     };
 
     const customers = currentCustomers.map((c) => {
-      const bu = c.businessUnit in businessUnits ? c.businessUnit : "Strategic Accounts";
+      const bu = (c.businessUnit && c.businessUnit in businessUnits) ? (c.businessUnit as keyof typeof businessUnits) : "Strategic Accounts";
       const idx = buCounters[bu] || 0;
       buCounters[bu] = idx + 1;
       const positions = buPositions[bu] || [{ x: 40, y: 70 }];
@@ -877,7 +878,7 @@ export default function CustomersWorkspace() {
                         <div>
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <span className="text-[10px] font-mono text-gold/60 uppercase tracking-wider">{c.tier} · {c.businessUnit}</span>
+                              <span className="text-[10px] font-mono text-gold/60 uppercase tracking-wider">{c.tier}{c.businessUnit ? ` · ${c.businessUnit}` : ""}</span>
                               <h4 className="font-display text-[14px] font-bold text-ivory mt-0.5">{c.name}</h4>
                               <p className="text-[11px] text-ivory/40">{c.industry || "Not available"}</p>
                             </div>
@@ -974,12 +975,16 @@ export default function CustomersWorkspace() {
               </span>
               <div>
                 <h3 className="font-display text-[17px] font-bold text-ivory leading-tight">{activeCustomer.name}</h3>
-                <p className="text-[11.5px] text-ivory/40 mt-0.5">{activeCustomer.industry || "Not available"} · Client since {activeCustomer.since}</p>
+                <p className="text-[11.5px] text-ivory/40 mt-0.5">
+                  {activeCustomer.industry || "Not available"} · {activeCustomer.since ? `Client since ${activeCustomer.since}` : "Relationship start unavailable"}
+                </p>
                 
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  <span className="rounded-full bg-white/[0.03] border border-white/[0.08] px-2 py-0.5 text-[9.5px] text-ivory/55 font-mono">
-                    BU: {activeCustomer.businessUnit}
-                  </span>
+                  {activeCustomer.businessUnit && (
+                    <span className="rounded-full bg-white/[0.03] border border-white/[0.08] px-2 py-0.5 text-[9.5px] text-ivory/55 font-mono">
+                      BU: {activeCustomer.businessUnit}
+                    </span>
+                  )}
                   <span className="rounded-full bg-white/[0.03] border border-white/[0.08] px-2 py-0.5 text-[9.5px] text-ivory/55">
                     Account: {activeCustomer.tier}
                   </span>
@@ -1081,11 +1086,11 @@ export default function CustomersWorkspace() {
             <div className="mt-3 space-y-2 text-[11.5px] text-ivory/70 font-mono">
               <div className="flex gap-2">
                 <span className="text-gold shrink-0">▸ First Ingestion:</span>
-                <span>Active since {activeCustomer.since} (Direct MSA signed)</span>
+                <span>{activeCustomer.since ? `Active since ${activeCustomer.since} (Direct MSA signed)` : "Active relationship (Direct MSA signed)"}</span>
               </div>
               <div className="flex gap-2">
                 <span className="text-gold shrink-0">▸ Major Milestones:</span>
-                <span>LTV expanded to ₦{activeCustomer.ltvNaira}M | {activeCustomer.businessUnit} mapped</span>
+                <span>LTV expanded to ₦{activeCustomer.ltvNaira}M{activeCustomer.businessUnit ? ` | ${activeCustomer.businessUnit} mapped` : ""}</span>
               </div>
               <div className="flex gap-2">
                 <span className="text-gold shrink-0">▸ Key Decision Makers:</span>

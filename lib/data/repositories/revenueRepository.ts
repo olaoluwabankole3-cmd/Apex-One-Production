@@ -94,7 +94,7 @@ export class ApiRevenueRepository implements RevenueRepository {
       const subMap: Record<string, number> = {};
 
       for (const c of customers) {
-        const sub = c.subsidiary || "Strategic Accounts";
+        const sub = c.subsidiary || "Unassigned";
         subMap[sub] = (subMap[sub] || 0) + (c.arr || 0);
       }
 
@@ -117,7 +117,7 @@ export class ApiRevenueRepository implements RevenueRepository {
       const subMap: Record<string, number> = {};
 
       for (const c of customers) {
-        const sub = c.subsidiary || "Strategic Accounts";
+        const sub = c.subsidiary || "Unassigned";
         subMap[sub] = (subMap[sub] || 0) + (c.arr || 0);
       }
 

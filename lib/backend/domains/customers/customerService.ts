@@ -60,7 +60,7 @@ export class CustomerService {
           c.name.toLowerCase().includes(q) ||
           c.contactName.toLowerCase().includes(q) ||
           c.contactEmail.toLowerCase().includes(q) ||
-          c.subsidiary.toLowerCase().includes(q);
+          (c.subsidiary || "").toLowerCase().includes(q);
         if (!matches) return false;
       }
       return true;

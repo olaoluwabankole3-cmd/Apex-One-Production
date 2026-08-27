@@ -1,7 +1,7 @@
 export interface UnifiedCustomer {
   id: string;
   name: string;
-  businessUnit: "Enterprise Operations" | "Commercial Operations" | "Strategic Accounts" | "Customer Operations";
+  businessUnit?: "Enterprise Operations" | "Commercial Operations" | "Strategic Accounts" | "Customer Operations" | string | null;
   tier: "Enterprise" | "Mid-Market" | "SMB";
   status: "active" | "at-risk" | "onboarding";
   healthScore: number;
@@ -9,7 +9,7 @@ export interface UnifiedCustomer {
   arrUSD: number; // in Millions USD
   ltvNaira: number; // in Millions Naira
   ltvUSD: number;
-  since: string;
+  since?: string | null;
   owner: string;
   contactName: string;
   contactRole: string;

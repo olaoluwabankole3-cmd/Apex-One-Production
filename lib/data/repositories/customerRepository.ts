@@ -24,7 +24,7 @@ function mapRecordToCustomer(c: CustomerRecord): Customer {
   return {
     id: c.id,
     name: c.name,
-    subsidiary: c.subsidiary,
+    subsidiary: c.subsidiary ?? "",
     tier: c.tier,
     status,
     healthScore: c.healthScore,
@@ -33,7 +33,7 @@ function mapRecordToCustomer(c: CustomerRecord): Customer {
     contactName: c.contactName,
     contactRole: c.contactRole,
     contactEmail: c.contactEmail,
-    since: c.since,
+    since: c.since ?? null,
     tags: c.tags || [],
     riskScore: c.riskScore ?? null,
     riskReason: c.riskReason ?? null,
@@ -45,22 +45,10 @@ function mapRecordToUnifiedCustomer(c: CustomerRecord): UnifiedCustomer {
   const arrNaira = (c.arr * 1500) / 1000000; // in Millions NGN
   const status: UnifiedCustomer["status"] = c.status === "dormant" ? "at-risk" : c.status;
 
-  const validBusinessUnits: UnifiedCustomer["businessUnit"][] = [
-    "Enterprise Operations",
-    "Commercial Operations",
-    "Strategic Accounts",
-    "Customer Operations",
-  ];
-  const businessUnit: UnifiedCustomer["businessUnit"] = validBusinessUnits.includes(
-    c.subsidiary as UnifiedCustomer["businessUnit"]
-  )
-    ? (c.subsidiary as UnifiedCustomer["businessUnit"])
-    : "Strategic Accounts";
-
   return {
     id: c.id,
     name: c.name,
-    businessUnit,
+    businessUnit: c.subsidiary ?? null,
     tier: c.tier,
     status,
     healthScore: c.healthScore,
@@ -68,7 +56,7 @@ function mapRecordToUnifiedCustomer(c: CustomerRecord): UnifiedCustomer {
     arrNaira,
     ltvUSD: arrUSD,
     ltvNaira: arrNaira,
-    since: c.since || "2024",
+    since: c.since ?? null,
     owner: c.owner,
     contactName: c.contactName,
     contactRole: c.contactRole,
