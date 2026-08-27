@@ -3,19 +3,29 @@
  */
 
 import { runTenantIsolationTestSuite } from "../lib/backend/tests/tenantIsolation.test";
+import { runFrontendAuthCompatibilityTestSuite } from "../lib/backend/tests/frontendAuthCompatibility.test";
 
 async function main() {
   console.log("================================================================================");
-  console.log("APEX ONE PRODUCTION — TENANT ISOLATION & SECURITY TEST SUITE");
+  console.log("APEX ONE PRODUCTION — TENANT ISOLATION & FRONTEND AUTH SECURITY TEST SUITE");
   console.log("================================================================================\n");
 
   const start = performance.now();
-  const summary = await runTenantIsolationTestSuite();
+  const [backendSummary, frontendSummary] = await Promise.all([
+    runTenantIsolationTestSuite(),
+    runFrontendAuthCompatibilityTestSuite(),
+  ]);
   const duration = Math.round(performance.now() - start);
 
+  const allResults = [...backendSummary.results, ...frontendSummary.results];
+  const total = backendSummary.total + frontendSummary.total;
+  const passedCount = backendSummary.passedCount + frontendSummary.passedCount;
+  const failedCount = backendSummary.failedCount + frontendSummary.failedCount;
+  const passed = failedCount === 0;
+
   // Group results by suite
-  const suites: Record<string, typeof summary.results> = {};
-  for (const res of summary.results) {
+  const suites: Record<string, typeof allResults> = {};
+  for (const res of allResults) {
     if (!suites[res.suite]) suites[res.suite] = [];
     suites[res.suite].push(res);
   }
@@ -34,15 +44,15 @@ async function main() {
   }
 
   console.log("\n" + "=".repeat(80));
-  console.log(`TOTAL: ${summary.total}`);
-  console.log(`PASSED: ${summary.passedCount}`);
-  console.log(`FAILED: ${summary.failedCount}`);
+  console.log(`TOTAL: ${total}`);
+  console.log(`PASSED: ${passedCount}`);
+  console.log(`FAILED: ${failedCount}`);
   console.log(`SKIPPED: 0`);
-  console.log(`STATUS: ${summary.passed ? "ALL SECURITY CHECKS PASSED ✅" : "SECURITY VULNERABILITIES DETECTED ❌"}`);
+  console.log(`STATUS: ${passed ? "ALL SECURITY CHECKS PASSED ✅" : "SECURITY VULNERABILITIES DETECTED ❌"}`);
   console.log(`DURATION: ${duration}ms`);
   console.log("=".repeat(80) + "\n");
 
-  if (!summary.passed || summary.failedCount > 0) {
+  if (!passed || failedCount > 0) {
     process.exit(1);
   }
   process.exit(0);
