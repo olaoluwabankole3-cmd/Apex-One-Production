@@ -2,7 +2,7 @@
  * APEX ONE — Customer Domain Service with Defense-in-Depth Tenant Isolation
  */
 
-import { db } from "../../database/store";
+import { db, DatabaseStore } from "../../database/store";
 import { CustomerRecord } from "../../database/schema";
 import { TenantContext, requirePermission } from "../../core/security";
 import { Validator } from "../../core/validation";
@@ -36,6 +36,8 @@ export interface UpdateCustomerDto {
 }
 
 export class CustomerService {
+  constructor(private readonly database: DatabaseStore = db) {}
+
   /**
    * List all customers belonging STRICTLY to the authenticated tenant.
    */
@@ -45,7 +47,7 @@ export class CustomerService {
   ): Promise<CustomerRecord[]> {
     requirePermission(ctx, "customer:read");
 
-    return db.customersRepo.findMany(ctx, (c) => {
+    return this.database.customersRepo.findMany(ctx, (c) => {
       if (filters?.tier && filters.tier !== "all" && c.tier !== filters.tier) {
         return false;
       }
@@ -71,7 +73,7 @@ export class CustomerService {
   public async getCustomerById(id: string, ctx: TenantContext): Promise<CustomerRecord> {
     requirePermission(ctx, "customer:read");
     Validator.requireId(id, "customerId");
-    return db.customersRepo.findById(id, ctx, "Customer");
+    return this.database.customersRepo.findById(id, ctx, "Customer");
   }
 
   /**
@@ -108,9 +110,9 @@ export class CustomerService {
       updatedAt: now,
     };
 
-    const record = await db.customersRepo.create(recordData, ctx);
+    const record = await this.database.customersRepo.create(recordData, ctx);
 
-    db.recordAuditLog({
+    this.database.recordAuditLog({
       organizationId: ctx.organizationId,
       actorId: ctx.userId,
       actorEmail: ctx.userEmail,
@@ -162,9 +164,9 @@ export class CustomerService {
     if (updates.contactRole !== undefined) validatedUpdates.contactRole = updates.contactRole.trim();
     if (updates.tags !== undefined) validatedUpdates.tags = updates.tags;
 
-    const updated = await db.customersRepo.update(id, validatedUpdates, ctx, "Customer");
+    const updated = await this.database.customersRepo.update(id, validatedUpdates, ctx, "Customer");
 
-    db.recordAuditLog({
+    this.database.recordAuditLog({
       organizationId: ctx.organizationId,
       actorId: ctx.userId,
       actorEmail: ctx.userEmail,
@@ -187,9 +189,9 @@ export class CustomerService {
     requirePermission(ctx, "customer:delete");
     Validator.requireId(id, "customerId");
 
-    const deleted = await db.customersRepo.delete(id, ctx, "Customer");
+    const deleted = await this.database.customersRepo.delete(id, ctx, "Customer");
 
-    db.recordAuditLog({
+    this.database.recordAuditLog({
       organizationId: ctx.organizationId,
       actorId: ctx.userId,
       actorEmail: ctx.userEmail,

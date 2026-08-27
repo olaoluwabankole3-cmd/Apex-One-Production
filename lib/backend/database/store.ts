@@ -126,6 +126,49 @@ export class DatabaseStore {
     dataProvider.seedInitialTenants(this);
   }
 
+  /**
+   * Clears all in-memory entity tables and audit logs.
+   * Useful for test isolation to ensure state does not leak between test suites.
+   */
+  public clearAll(): void {
+    this.organizations.clear();
+    this.users.clear();
+    this.memberships.clear();
+    this.customers.clear();
+    this.contracts.clear();
+    this.transactions.clear();
+    this.documents.clear();
+    this.knowledge.clear();
+    this.memory.clear();
+    this.events.clear();
+    this.signals.clear();
+    this.opportunities.clear();
+    this.valueCaptured.clear();
+    this.workflows.clear();
+    this.workflowRuns.clear();
+    this.actions.clear();
+    if (this.auditLogsRepo instanceof InMemoryAuditLogRepository) {
+      this.auditLogsRepo.clear();
+    }
+  }
+
+  /**
+   * Resets database state and optionally re-seeds using a provider.
+   */
+  public reset(dataProvider?: IDataProvider): void {
+    this.clearAll();
+    if (dataProvider) {
+      dataProvider.seedInitialTenants(this);
+    }
+  }
+
+  /**
+   * Creates a fresh, isolated DatabaseStore instance.
+   */
+  public static createFreshStore(dataProvider?: IDataProvider): DatabaseStore {
+    return new DatabaseStore(dataProvider);
+  }
+
   public recordAuditLog(
     log: Omit<AuditLogRecord, "id"> | (Omit<AuditLogRecord, "id" | "timestamp"> & { timestamp?: string })
   ) {

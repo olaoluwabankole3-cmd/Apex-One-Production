@@ -228,4 +228,8 @@ export class InMemoryAuditLogRepository implements IAuditLogRepository {
       .filter((log) => log.organizationId === ctx.organizationId)
       .slice(0, limit);
   }
+
+  public clear(): void {
+    this.logs = [];
+  }
 }

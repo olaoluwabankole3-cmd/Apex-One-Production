@@ -12,7 +12,7 @@ import {
   CrossTenantViolationError,
 } from "./errors";
 import { generateSecureRequestId } from "./crypto";
-import { defaultSessionStore } from "../domains/auth/authProvider";
+import { defaultSessionStore, ISessionStore } from "../domains/auth/authProvider";
 
 export type { TenantContext, PermissionCapability };
 export {
@@ -204,7 +204,8 @@ function parseCookieHeader(cookieHeader?: string): Record<string, string> {
  * 4. Client headers or body cannot override the trusted organizationId established by authenticated session.
  */
 export async function resolveTenantContext(
-  headers: Headers | Record<string, string | string[] | undefined>
+  headers: Headers | Record<string, string | string[] | undefined>,
+  sessionStore: ISessionStore = defaultSessionStore
 ): Promise<TenantContext> {
   const requestId = generateRequestId();
   const timestamp = new Date().toISOString();
@@ -261,7 +262,7 @@ export async function resolveTenantContext(
     throw new UnauthorizedError("Authentication required: Missing Authorization Bearer token or session cookie");
   }
 
-  const session = await defaultSessionStore.getSession(token);
+  const session = await sessionStore.getSession(token);
   if (!session) {
     throw new UnauthorizedError("Authentication failed: Invalid or expired session token");
   }

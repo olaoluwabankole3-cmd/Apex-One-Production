@@ -34,13 +34,18 @@ async function main() {
   }
 
   console.log("\n" + "=".repeat(80));
-  console.log(`SUMMARY: ${summary.passedCount}/${summary.total} tests passed (${summary.failedCount} failures) in ${duration}ms`);
+  console.log(`TOTAL: ${summary.total}`);
+  console.log(`PASSED: ${summary.passedCount}`);
+  console.log(`FAILED: ${summary.failedCount}`);
+  console.log(`SKIPPED: 0`);
   console.log(`STATUS: ${summary.passed ? "ALL SECURITY CHECKS PASSED ✅" : "SECURITY VULNERABILITIES DETECTED ❌"}`);
+  console.log(`DURATION: ${duration}ms`);
   console.log("=".repeat(80) + "\n");
 
-  if (!summary.passed) {
+  if (!summary.passed || summary.failedCount > 0) {
     process.exit(1);
   }
+  process.exit(0);
 }
 
 main().catch((err) => {

@@ -2,10 +2,10 @@
  * APEX ONE — Auth & Identity Domain Service
  */
 
-import { db } from "../../database/store";
-import { defaultAuthProvider, defaultSessionStore } from "./authProvider";
-import { defaultAuthRateLimiter } from "./rateLimiter";
-import { createSessionToken, revokeSession, AuthSession } from "../../core/security";
+import { db, DatabaseStore } from "../../database/store";
+import { defaultAuthProvider, defaultSessionStore, IAuthenticationProvider, ISessionStore } from "./authProvider";
+import { defaultAuthRateLimiter, IRateLimiter } from "./rateLimiter";
+import { createSessionToken, revokeSession, AuthSession, ROLE_PERMISSIONS } from "../../core/security";
 import { hashPassword, verifyPassword, validatePasswordPolicy } from "../../core/crypto";
 import {
   TenantContext,
@@ -33,6 +33,13 @@ export interface LoginOptions {
 }
 
 export class AuthService {
+  constructor(
+    private readonly database: DatabaseStore = db,
+    private readonly authProvider: IAuthenticationProvider = defaultAuthProvider,
+    private readonly sessionStore: ISessionStore = defaultSessionStore,
+    private readonly rateLimiter: IRateLimiter = defaultAuthRateLimiter
+  ) {}
+
   /**
    * Authenticate a user, verify organization membership, enforce rate limiting,
    * and issue a tenant-scoped session token.
@@ -54,9 +61,9 @@ export class AuthService {
     const rateLimitKey = options?.ipAddress ? `${options.ipAddress}:${normalizedEmail}` : normalizedEmail;
 
     // 1. Enforce rate limiting to protect against brute-force attacks
-    const rateLimitResult = await defaultAuthRateLimiter.isRateLimited(rateLimitKey);
+    const rateLimitResult = await this.rateLimiter.isRateLimited(rateLimitKey);
     if (rateLimitResult.limited) {
-      db.recordAuditLog({
+      this.database.recordAuditLog({
         organizationId: "system",
         actorId: "unauthenticated",
         actorEmail: normalizedEmail.substring(0, 80),
@@ -77,7 +84,7 @@ export class AuthService {
     }
 
     try {
-      const authResult = await defaultAuthProvider.authenticateCredentials(
+      const authResult = await this.authProvider.authenticateCredentials(
         normalizedEmail,
         dto.password,
         dto.targetOrganizationId,
@@ -85,9 +92,9 @@ export class AuthService {
       );
 
       // Reset rate limiter on successful authentication
-      await defaultAuthRateLimiter.recordAttempt(rateLimitKey, true);
+      await this.rateLimiter.recordAttempt(rateLimitKey, true);
 
-      db.recordAuditLog({
+      this.database.recordAuditLog({
         organizationId: authResult.session.organizationId,
         actorId: authResult.session.userId,
         actorEmail: authResult.session.userEmail,
@@ -106,9 +113,9 @@ export class AuthService {
       return authResult;
     } catch (err: any) {
       // Record failed attempt for rate limiting
-      await defaultAuthRateLimiter.recordAttempt(rateLimitKey, false);
+      await this.rateLimiter.recordAttempt(rateLimitKey, false);
 
-      db.recordAuditLog({
+      this.database.recordAuditLog({
         organizationId: "system",
         actorId: "unauthenticated",
         actorEmail: normalizedEmail.substring(0, 80),
@@ -137,7 +144,7 @@ export class AuthService {
       throw new ForbiddenError("You are not authorized to change credentials for another user");
     }
 
-    const user = db.users.get(dto.userId);
+    const user = this.database.users.get(dto.userId);
     if (!user) {
       throw new NotFoundError("User");
     }
@@ -161,12 +168,12 @@ export class AuthService {
     const newCredentials = hashPassword(dto.newPassword);
     user.passwordHash = newCredentials.hash;
     user.passwordSalt = newCredentials.salt;
-    db.users.set(user.id, user);
+    this.database.users.set(user.id, user);
 
     // Invalidate all active sessions for the user to force re-authentication across all devices
-    await defaultSessionStore.revokeUserSessions(user.id);
+    await this.sessionStore.revokeUserSessions(user.id);
 
-    db.recordAuditLog({
+    this.database.recordAuditLog({
       organizationId: ctx.organizationId,
       actorId: ctx.userId,
       actorEmail: ctx.userEmail,
@@ -181,8 +188,8 @@ export class AuthService {
   }
 
   public async getCurrentSession(ctx: TenantContext): Promise<any> {
-    const user = db.users.get(ctx.userId);
-    const org = db.organizations.get(ctx.organizationId);
+    const user = this.database.users.get(ctx.userId);
+    const org = this.database.organizations.get(ctx.organizationId);
     return {
       user: {
         id: ctx.userId,
@@ -201,10 +208,10 @@ export class AuthService {
   }
 
   public async switchOrganization(targetOrgId: string, ctx: TenantContext): Promise<AuthSession> {
-    const memberships = Array.from(db.memberships.values()).filter((m) => m.userId === ctx.userId);
+    const memberships = Array.from(this.database.memberships.values()).filter((m) => m.userId === ctx.userId);
     const match = memberships.find((m) => m.organizationId === targetOrgId);
     if (!match) {
-      db.recordAuditLog({
+      this.database.recordAuditLog({
         organizationId: ctx.organizationId,
         actorId: ctx.userId,
         actorEmail: ctx.userEmail,
@@ -218,19 +225,20 @@ export class AuthService {
       throw new ForbiddenError(`Cannot switch to organization ${targetOrgId}: user is not an authorized member.`);
     }
 
-    const org = db.organizations.get(targetOrgId);
+    const org = this.database.organizations.get(targetOrgId);
     if (!org) {
       throw new NotFoundError("Target organization");
     }
 
-    const user = db.users.get(ctx.userId)!;
-    const session = await createSessionToken(
-      { id: user.id, email: user.email, name: user.name },
-      { id: org.id, name: org.name },
-      match.role
-    );
+    const user = this.database.users.get(ctx.userId)!;
+    const session = await this.sessionStore.createSession({
+      user: { id: user.id, email: user.email, name: user.name },
+      org: { id: org.id, name: org.name },
+      role: match.role,
+      permissions: ROLE_PERMISSIONS[match.role] || ROLE_PERMISSIONS["Operations"],
+    });
 
-    db.recordAuditLog({
+    this.database.recordAuditLog({
       organizationId: targetOrgId,
       actorId: user.id,
       actorEmail: user.email,
@@ -246,9 +254,9 @@ export class AuthService {
   }
 
   public async logout(token: string, ctx?: TenantContext): Promise<boolean> {
-    await revokeSession(token);
+    await this.sessionStore.revokeSession(token);
     if (ctx) {
-      db.recordAuditLog({
+      this.database.recordAuditLog({
         organizationId: ctx.organizationId,
         actorId: ctx.userId,
         actorEmail: ctx.userEmail,

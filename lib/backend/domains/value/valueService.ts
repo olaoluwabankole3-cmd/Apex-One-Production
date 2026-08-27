@@ -6,7 +6,7 @@
  * Zero hardcoded financial constants.
  */
 
-import { db } from "../../database/store";
+import { db, DatabaseStore } from "../../database/store";
 import { ValueOpportunityRecord, ValueCapturedRecord } from "../../database/schema";
 import { TenantContext, requirePermission, ValidationError } from "../../core/security";
 
@@ -65,6 +65,8 @@ export interface ScenarioSimulationResult {
 }
 
 export class ValueService {
+  constructor(private readonly database: DatabaseStore = db) {}
+
   /**
    * Get consolidated Value Intelligence Command Center metrics for the tenant.
    * Derived purely from tenant repository entities.
@@ -76,12 +78,12 @@ export class ValueService {
 
     // 1. Fetch tenant entities
     const [opps, captured, customers, contracts, txns, signals] = await Promise.all([
-      db.opportunitiesRepo.findMany(ctx),
-      db.valueCapturedRepo.findMany(ctx),
-      db.customersRepo.findMany(ctx),
-      db.contractsRepo.findMany(ctx),
-      db.transactionsRepo.findMany(ctx),
-      db.signalsRepo.findMany(ctx),
+      this.database.opportunitiesRepo.findMany(ctx),
+      this.database.valueCapturedRepo.findMany(ctx),
+      this.database.customersRepo.findMany(ctx),
+      this.database.contractsRepo.findMany(ctx),
+      this.database.transactionsRepo.findMany(ctx),
+      this.database.signalsRepo.findMany(ctx),
     ]);
 
     // 2. Compute Tenant Baseline
@@ -281,7 +283,7 @@ export class ValueService {
   ): Promise<ValueOpportunityRecord[]> {
     requirePermission(ctx, "value:read");
 
-    return db.opportunitiesRepo.findMany(ctx, (o) => {
+    return this.database.opportunitiesRepo.findMany(ctx, (o) => {
       if (filters?.category && filters.category !== "all" && o.category !== filters.category) {
         return false;
       }
@@ -297,7 +299,7 @@ export class ValueService {
    */
   public async getOpportunityById(id: string, ctx: TenantContext): Promise<ValueOpportunityRecord> {
     requirePermission(ctx, "value:read");
-    return db.opportunitiesRepo.findById(id, ctx, "ValueOpportunity");
+    return this.database.opportunitiesRepo.findById(id, ctx, "ValueOpportunity");
   }
 
   /**
@@ -305,7 +307,7 @@ export class ValueService {
    */
   public async getCapturedLedger(ctx: TenantContext): Promise<ValueCapturedRecord[]> {
     requirePermission(ctx, "value:read");
-    return db.valueCapturedRepo.findMany(ctx);
+    return this.database.valueCapturedRepo.findMany(ctx);
   }
 
   /**
@@ -326,9 +328,9 @@ export class ValueService {
 
     // Dynamically derive baseline from tenant's real customer ARR and contract telemetry
     const [customers, contracts, txns] = await Promise.all([
-      db.customersRepo.findMany(ctx),
-      db.contractsRepo.findMany(ctx),
-      db.transactionsRepo.findMany(ctx),
+      this.database.customersRepo.findMany(ctx),
+      this.database.contractsRepo.findMany(ctx),
+      this.database.transactionsRepo.findMany(ctx),
     ]);
 
     const arrSum = customers.reduce((sum, c) => sum + (c.arr || 0), 0);

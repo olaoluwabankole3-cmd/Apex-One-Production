@@ -4,7 +4,7 @@
  * Manages workflow graph definitions, validation, versioning, and execution engine runs.
  */
 
-import { db } from "../../database/store";
+import { db, DatabaseStore } from "../../database/store";
 import { WorkflowRecord, WorkflowRunRecord, WorkflowRunStepRecord } from "../../database/schema";
 import { TenantContext, requirePermission, ValidationError, NotFoundError } from "../../core/security";
 import {
@@ -16,13 +16,15 @@ import {
 import { WorkflowValidator } from "./workflowValidator";
 
 export class WorkflowService {
+  constructor(private readonly database: DatabaseStore = db) {}
+
   /**
    * List all workflows for the tenant.
    */
   public async getWorkflows(ctx: TenantContext, filter?: { status?: string }): Promise<WorkflowRecord[]> {
     requirePermission(ctx, "workflow:read");
 
-    return db.workflowsRepo.findMany(ctx, (w) => {
+    return this.database.workflowsRepo.findMany(ctx, (w) => {
       if (filter?.status && filter.status !== "all" && w.status !== filter.status) {
         return false;
       }
@@ -35,7 +37,7 @@ export class WorkflowService {
    */
   public async getWorkflowById(id: string, ctx: TenantContext): Promise<WorkflowRecord> {
     requirePermission(ctx, "workflow:read");
-    return db.workflowsRepo.findById(id, ctx, "Workflow");
+    return this.database.workflowsRepo.findById(id, ctx, "Workflow");
   }
 
   /**
@@ -67,7 +69,7 @@ export class WorkflowService {
       updatedAt: new Date().toISOString(),
     };
 
-    return db.workflowsRepo.create(newWf, ctx);
+    return this.database.workflowsRepo.create(newWf, ctx);
   }
 
   /**
@@ -80,7 +82,7 @@ export class WorkflowService {
   ): Promise<WorkflowRecord> {
     requirePermission(ctx, "workflow:write");
 
-    const existing = await db.workflowsRepo.findById(id, ctx, "Workflow");
+    const existing = await this.database.workflowsRepo.findById(id, ctx, "Workflow");
 
     const nextNodes = dto.nodes || existing.nodes;
     const nextConnections = dto.connections || existing.connections;
@@ -89,7 +91,7 @@ export class WorkflowService {
       WorkflowValidator.validateWorkflowGraph(nextNodes, nextConnections);
     }
 
-    return db.workflowsRepo.update(
+    return this.database.workflowsRepo.update(
       id,
       {
         ...dto,
@@ -106,7 +108,7 @@ export class WorkflowService {
   public async triggerWorkflowRun(dto: TriggerWorkflowRunDto, ctx: TenantContext): Promise<WorkflowRunRecord> {
     requirePermission(ctx, "workflow:execute");
 
-    const wf = await db.workflowsRepo.findById(dto.workflowId, ctx, "Workflow");
+    const wf = await this.database.workflowsRepo.findById(dto.workflowId, ctx, "Workflow");
     if (wf.status !== "active") {
       throw new ValidationError(`Cannot execute workflow in status '${wf.status}'`);
     }
@@ -136,7 +138,7 @@ export class WorkflowService {
     };
 
     // Increment runs count
-    await db.workflowsRepo.update(
+    await this.database.workflowsRepo.update(
       wf.id,
       {
         runsCount: wf.runsCount + 1,
@@ -145,7 +147,7 @@ export class WorkflowService {
       "Workflow"
     );
 
-    return db.workflowRunsRepo.create(runRecord, ctx);
+    return this.database.workflowRunsRepo.create(runRecord, ctx);
   }
 
   /**
@@ -154,7 +156,7 @@ export class WorkflowService {
   public async advanceWorkflowStep(dto: AdvanceWorkflowStepDto, ctx: TenantContext): Promise<WorkflowRunRecord> {
     requirePermission(ctx, "workflow:execute");
 
-    const run = await db.workflowRunsRepo.findById(dto.runId, ctx, "WorkflowRun");
+    const run = await this.database.workflowRunsRepo.findById(dto.runId, ctx, "WorkflowRun");
 
     const updatedSteps = run.steps.map((step) => {
       if (step.stepId === dto.stepId) {
@@ -173,7 +175,7 @@ export class WorkflowService {
 
     const nextStatus = hasFailed ? "failed" : isAllCompleted ? "completed" : "running";
 
-    return db.workflowRunsRepo.update(
+    return this.database.workflowRunsRepo.update(
       run.id,
       {
         steps: updatedSteps,
@@ -190,7 +192,7 @@ export class WorkflowService {
    */
   public async getWorkflowRuns(workflowId: string, ctx: TenantContext): Promise<WorkflowRunRecord[]> {
     requirePermission(ctx, "workflow:read");
-    return db.workflowRunsRepo.findByWorkflow(workflowId, ctx);
+    return this.database.workflowRunsRepo.findByWorkflow(workflowId, ctx);
   }
 }
 

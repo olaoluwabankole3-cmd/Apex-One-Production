@@ -2,7 +2,7 @@
  * APEX ONE — Organizational Memory Domain Service
  */
 
-import { db } from "../../database/store";
+import { db, DatabaseStore } from "../../database/store";
 import { OrganizationalMemoryRecord } from "../../database/schema";
 import { TenantContext, requirePermission } from "../../core/security";
 import { Validator } from "../../core/validation";
@@ -19,6 +19,8 @@ export interface CreateMemoryDto {
 }
 
 export class MemoryService {
+  constructor(private readonly database: DatabaseStore = db) {}
+
   /**
    * List organizational memory items for the tenant.
    */
@@ -28,7 +30,7 @@ export class MemoryService {
   ): Promise<OrganizationalMemoryRecord[]> {
     requirePermission(ctx, "org:read");
 
-    return db.memoryRepo.findMany(ctx, (m) => {
+    return this.database.memoryRepo.findMany(ctx, (m) => {
       if (filters?.type && filters.type !== "all" && m.type !== filters.type) {
         return false;
       }
@@ -48,7 +50,7 @@ export class MemoryService {
   public async getMemoryById(id: string, ctx: TenantContext): Promise<OrganizationalMemoryRecord> {
     requirePermission(ctx, "org:read");
     Validator.requireId(id, "memoryId");
-    return db.memoryRepo.findById(id, ctx, "OrganizationalMemory");
+    return this.database.memoryRepo.findById(id, ctx, "OrganizationalMemory");
   }
 
   /**
@@ -81,9 +83,9 @@ export class MemoryService {
       createdAt: new Date().toISOString(),
     };
 
-    const record = await db.memoryRepo.create(recordData, ctx);
+    const record = await this.database.memoryRepo.create(recordData, ctx);
 
-    db.recordAuditLog({
+    this.database.recordAuditLog({
       organizationId: ctx.organizationId,
       actorId: ctx.userId,
       actorEmail: ctx.userEmail,

@@ -12,7 +12,7 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { TenantContext, requirePermission } from "../../core/security";
-import { db } from "../../database/store";
+import { db, DatabaseStore } from "../../database/store";
 
 let aiClient: GoogleGenAI | null = null;
 function getAiClient() {
@@ -57,113 +57,119 @@ export interface AiToolDefinition {
   handler: (args: Record<string, unknown>, ctx: TenantContext) => Promise<unknown>;
 }
 
+export function createAuthorizedAiTools(database: DatabaseStore = db): Record<string, AiToolDefinition> {
+  return {
+    get_tenant_customers: {
+      name: "get_tenant_customers",
+      description: "Retrieve customers and ARR within the authenticated organization",
+      parameters: { type: "object", properties: { status: { type: "string" } } },
+      handler: async (args, ctx) => {
+        const customers = await database.customersRepo.findMany(ctx, (c) => {
+          if (args.status && c.status !== args.status) return false;
+          return true;
+        });
+        return customers.map((c) => ({
+          id: c.id,
+          name: c.name,
+          arr: c.arr,
+          status: c.status,
+          health: c.healthScore,
+        }));
+      },
+    },
+    get_value_opportunities: {
+      name: "get_value_opportunities",
+      description: "Retrieve active value discovery and expansion opportunities for the organization",
+      parameters: { type: "object", properties: {} },
+      handler: async (_args, ctx) => {
+        const opps = await database.opportunitiesRepo.findMany(ctx);
+        return opps.map((o) => ({
+          id: o.id,
+          title: o.title,
+          value: o.potentialValue,
+          category: o.category,
+          status: o.status,
+        }));
+      },
+    },
+    get_organizational_memory: {
+      name: "get_organizational_memory",
+      description: "Search institutional memory facts, policies, and historical audit findings with provenance",
+      parameters: { type: "object", properties: { query: { type: "string" } } },
+      handler: async (args, ctx) => {
+        const q = typeof args.query === "string" ? args.query.toLowerCase() : "";
+        const memories = await database.memoryRepo.findMany(ctx, (m) => {
+          if (!q) return true;
+          return m.title.toLowerCase().includes(q) || m.content.toLowerCase().includes(q);
+        });
+        return memories.map((m) => ({
+          title: m.title,
+          content: m.content,
+          source: m.source,
+          confidence: m.confidence,
+        }));
+      },
+    },
+    get_tenant_documents: {
+      name: "get_tenant_documents",
+      description: "Retrieve indexed document summaries and extraction records for the organization",
+      parameters: { type: "object", properties: { category: { type: "string" } } },
+      handler: async (args, ctx) => {
+        const docs = await database.documentsRepo.findMany(ctx, (d) => {
+          if (args.category && d.category !== args.category) return false;
+          return true;
+        });
+        return docs.map((d) => ({
+          id: d.id,
+          name: d.name,
+          category: d.category,
+          summary: d.aiSummary,
+          fields: d.extractedFields,
+        }));
+      },
+    },
+    get_tenant_contracts: {
+      name: "get_tenant_contracts",
+      description: "Retrieve active contract metadata, SLAs, and indexation clauses for the organization",
+      parameters: { type: "object", properties: {} },
+      handler: async (_args, ctx) => {
+        const contracts = await database.contractsRepo.findMany(ctx);
+        return contracts.map((c) => ({
+          id: c.id,
+          title: c.title,
+          value: c.contractValue,
+          sla: c.slaCompliance,
+          indexed: c.volatilityIndexationClause,
+          renewalDays: c.renewalDaysRemaining,
+        }));
+      },
+    },
+  };
+}
+
 // Authorized Tenant-Aware Tools Registry
-export const authorizedAiTools: Record<string, AiToolDefinition> = {
-  get_tenant_customers: {
-    name: "get_tenant_customers",
-    description: "Retrieve customers and ARR within the authenticated organization",
-    parameters: { type: "object", properties: { status: { type: "string" } } },
-    handler: async (args, ctx) => {
-      const customers = await db.customersRepo.findMany(ctx, (c) => {
-        if (args.status && c.status !== args.status) return false;
-        return true;
-      });
-      return customers.map((c) => ({
-        id: c.id,
-        name: c.name,
-        arr: c.arr,
-        status: c.status,
-        health: c.healthScore,
-      }));
-    },
-  },
-  get_value_opportunities: {
-    name: "get_value_opportunities",
-    description: "Retrieve active value discovery and expansion opportunities for the organization",
-    parameters: { type: "object", properties: {} },
-    handler: async (_args, ctx) => {
-      const opps = await db.opportunitiesRepo.findMany(ctx);
-      return opps.map((o) => ({
-        id: o.id,
-        title: o.title,
-        value: o.potentialValue,
-        category: o.category,
-        status: o.status,
-      }));
-    },
-  },
-  get_organizational_memory: {
-    name: "get_organizational_memory",
-    description: "Search institutional memory facts, policies, and historical audit findings with provenance",
-    parameters: { type: "object", properties: { query: { type: "string" } } },
-    handler: async (args, ctx) => {
-      const q = typeof args.query === "string" ? args.query.toLowerCase() : "";
-      const memories = await db.memoryRepo.findMany(ctx, (m) => {
-        if (!q) return true;
-        return m.title.toLowerCase().includes(q) || m.content.toLowerCase().includes(q);
-      });
-      return memories.map((m) => ({
-        title: m.title,
-        content: m.content,
-        source: m.source,
-        confidence: m.confidence,
-      }));
-    },
-  },
-  get_tenant_documents: {
-    name: "get_tenant_documents",
-    description: "Retrieve indexed document summaries and extraction records for the organization",
-    parameters: { type: "object", properties: { category: { type: "string" } } },
-    handler: async (args, ctx) => {
-      const docs = await db.documentsRepo.findMany(ctx, (d) => {
-        if (args.category && d.category !== args.category) return false;
-        return true;
-      });
-      return docs.map((d) => ({
-        id: d.id,
-        name: d.name,
-        category: d.category,
-        summary: d.aiSummary,
-        fields: d.extractedFields,
-      }));
-    },
-  },
-  get_tenant_contracts: {
-    name: "get_tenant_contracts",
-    description: "Retrieve active contract metadata, SLAs, and indexation clauses for the organization",
-    parameters: { type: "object", properties: {} },
-    handler: async (_args, ctx) => {
-      const contracts = await db.contractsRepo.findMany(ctx);
-      return contracts.map((c) => ({
-        id: c.id,
-        title: c.title,
-        value: c.contractValue,
-        sla: c.slaCompliance,
-        indexed: c.volatilityIndexationClause,
-        renewalDays: c.renewalDaysRemaining,
-      }));
-    },
-  },
-};
+export const authorizedAiTools: Record<string, AiToolDefinition> = createAuthorizedAiTools(db);
 
 export class AiOrchestratorService {
+  constructor(private readonly database: DatabaseStore = db) {}
+
   /**
    * Execute an AI intelligence analysis with contextual grounding, authorized tools, and strict non-fabrication guarantees.
    */
   public async processIntelligencePrompt(dto: AiChatRequestDto, ctx: TenantContext): Promise<AiIntelligenceResponse> {
     requirePermission(ctx, "ai:execute");
 
-    const org = db.organizations.get(ctx.organizationId);
+    const org = this.database.organizations.get(ctx.organizationId);
     const orgName = org?.name || "Apex Demo Group";
     const currency = org?.currencySymbol || "₦";
 
     // 1. Gather tenant-grounded evidence strictly through repository scoping
     const [tenantCustomers, tenantOpps, tenantMemories, tenantContracts, tenantSignals] = await Promise.all([
-      db.customersRepo.findMany(ctx),
-      db.opportunitiesRepo.findMany(ctx),
-      db.memoryRepo.findMany(ctx),
-      db.contractsRepo.findMany(ctx),
-      db.signalsRepo.findMany(ctx),
+      this.database.customersRepo.findMany(ctx),
+      this.database.opportunitiesRepo.findMany(ctx),
+      this.database.memoryRepo.findMany(ctx),
+      this.database.contractsRepo.findMany(ctx),
+      this.database.signalsRepo.findMany(ctx),
     ]);
 
     const totalRecordsGrounded =
@@ -234,7 +240,7 @@ ORGANIZATION CONTEXT (Strict Grounding):
 
     try {
       const ai = getAiClient();
-      const response = await ai.models.generateContent({
+      const aiPromise = ai.models.generateContent({
         model: "gemini-3.6-flash",
         contents: `${contextSnippet}\n\nUSER QUERY (${dto.mode || "General"} Analysis Mode):\n${dto.prompt}`,
         config: {
@@ -251,9 +257,18 @@ Always format structured recommendations with:
 6. **NEXT STEP**: Immediate tactical move`,
         },
       });
-      generatedText = response.text || "Analysis complete.";
+      let timeoutTimer: NodeJS.Timeout | undefined;
+      try {
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutTimer = setTimeout(() => reject(new Error("AI generation timeout")), 3000);
+        });
+        const response = await Promise.race([aiPromise, timeoutPromise]);
+        generatedText = response.text || "Analysis complete.";
+      } finally {
+        if (timeoutTimer) clearTimeout(timeoutTimer);
+      }
     } catch {
-      // Clean, evidence-grounded non-fabricating response if Gemini API key is not configured in environment
+      // Clean, evidence-grounded non-fabricating response if Gemini API key is not configured in environment or timeout
       responseStatus = "requires_verification";
       generatedText = `**[Apex Intelligence Engine — Telemetry Analysis for ${orgName}]**
 
@@ -265,7 +280,7 @@ Always format structured recommendations with:
 6. **NEXT STEP**: Supply GEMINI_API_KEY in **Settings > Secrets** for live generative reasoning, or execute approved actions in the Execution Actions center.`;
     }
 
-    db.recordAuditLog({
+    this.database.recordAuditLog({
       organizationId: ctx.organizationId,
       actorId: ctx.userId,
       actorEmail: ctx.userEmail,

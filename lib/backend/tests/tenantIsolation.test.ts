@@ -25,21 +25,22 @@
  * 17. Input Validation, Sanitization & Negative Boundary Tests
  */
 
-import { customerService } from "../domains/customers/customerService";
-import { valueService } from "../domains/value/valueService";
-import { memoryService } from "../domains/memory/memoryService";
-import { actionService } from "../domains/actions/actionService";
-import { auditService } from "../domains/audit/auditService";
-import { authService } from "../domains/auth/authService";
-import { documentService } from "../domains/documents/documentService";
-import { knowledgeService } from "../domains/knowledge/knowledgeService";
-import { workflowService } from "../domains/workflows/workflowService";
+import { CustomerService } from "../domains/customers/customerService";
+import { ValueService } from "../domains/value/valueService";
+import { MemoryService } from "../domains/memory/memoryService";
+import { ActionService } from "../domains/actions/actionService";
+import { AuditService } from "../domains/audit/auditService";
+import { AuthService } from "../domains/auth/authService";
+import { DocumentService } from "../domains/documents/documentService";
+import { KnowledgeService } from "../domains/knowledge/knowledgeService";
+import { WorkflowService } from "../domains/workflows/workflowService";
 import { WorkflowValidator } from "../domains/workflows/workflowValidator";
-import { documentSearchIndex } from "../domains/documents/documentSearchIndex";
-import { objectStorageService } from "../domains/documents/documentStorage";
-import { defaultSessionStore, defaultAuthProvider } from "../domains/auth/authProvider";
-import { authorizedAiTools, aiOrchestratorService } from "../domains/ai/aiOrchestratorService";
-import { db } from "../database/store";
+import { InMemoryDocumentIndexAdapter } from "../domains/documents/documentSearchIndex";
+import { InMemoryObjectStorageAdapter } from "../domains/documents/documentStorage";
+import { InMemorySessionStore, LocalAuthenticationProvider } from "../domains/auth/authProvider";
+import { InMemoryRateLimiter } from "../domains/auth/rateLimiter";
+import { createAuthorizedAiTools, AiOrchestratorService } from "../domains/ai/aiOrchestratorService";
+import { DatabaseStore } from "../database/store";
 import { DemoDataProvider } from "../database/demoDataProvider";
 import { hashPassword, validatePasswordPolicy } from "../core/crypto";
 import {
@@ -60,7 +61,7 @@ export interface TestResult {
   durationMs?: number;
 }
 
-export async function runTenantIsolationTestSuite(): Promise<{
+export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): Promise<{
   passed: boolean;
   total: number;
   passedCount: number;
@@ -69,8 +70,28 @@ export async function runTenantIsolationTestSuite(): Promise<{
 }> {
   const results: TestResult[] = [];
 
-  // Re-seed demo multi-tenant fixtures to guarantee clean, deterministic state
+  // Create or reset isolated test database to guarantee strict isolation from production singleton
+  const db = isolatedDb || DatabaseStore.createFreshStore();
   new DemoDataProvider().seedInitialTenants(db);
+
+  // Initialize isolated test domain components
+  const defaultSessionStore = new InMemorySessionStore();
+  const defaultAuthProvider = new LocalAuthenticationProvider(defaultSessionStore, db);
+  const defaultRateLimiter = new InMemoryRateLimiter();
+  const documentSearchIndex = new InMemoryDocumentIndexAdapter();
+  const objectStorageService = new InMemoryObjectStorageAdapter();
+
+  const customerService = new CustomerService(db);
+  const valueService = new ValueService(db);
+  const memoryService = new MemoryService(db);
+  const actionService = new ActionService(db);
+  const auditService = new AuditService(db);
+  const authService = new AuthService(db, defaultAuthProvider, defaultSessionStore, defaultRateLimiter);
+  const documentService = new DocumentService(db, objectStorageService, documentSearchIndex);
+  const knowledgeService = new KnowledgeService(db);
+  const workflowService = new WorkflowService(db);
+  const aiOrchestratorService = new AiOrchestratorService(db);
+  const authorizedAiTools = createAuthorizedAiTools(db);
 
   // Helper to run a test and measure time
   async function testCase(
@@ -342,7 +363,7 @@ export async function runTenantIsolationTestSuite(): Promise<{
       process.env.DEMO_MODE = "false";
       let rejected = false;
       try {
-        await resolveTenantContext({});
+        await resolveTenantContext({}, defaultSessionStore);
       } catch (err: any) {
         if (err instanceof UnauthorizedError) rejected = true;
       }
@@ -355,7 +376,7 @@ export async function runTenantIsolationTestSuite(): Promise<{
   await testCase("Authentication Security", "Empty Bearer token triggers 401 Unauthorized", async () => {
     let rejected = false;
     try {
-      await resolveTenantContext({ authorization: "Bearer " });
+      await resolveTenantContext({ authorization: "Bearer " }, defaultSessionStore);
     } catch (err: any) {
       if (err instanceof UnauthorizedError) rejected = true;
     }
@@ -365,7 +386,7 @@ export async function runTenantIsolationTestSuite(): Promise<{
   await testCase("Authentication Security", "Forged session token triggers 401 Unauthorized", async () => {
     let rejected = false;
     try {
-      await resolveTenantContext({ authorization: "Bearer apex_sec_forged_random_string_12345" });
+      await resolveTenantContext({ authorization: "Bearer apex_sec_forged_random_string_12345" }, defaultSessionStore);
     } catch (err: any) {
       if (err instanceof UnauthorizedError) rejected = true;
     }
@@ -382,7 +403,7 @@ export async function runTenantIsolationTestSuite(): Promise<{
     );
     let rejected = false;
     try {
-      await resolveTenantContext({ authorization: `Bearer ${expiredSession.token}` });
+      await resolveTenantContext({ authorization: `Bearer ${expiredSession.token}` }, defaultSessionStore);
     } catch (err: any) {
       if (err instanceof UnauthorizedError) rejected = true;
     }
@@ -592,9 +613,12 @@ export async function runTenantIsolationTestSuite(): Promise<{
     const token = login.session.token;
     
     // Resolve context using cookie header
-    const resolvedCtx = await resolveTenantContext({
-      cookie: `other_pref=dark; apex_session=${token}; analytics=false`,
-    });
+    const resolvedCtx = await resolveTenantContext(
+      {
+        cookie: `other_pref=dark; apex_session=${token}; analytics=false`,
+      },
+      defaultSessionStore
+    );
 
     if (resolvedCtx.userId !== "usr-marcus-thorne") throw new Error("User ID mismatch from cookie auth");
     if (resolvedCtx.organizationId !== "apex-demo") throw new Error("Organization ID mismatch from cookie auth");
@@ -609,7 +633,7 @@ export async function runTenantIsolationTestSuite(): Promise<{
 
       let rejected = false;
       try {
-        await resolveTenantContext({});
+        await resolveTenantContext({}, defaultSessionStore);
       } catch (err: any) {
         if (err instanceof UnauthorizedError) rejected = true;
       }

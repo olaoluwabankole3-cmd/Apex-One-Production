@@ -5,19 +5,21 @@
  * with strict organization-level scoping.
  */
 
-import { db } from "../../database/store";
+import { db, DatabaseStore } from "../../database/store";
 import { KnowledgeItemRecord } from "../../database/schema";
 import { TenantContext, requirePermission, ValidationError, NotFoundError } from "../../core/security";
 import { CreateKnowledgeItemDto, UpdateKnowledgeItemDto, KnowledgeFilterDto } from "./knowledgeTypes";
 
 export class KnowledgeService {
+  constructor(private readonly database: DatabaseStore = db) {}
+
   /**
    * List all knowledge items accessible in the tenant context.
    */
   public async getKnowledgeItems(ctx: TenantContext, filters?: KnowledgeFilterDto): Promise<KnowledgeItemRecord[]> {
     requirePermission(ctx, "knowledge:read");
 
-    return db.knowledgeRepo.findMany(ctx, (k) => {
+    return this.database.knowledgeRepo.findMany(ctx, (k) => {
       if (filters?.category && filters.category !== "all" && k.category !== filters.category) {
         return false;
       }
@@ -43,7 +45,7 @@ export class KnowledgeService {
    */
   public async getKnowledgeItemById(id: string, ctx: TenantContext): Promise<KnowledgeItemRecord> {
     requirePermission(ctx, "knowledge:read");
-    return db.knowledgeRepo.findById(id, ctx, "KnowledgeItem");
+    return this.database.knowledgeRepo.findById(id, ctx, "KnowledgeItem");
   }
 
   /**
@@ -76,7 +78,7 @@ export class KnowledgeService {
       updatedAt: new Date().toISOString(),
     };
 
-    return db.knowledgeRepo.create(newItem, ctx);
+    return this.database.knowledgeRepo.create(newItem, ctx);
   }
 
   /**
@@ -89,10 +91,10 @@ export class KnowledgeService {
   ): Promise<KnowledgeItemRecord> {
     requirePermission(ctx, "knowledge:write");
 
-    const existing = await db.knowledgeRepo.findById(id, ctx, "KnowledgeItem");
+    const existing = await this.database.knowledgeRepo.findById(id, ctx, "KnowledgeItem");
     const nextVersion = existing.version + 1;
 
-    return db.knowledgeRepo.update(
+    return this.database.knowledgeRepo.update(
       id,
       {
         ...dto,
@@ -108,7 +110,7 @@ export class KnowledgeService {
    */
   public async deleteKnowledgeItem(id: string, ctx: TenantContext): Promise<boolean> {
     requirePermission(ctx, "knowledge:write");
-    return db.knowledgeRepo.delete(id, ctx, "KnowledgeItem");
+    return this.database.knowledgeRepo.delete(id, ctx, "KnowledgeItem");
   }
 }
 

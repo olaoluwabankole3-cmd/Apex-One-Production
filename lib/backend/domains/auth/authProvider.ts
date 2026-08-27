@@ -10,7 +10,7 @@
 
 import { AuthSession, PermissionCapability, ROLE_PERMISSIONS } from "../../core/security";
 import { generateSecureToken, verifyPassword, dummyPasswordVerification } from "../../core/crypto";
-import { db } from "../../database/store";
+import { db, DatabaseStore } from "../../database/store";
 import { UnauthorizedError, ForbiddenError, NotFoundError } from "../../core/errors";
 
 export interface CreateSessionParams {
@@ -195,7 +195,10 @@ export interface IAuthenticationProvider {
 }
 
 export class LocalAuthenticationProvider implements IAuthenticationProvider {
-  constructor(private readonly sessionStore: ISessionStore) {}
+  constructor(
+    private readonly sessionStore: ISessionStore,
+    private readonly database: DatabaseStore = db
+  ) {}
 
   public async authenticateCredentials(
     email: string,
@@ -219,7 +222,7 @@ export class LocalAuthenticationProvider implements IAuthenticationProvider {
     const normalizedEmail = email.trim().toLowerCase();
 
     // 3. User lookup
-    const user = Array.from(db.users.values()).find(
+    const user = Array.from(this.database.users.values()).find(
       (u) => u.email.toLowerCase() === normalizedEmail
     );
 
@@ -255,7 +258,7 @@ export class LocalAuthenticationProvider implements IAuthenticationProvider {
     }
 
     // 7. Resolve verified tenant memberships for authenticated user
-    const memberships = Array.from(db.memberships.values()).filter((m) => m.userId === user.id);
+    const memberships = Array.from(this.database.memberships.values()).filter((m) => m.userId === user.id);
     if (memberships.length === 0) {
       throw new ForbiddenError("User is not associated with any active organization tenant");
     }
@@ -270,7 +273,7 @@ export class LocalAuthenticationProvider implements IAuthenticationProvider {
       chosenMembership = match;
     }
 
-    const org = db.organizations.get(chosenMembership.organizationId);
+    const org = this.database.organizations.get(chosenMembership.organizationId);
     if (!org) {
       throw new NotFoundError("Organization");
     }
@@ -289,7 +292,7 @@ export class LocalAuthenticationProvider implements IAuthenticationProvider {
     });
 
     const availableOrganizations = memberships.map((m) => {
-      const o = db.organizations.get(m.organizationId);
+      const o = this.database.organizations.get(m.organizationId);
       return {
         id: m.organizationId,
         name: o?.name || m.organizationId,

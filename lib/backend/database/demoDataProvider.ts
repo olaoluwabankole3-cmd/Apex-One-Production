@@ -81,6 +81,11 @@ export class DemoDataProvider implements IDataProvider {
     workflows: Map<string, WorkflowRecord>;
     actions: Map<string, ActionRecord>;
   }): void {
+    // Strict production guard: Demo data provider must NEVER execute in production runtime
+    if (process.env.NODE_ENV === "production" || process.env.APP_ENV === "production") {
+      throw new Error("Security Violation: DemoDataProvider cannot be executed in a production environment");
+    }
+
     // 1. Organizations
     store.organizations.set("apex-demo", {
       id: "apex-demo",

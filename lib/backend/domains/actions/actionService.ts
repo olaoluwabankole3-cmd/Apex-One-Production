@@ -4,7 +4,7 @@
  * First-class action entities, human-approval gating, execution state transitions, and audit logs.
  */
 
-import { db } from "../../database/store";
+import { db, DatabaseStore } from "../../database/store";
 import { ActionRecord } from "../../database/schema";
 import { TenantContext, requirePermission } from "../../core/security";
 import { Validator } from "../../core/validation";
@@ -23,12 +23,14 @@ export interface CreateActionDto {
 }
 
 export class ActionService {
+  constructor(private readonly database: DatabaseStore = db) {}
+
   /**
    * List execution actions for tenant.
    */
   public async getActions(ctx: TenantContext, status?: string): Promise<ActionRecord[]> {
     requirePermission(ctx, "value:read");
-    return db.actionsRepo.findMany(ctx, (a) => {
+    return this.database.actionsRepo.findMany(ctx, (a) => {
       if (status && status !== "all" && a.status !== status) {
         return false;
       }
@@ -42,7 +44,7 @@ export class ActionService {
   public async getActionById(id: string, ctx: TenantContext): Promise<ActionRecord> {
     requirePermission(ctx, "value:read");
     Validator.requireId(id, "actionId");
-    return db.actionsRepo.findById(id, ctx, "Action");
+    return this.database.actionsRepo.findById(id, ctx, "Action");
   }
 
   /**
@@ -81,9 +83,9 @@ export class ActionService {
       updatedAt: now,
     };
 
-    const action = await db.actionsRepo.create(recordData, ctx);
+    const action = await this.database.actionsRepo.create(recordData, ctx);
 
-    db.recordAuditLog({
+    this.database.recordAuditLog({
       organizationId: ctx.organizationId,
       actorId: ctx.userId,
       actorEmail: ctx.userEmail,
@@ -104,7 +106,7 @@ export class ActionService {
    */
   public async advanceAction(id: string, ctx: TenantContext): Promise<ActionRecord> {
     Validator.requireId(id, "actionId");
-    const action = await db.actionsRepo.findById(id, ctx, "Action");
+    const action = await this.database.actionsRepo.findById(id, ctx, "Action");
 
     const pipelineOrder: ActionRecord["status"][] = ["Ready", "Approved", "In Progress", "Completed", "Measured"];
     const currentIndex = pipelineOrder.indexOf(action.status);
@@ -151,7 +153,7 @@ export class ActionService {
       updatedLogs.push(`Certified yield logged in organizational ledger`);
     }
 
-    const updated = await db.actionsRepo.update(
+    const updated = await this.database.actionsRepo.update(
       id,
       {
         status: nextStatus,
@@ -162,7 +164,7 @@ export class ActionService {
       "Action"
     );
 
-    db.recordAuditLog({
+    this.database.recordAuditLog({
       organizationId: ctx.organizationId,
       actorId: ctx.userId,
       actorEmail: ctx.userEmail,

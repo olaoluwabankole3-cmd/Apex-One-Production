@@ -5,15 +5,21 @@
  * and tenant-isolated index querying.
  */
 
-import { db } from "../../database/store";
+import { db, DatabaseStore } from "../../database/store";
 import { DocumentRecord } from "../../database/schema";
 import { TenantContext, requirePermission, ValidationError, NotFoundError } from "../../core/security";
 import { UploadDocumentDto, DocumentFilterDto, DocumentSummaryDto } from "./documentTypes";
-import { objectStorageService } from "./documentStorage";
+import { objectStorageService, IObjectStorageService } from "./documentStorage";
 import { documentExtractor } from "./documentExtractor";
-import { documentSearchIndex } from "./documentSearchIndex";
+import { documentSearchIndex, IDocumentSearchIndex } from "./documentSearchIndex";
 
 export class DocumentService {
+  constructor(
+    private readonly database: DatabaseStore = db,
+    private readonly storage: IObjectStorageService = objectStorageService,
+    private readonly searchIndex: IDocumentSearchIndex = documentSearchIndex
+  ) {}
+
   /**
    * List all documents matching tenant criteria.
    */
@@ -22,10 +28,10 @@ export class DocumentService {
 
     let docIdsFromSearch: string[] | undefined;
     if (filters?.query && filters.query.trim().length > 0) {
-      docIdsFromSearch = await documentSearchIndex.search(ctx.organizationId, filters.query.trim());
+      docIdsFromSearch = await this.searchIndex.search(ctx.organizationId, filters.query.trim());
     }
 
-    return db.documentsRepo.findMany(ctx, (doc) => {
+    return this.database.documentsRepo.findMany(ctx, (doc) => {
       if (filters?.category && filters.category !== "all" && doc.category !== filters.category) {
         return false;
       }
@@ -51,7 +57,7 @@ export class DocumentService {
    */
   public async getDocumentById(id: string, ctx: TenantContext): Promise<DocumentRecord> {
     requirePermission(ctx, "document:read");
-    return db.documentsRepo.findById(id, ctx, "Document");
+    return this.database.documentsRepo.findById(id, ctx, "Document");
   }
 
   /**
@@ -69,7 +75,7 @@ export class DocumentService {
 
     // 1. Put into object storage
     const content = dto.contentBuffer || `Simulated document content for ${dto.name}`;
-    const storageResult = await objectStorageService.putObject(
+    const storageResult = await this.storage.putObject(
       storageKey,
       content,
       dto.fileType === "pdf" ? "application/pdf" : "application/octet-stream"
@@ -98,7 +104,19 @@ export class DocumentService {
       updatedAt: new Date().toISOString(),
     };
 
-    const savedDoc = await db.documentsRepo.create(newDoc, ctx);
+    const savedDoc = await this.database.documentsRepo.create(newDoc, ctx);
+
+    this.database.recordAuditLog({
+      organizationId: ctx.organizationId,
+      actorId: ctx.userId,
+      actorEmail: ctx.userEmail,
+      action: "document:upload",
+      resource: "Document",
+      resourceId: savedDoc.id,
+      requestId: ctx.requestId,
+      status: "success",
+      metadata: { name: savedDoc.name, category: savedDoc.category, size: savedDoc.size },
+    });
 
     // 3. Process & Extract
     return this.processDocument(savedDoc.id, ctx, content);
@@ -110,16 +128,16 @@ export class DocumentService {
   public async processDocument(id: string, ctx: TenantContext, content?: string): Promise<DocumentRecord> {
     requirePermission(ctx, "document:write");
 
-    const doc = await db.documentsRepo.findById(id, ctx, "Document");
+    const doc = await this.database.documentsRepo.findById(id, ctx, "Document");
     const extraction = await documentExtractor.extractFields(doc, content);
 
     // Index search tokens
     const fullText = `${doc.name} ${doc.category} ${doc.tags.join(" ")} ${extraction.summary} ${extraction.fields
       .map((f) => `${f.label} ${f.value}`)
       .join(" ")}`;
-    const indexRef = await documentSearchIndex.indexDocument(ctx.organizationId, doc.id, fullText);
+    const indexRef = await this.searchIndex.indexDocument(ctx.organizationId, doc.id, fullText);
 
-    const updated = await db.documentsRepo.update(
+    const updated = await this.database.documentsRepo.update(
       id,
       {
         status: "indexed",
@@ -144,10 +162,23 @@ export class DocumentService {
   public async deleteDocument(id: string, ctx: TenantContext): Promise<boolean> {
     requirePermission(ctx, "document:delete");
 
-    const doc = await db.documentsRepo.findById(id, ctx, "Document");
-    await objectStorageService.deleteObject(doc.storageKey);
-    await documentSearchIndex.removeDocument(ctx.organizationId, doc.id);
-    return db.documentsRepo.delete(id, ctx, "Document");
+    const doc = await this.database.documentsRepo.findById(id, ctx, "Document");
+    await this.storage.deleteObject(doc.storageKey);
+    await this.searchIndex.removeDocument(ctx.organizationId, doc.id);
+    const result = await this.database.documentsRepo.delete(id, ctx, "Document");
+
+    this.database.recordAuditLog({
+      organizationId: ctx.organizationId,
+      actorId: ctx.userId,
+      actorEmail: ctx.userEmail,
+      action: "document:delete",
+      resource: "Document",
+      resourceId: id,
+      requestId: ctx.requestId,
+      status: "success",
+    });
+
+    return result;
   }
 
   /**
@@ -156,7 +187,7 @@ export class DocumentService {
   public async getSummary(ctx: TenantContext): Promise<DocumentSummaryDto> {
     requirePermission(ctx, "document:read");
 
-    const docs = await db.documentsRepo.findMany(ctx);
+    const docs = await this.database.documentsRepo.findMany(ctx);
     const byCategory: Record<string, number> = {};
     const byStatus: Record<string, number> = {};
     let totalStorageBytes = 0;
