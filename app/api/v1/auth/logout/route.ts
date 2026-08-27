@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveTenantContext } from "@/lib/backend/core/security";
+import { resolveTenantContext, getClearSessionCookieOptions } from "@/lib/backend/core/security";
 import { authService } from "@/lib/backend/domains/auth/authService";
 import { BackendError } from "@/lib/backend/core/errors";
 
@@ -27,16 +27,7 @@ export async function POST(req: NextRequest) {
     const response = NextResponse.json({ success: true, message: "Logged out successfully" });
     
     // Clear HttpOnly session cookie
-    response.cookies.set({
-      name: "apex_session",
-      value: "",
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 0,
-      expires: new Date(0),
-    });
+    response.cookies.set(getClearSessionCookieOptions());
 
     return response;
   } catch (err: any) {

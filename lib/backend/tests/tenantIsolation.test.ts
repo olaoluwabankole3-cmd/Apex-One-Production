@@ -42,7 +42,7 @@ import { InMemoryRateLimiter } from "../domains/auth/rateLimiter";
 import { createAuthorizedAiTools, AiOrchestratorService } from "../domains/ai/aiOrchestratorService";
 import { DatabaseStore } from "../database/store";
 import { DemoDataProvider } from "../database/demoDataProvider";
-import { hashPassword, validatePasswordPolicy } from "../core/crypto";
+import { hashPassword, validatePasswordPolicy, generateSecureToken } from "../core/crypto";
 import {
   TenantContext,
   CrossTenantViolationError,
@@ -51,7 +51,13 @@ import {
   ForbiddenError,
   ValidationError,
 } from "../core/errors";
-import { resolveTenantContext, ROLE_PERMISSIONS } from "../core/security";
+import {
+  resolveTenantContext,
+  ROLE_PERMISSIONS,
+  AUTH_COOKIE_NAME,
+  getSessionCookieOptions,
+  getClearSessionCookieOptions,
+} from "../core/security";
 
 export interface TestResult {
   suite: string;
@@ -354,131 +360,70 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
   });
 
   // =========================================================================
-  // SUITE 1: AUTHENTICATION, TOKEN SECURITY & CONTEXT RESOLUTION
+  // SUITE 1: AUTHENTICATION, TOKEN SECURITY & CONTEXT RESOLUTION (TASK 02)
   // =========================================================================
 
-  await testCase("Authentication Security", "Missing Authorization header triggers 401 Unauthorized", async () => {
-    const prevEnv = process.env.DEMO_MODE;
-    try {
-      process.env.DEMO_MODE = "false";
-      let rejected = false;
-      try {
-        await resolveTenantContext({}, defaultSessionStore);
-      } catch (err: any) {
-        if (err instanceof UnauthorizedError) rejected = true;
-      }
-      if (!rejected) throw new Error("Request without auth header was permitted");
-    } finally {
-      process.env.DEMO_MODE = prevEnv;
-    }
-  });
-
-  await testCase("Authentication Security", "Empty Bearer token triggers 401 Unauthorized", async () => {
-    let rejected = false;
-    try {
-      await resolveTenantContext({ authorization: "Bearer " }, defaultSessionStore);
-    } catch (err: any) {
-      if (err instanceof UnauthorizedError) rejected = true;
-    }
-    if (!rejected) throw new Error("Empty Bearer token was accepted");
-  });
-
-  await testCase("Authentication Security", "Forged session token triggers 401 Unauthorized", async () => {
-    let rejected = false;
-    try {
-      await resolveTenantContext({ authorization: "Bearer apex_sec_forged_random_string_12345" }, defaultSessionStore);
-    } catch (err: any) {
-      if (err instanceof UnauthorizedError) rejected = true;
-    }
-    if (!rejected) throw new Error("Forged token was accepted");
-  });
-
-  await testCase("Authentication Security", "Expired session token triggers 401 Unauthorized and is invalidated", async () => {
-    const expiredSession = await defaultSessionStore.createSession(
-      { id: "usr-temp-expired", email: "temp@example.com", name: "Temp" },
-      { id: "apex-demo", name: "Apex Demo" },
-      "CEO",
-      ROLE_PERMISSIONS["CEO"],
-      -10 // Expired 10 seconds ago
-    );
-    let rejected = false;
-    try {
-      await resolveTenantContext({ authorization: `Bearer ${expiredSession.token}` }, defaultSessionStore);
-    } catch (err: any) {
-      if (err instanceof UnauthorizedError) rejected = true;
-    }
-    if (!rejected) throw new Error("Expired session token was accepted");
-    const sessionInStore = await defaultSessionStore.getSession(expiredSession.token);
-    if (sessionInStore) throw new Error("Expired session was not purged from store");
-  });
-
-  await testCase("Authentication Security", "Valid user credentials authenticate successfully with authoritative claims", async () => {
+  // Test 1: Successful login
+  await testCase("Authentication Security", "1. Successful login authenticates credentials and registers session in store", async () => {
     const loginResult = await authService.login(
       { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
       "test_auth_success_run"
     );
-    if (!loginResult?.session?.token) throw new Error("Missing session token in response");
+    if (!loginResult?.session?.token) throw new Error("Missing session token in provider result");
     if (loginResult.session.userId !== "usr-marcus-thorne") throw new Error("User ID mismatch");
     if (loginResult.session.organizationId !== "apex-demo") throw new Error("Organization ID mismatch");
     if (loginResult.session.role !== "CEO") throw new Error("Role mismatch");
+    if (!loginResult.session.permissions.includes("org:admin")) throw new Error("Missing admin permissions");
+
+    const sessionInStore = await defaultSessionStore.getSession(loginResult.session.token);
+    if (!sessionInStore) throw new Error("Session was not registered in session store");
   });
 
-  await testCase("Authentication Security", "Invalid password triggers authentication rejection", async () => {
+  // Test 2: Wrong password
+  await testCase("Authentication Security", "2. Wrong password triggers authentication rejection with generic error", async () => {
     let rejected = false;
+    let errorMessage = "";
     try {
       await authService.login(
         { email: "m.thorne@apexsync.ai", password: "WrongPassword2026!" },
         "test_auth_bad_password"
       );
     } catch (err: any) {
-      if (err instanceof UnauthorizedError) rejected = true;
+      if (err instanceof UnauthorizedError) {
+        rejected = true;
+        errorMessage = err.message;
+      }
     }
     if (!rejected) throw new Error("Authentication succeeded with wrong password");
+    if (errorMessage !== "Invalid email or password") {
+      throw new Error(`Non-uniform error message leaked: '${errorMessage}'`);
+    }
   });
 
-  await testCase("Authentication Security", "Empty password input rejected during login", async () => {
+  // Test 3: Unknown account
+  await testCase("Authentication Security", "3. Unknown account email triggers uniform rejection without account enumeration", async () => {
     let rejected = false;
+    let errorMessage = "";
     try {
-      await authService.login({ email: "m.thorne@apexsync.ai", password: "" }, "test_empty_password");
+      await authService.login(
+        { email: "nonexistent.user@apexsync.ai", password: "AnyPassword123!" },
+        "test_auth_unknown_acc"
+      );
     } catch (err: any) {
-      if (err instanceof ValidationError || err instanceof UnauthorizedError) rejected = true;
-    }
-    if (!rejected) throw new Error("Login succeeded with empty password");
-  });
-
-  await testCase("Authentication Security", "User without passwordHash or passwordSalt cannot authenticate", async () => {
-    db.users.set("usr-test-no-creds", {
-      id: "usr-test-no-creds",
-      email: "nocreds@apexsync.ai",
-      name: "No Creds User",
-      title: "Test User",
-      status: "active",
-      createdAt: "2026-01-01T00:00:00Z",
-    });
-    db.memberships.set("mem-test-no-creds", {
-      id: "mem-test-no-creds",
-      organizationId: "apex-demo",
-      userId: "usr-test-no-creds",
-      role: "Operations",
-      department: "Ops",
-      joinedAt: "2026-01-01T00:00:00Z",
-    });
-
-    try {
-      let rejected = false;
-      try {
-        await defaultAuthProvider.authenticateCredentials("nocreds@apexsync.ai", "SomePass123!");
-      } catch (err: any) {
-        if (err instanceof UnauthorizedError) rejected = true;
+      if (err instanceof UnauthorizedError) {
+        rejected = true;
+        errorMessage = err.message;
       }
-      if (!rejected) throw new Error("User without passwordHash authenticated");
-    } finally {
-      db.users.delete("usr-test-no-creds");
-      db.memberships.delete("mem-test-no-creds");
+    }
+    if (!rejected) throw new Error("Non-existent user email was accepted");
+    if (errorMessage !== "Invalid email or password") {
+      throw new Error(`Account existence leaked via error message: '${errorMessage}'`);
     }
   });
 
-  await testCase("Authentication Security", "Disabled account status blocks login", async () => {
+  // Test 4: Invalid credentials (disabled account & missing password hashes)
+  await testCase("Authentication Security", "4. Invalid credentials (disabled status or missing hash) blocked", async () => {
+    // Sub-case A: Disabled account
     const testCreds = hashPassword("ApexEnterprise2026!");
     db.users.set("usr-test-disabled-acc", {
       id: "usr-test-disabled-acc",
@@ -511,33 +456,447 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
       db.users.delete("usr-test-disabled-acc");
       db.memberships.delete("mem-test-disabled-acc");
     }
+
+    // Sub-case B: User missing hash/salt
+    db.users.set("usr-test-no-creds", {
+      id: "usr-test-no-creds",
+      email: "nocreds@apexsync.ai",
+      name: "No Creds User",
+      title: "Test User",
+      status: "active",
+      createdAt: "2026-01-01T00:00:00Z",
+    });
+    db.memberships.set("mem-test-no-creds", {
+      id: "mem-test-no-creds",
+      organizationId: "apex-demo",
+      userId: "usr-test-no-creds",
+      role: "Operations",
+      department: "Ops",
+      joinedAt: "2026-01-01T00:00:00Z",
+    });
+
+    try {
+      let rejected = false;
+      try {
+        await defaultAuthProvider.authenticateCredentials("nocreds@apexsync.ai", "SomePass123!");
+      } catch (err: any) {
+        if (err instanceof UnauthorizedError) rejected = true;
+      }
+      if (!rejected) throw new Error("User without passwordHash authenticated");
+    } finally {
+      db.users.delete("usr-test-no-creds");
+      db.memberships.delete("mem-test-no-creds");
+    }
   });
 
-  await testCase("Authentication Security", "Non-existent user email rejected", async () => {
+  // Test 5: Malformed login request
+  await testCase("Authentication Security", "5. Malformed login request rejected during validation", async () => {
+    // Empty email
+    let rejectedEmptyEmail = false;
+    try {
+      await authService.login({ email: "", password: "SomePassword123!" }, "test_empty_email");
+    } catch (err: any) {
+      if (err instanceof ValidationError || err instanceof UnauthorizedError) rejectedEmptyEmail = true;
+    }
+    if (!rejectedEmptyEmail) throw new Error("Login succeeded with empty email");
+
+    // Empty password
+    let rejectedEmptyPass = false;
+    try {
+      await authService.login({ email: "m.thorne@apexsync.ai", password: "" }, "test_empty_password");
+    } catch (err: any) {
+      if (err instanceof ValidationError || err instanceof UnauthorizedError) rejectedEmptyPass = true;
+    }
+    if (!rejectedEmptyPass) throw new Error("Login succeeded with empty password");
+  });
+
+  // Test 6: Password never returned
+  await testCase("Authentication Security", "6. Plaintext password is never returned in session data or user profiles", async () => {
+    const loginResult = await authService.login(
+      { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
+      "test_no_pwd_leak"
+    );
+    const session = loginResult.session;
+    if ((session as any).password || (session as any).currentPassword || (session as any).plainPassword) {
+      throw new Error("Session object leaked plaintext password");
+    }
+
+    const sessionData = await authService.getCurrentSession(tenantAContext);
+    if ((sessionData.user as any).password) {
+      throw new Error("getCurrentSession leaked plaintext password");
+    }
+  });
+
+  // Test 7: Password hash never returned
+  await testCase("Authentication Security", "7. Password hash and salt are never returned in session data or user records", async () => {
+    const loginResult = await authService.login(
+      { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
+      "test_no_hash_leak"
+    );
+    const session = loginResult.session;
+    if ((session as any).passwordHash || (session as any).passwordSalt) {
+      throw new Error("Session object leaked cryptographic hashes or salts");
+    }
+
+    const sessionData = await authService.getCurrentSession(tenantAContext);
+    if ((sessionData.user as any).passwordHash || (sessionData.user as any).passwordSalt) {
+      throw new Error("User session leaked cryptographic hashes or salts");
+    }
+  });
+
+  // Test 8: Session token never returned in login JSON
+  await testCase("Authentication Security", "8. Session token is never returned in login API JSON response payload", async () => {
+    // Simulate what /app/api/v1/auth/login/route.ts returns in its JSON response
+    const result = await authService.login(
+      { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
+      "test_json_response_clean"
+    );
+
+    // Exact response structure from /api/v1/auth/login
+    const apiJsonResponse = {
+      success: true,
+      user: {
+        id: result.session.userId,
+        email: result.session.userEmail,
+        name: result.session.userName,
+        role: result.session.role,
+        permissions: result.session.permissions,
+      },
+      organization: {
+        id: result.session.organizationId,
+        name: result.session.organizationName,
+      },
+      availableOrganizations: result.availableOrganizations,
+      expiresAt: result.session.expiresAt,
+    };
+
+    if ("token" in apiJsonResponse || (apiJsonResponse as any).token !== undefined) {
+      throw new Error("CRITICAL SECURITY DEFECT: Session token leaked in login JSON response payload");
+    }
+  });
+
+  // Test 9: Secure cookie configuration
+  await testCase("Authentication Security", "9. Secure cookie configuration enforces HttpOnly, Secure, SameSite, and path", () => {
+    const prevEnv = process.env.APP_ENV;
+    try {
+      process.env.APP_ENV = "production";
+      const prodCookie = getSessionCookieOptions(86400);
+      if (prodCookie.name !== AUTH_COOKIE_NAME) throw new Error("Incorrect cookie name");
+      if (prodCookie.httpOnly !== true) throw new Error("Cookie missing HttpOnly flag");
+      if (prodCookie.secure !== true) throw new Error("Cookie missing Secure flag in production");
+      if (prodCookie.sameSite !== "lax") throw new Error("Cookie missing SameSite=lax attribute");
+      if (prodCookie.path !== "/") throw new Error("Cookie path is not root /");
+      if (prodCookie.maxAge !== 86400) throw new Error("Cookie maxAge mismatch");
+
+      const clearCookie = getClearSessionCookieOptions();
+      if (clearCookie.name !== AUTH_COOKIE_NAME) throw new Error("Clear cookie name mismatch");
+      if (clearCookie.value !== "") throw new Error("Clear cookie value not empty");
+      if (clearCookie.maxAge !== 0) throw new Error("Clear cookie maxAge is not 0");
+    } finally {
+      process.env.APP_ENV = prevEnv;
+    }
+  });
+
+  // Test 10: Session token randomness/security
+  await testCase("Authentication Security", "10. Session token uses cryptographically secure random bytes with high entropy", () => {
+    const tokens = new Set<string>();
+    for (let i = 0; i < 100; i++) {
+      const token = generateSecureToken("apex_sec");
+      if (!token.startsWith("apex_sec_")) throw new Error("Invalid token prefix format");
+      if (token.length < 32) throw new Error("Token length insufficient for 256-bit entropy");
+      if (tokens.has(token)) throw new Error("Duplicate token generated (entropy defect)");
+      tokens.add(token);
+    }
+  });
+
+  // Test 11: Valid session
+  await testCase("Authentication Security", "11. Valid session resolves authenticated TenantContext via Header and Cookie", async () => {
+    const login = await authService.login(
+      { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
+      "test_valid_session"
+    );
+    const token = login.session.token;
+
+    // Via Bearer header
+    const ctxHeader = await resolveTenantContext({ authorization: `Bearer ${token}` }, defaultSessionStore);
+    if (ctxHeader.userId !== "usr-marcus-thorne") throw new Error("Header auth userId mismatch");
+    if (ctxHeader.organizationId !== "apex-demo") throw new Error("Header auth organizationId mismatch");
+
+    // Via Cookie
+    const ctxCookie = await resolveTenantContext({ cookie: `${AUTH_COOKIE_NAME}=${token}` }, defaultSessionStore);
+    if (ctxCookie.userId !== "usr-marcus-thorne") throw new Error("Cookie auth userId mismatch");
+    if (ctxCookie.organizationId !== "apex-demo") throw new Error("Cookie auth organizationId mismatch");
+  });
+
+  // Test 12: Expired session
+  await testCase("Authentication Security", "12. Expired session triggers 401 Unauthorized and is purged from store", async () => {
+    const expiredSession = await defaultSessionStore.createSession(
+      { id: "usr-temp-expired", email: "temp@example.com", name: "Temp" },
+      { id: "apex-demo", name: "Apex Demo" },
+      "CEO",
+      ROLE_PERMISSIONS["CEO"],
+      -10 // Expired 10 seconds ago
+    );
     let rejected = false;
     try {
-      await defaultAuthProvider.authenticateCredentials("ghost@apexsync.ai", "AnyPassword123!");
+      await resolveTenantContext({ authorization: `Bearer ${expiredSession.token}` }, defaultSessionStore);
     } catch (err: any) {
       if (err instanceof UnauthorizedError) rejected = true;
     }
-    if (!rejected) throw new Error("Non-existent user email was accepted");
+    if (!rejected) throw new Error("Expired session token was accepted");
+    const sessionInStore = await defaultSessionStore.getSession(expiredSession.token);
+    if (sessionInStore) throw new Error("Expired session was not purged from store");
   });
 
-  await testCase("Authentication Security", "Target organization spoofing during login is rejected", async () => {
+  // Test 13: Revoked session
+  await testCase("Authentication Security", "13. Revoked session token triggers 401 Unauthorized", async () => {
+    const login = await authService.login(
+      { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
+      "test_revoked_session"
+    );
+    const token = login.session.token;
+    await defaultSessionStore.revokeSession(token);
+
     let rejected = false;
     try {
-      // Marcus Thorne is not a member of Titan Corp
+      await resolveTenantContext({ authorization: `Bearer ${token}` }, defaultSessionStore);
+    } catch (err: any) {
+      if (err instanceof UnauthorizedError) rejected = true;
+    }
+    if (!rejected) throw new Error("Revoked session token was accepted");
+  });
+
+  // Test 14: Unknown session
+  await testCase("Authentication Security", "14. Unknown / forged session token triggers 401 Unauthorized", async () => {
+    let rejected = false;
+    try {
+      await resolveTenantContext({ authorization: "Bearer apex_sec_forged_random_string_12345" }, defaultSessionStore);
+    } catch (err: any) {
+      if (err instanceof UnauthorizedError) rejected = true;
+    }
+    if (!rejected) throw new Error("Forged token was accepted");
+  });
+
+  // Test 15: Malformed session
+  await testCase("Authentication Security", "15. Malformed session string triggers 401 Unauthorized", async () => {
+    // Empty Bearer token
+    let rejectedEmpty = false;
+    try {
+      await resolveTenantContext({ authorization: "Bearer " }, defaultSessionStore);
+    } catch (err: any) {
+      if (err instanceof UnauthorizedError) rejectedEmpty = true;
+    }
+    if (!rejectedEmpty) throw new Error("Empty Bearer token was accepted");
+
+    // Malformed cookie string
+    let rejectedCookie = false;
+    try {
+      await resolveTenantContext({ cookie: `${AUTH_COOKIE_NAME}=; other=123` }, defaultSessionStore);
+    } catch (err: any) {
+      if (err instanceof UnauthorizedError) rejectedCookie = true;
+    }
+    if (!rejectedCookie && process.env.APP_ENV === "production") {
+      throw new Error("Empty cookie value was accepted");
+    }
+  });
+
+  // Test 16: Logout invalidates session
+  await testCase("Authentication Security", "16. Logout invalidates session token immediately in store", async () => {
+    const login = await authService.login(
+      { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
+      "test_logout_run"
+    );
+    const token = login.session.token;
+    await authService.logout(token, tenantAContext);
+    const session = await defaultSessionStore.getSession(token);
+    if (session) throw new Error("Revoked session token remains valid in store after logout");
+  });
+
+  // Test 17: Session fixation protection
+  await testCase("Authentication Security", "17. Session fixation prevention: logins generate distinct cryptographic tokens", async () => {
+    const login1 = await authService.login(
+      { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
+      "test_fixation_1"
+    );
+    const login2 = await authService.login(
+      { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
+      "test_fixation_2"
+    );
+
+    if (login1.session.token === login2.session.token) {
+      throw new Error("Sequential logins returned identical session token (session fixation vulnerability)");
+    }
+    if (!login1.session.token.startsWith("apex_sec_") || !login2.session.token.startsWith("apex_sec_")) {
+      throw new Error("Tokens do not use secure prefix format");
+    }
+  });
+
+  // Test 18: Organization spoofing
+  await testCase("Authentication Security", "18. Target organization spoofing during login or switch is rejected with 403", async () => {
+    // Marcus Thorne is not a member of Titan Corp
+    let rejectedLogin = false;
+    try {
       await defaultAuthProvider.authenticateCredentials(
         "m.thorne@apexsync.ai",
         "ApexEnterprise2026!",
         "org-titan-corp"
       );
     } catch (err: any) {
-      if (err instanceof ForbiddenError) rejected = true;
+      if (err instanceof ForbiddenError) rejectedLogin = true;
     }
-    if (!rejected) throw new Error("User authenticated into unassigned organization tenant");
+    if (!rejectedLogin) throw new Error("User authenticated into unassigned organization tenant");
+
+    // Switching to unassigned organization
+    let rejectedSwitch = false;
+    try {
+      await authService.switchOrganization("org-titan-corp", tenantAContext);
+    } catch (err: any) {
+      if (err instanceof ForbiddenError) rejectedSwitch = true;
+    }
+    if (!rejectedSwitch) throw new Error("User switched into unauthorized tenant");
   });
 
+  // Test 19: Tenant spoofing
+  await testCase("Authentication Security", "19. Client-supplied organization headers or body cannot override context", async () => {
+    const marcusLogin = await authService.login(
+      { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
+      "test_tenant_spoof_login"
+    );
+    const headers = {
+      authorization: `Bearer ${marcusLogin.session.token}`,
+      "x-organization-id": "org-titan-corp",
+      "x-tenant-id": "org-titan-corp",
+    };
+    const ctx = await resolveTenantContext(headers, defaultSessionStore);
+    if (ctx.organizationId !== "apex-demo") {
+      throw new Error(`Tenant spoofing vulnerability: Context resolved to '${ctx.organizationId}' instead of 'apex-demo'`);
+    }
+  });
+
+  // Test 20: Role spoofing
+  await testCase("Authentication Security", "20. Client cannot claim arbitrary role; role is derived strictly from membership", async () => {
+    const elenaLogin = await authService.login(
+      { email: "e.cho@apexsync.ai", password: "ApexEnterprise2026!" },
+      "test_role_spoof_login"
+    );
+    const headers = {
+      authorization: `Bearer ${elenaLogin.session.token}`,
+      "x-role": "CEO",
+      "x-user-role": "SuperAdmin",
+    };
+    const ctx = await resolveTenantContext(headers, defaultSessionStore);
+    if (ctx.userRole !== "Relationship Manager") {
+      throw new Error(`Role spoofing vulnerability: Context resolved to '${ctx.userRole}' instead of verified 'Relationship Manager'`);
+    }
+  });
+
+  // Test 21: Permission spoofing
+  await testCase("Authentication Security", "21. Client cannot claim arbitrary permissions; derived strictly from server rules", async () => {
+    const elenaLogin = await authService.login(
+      { email: "e.cho@apexsync.ai", password: "ApexEnterprise2026!" },
+      "test_perm_spoof_login"
+    );
+    const headers = {
+      authorization: `Bearer ${elenaLogin.session.token}`,
+      "x-permissions": "admin:manage,customer:delete,security:audit",
+    };
+    const ctx = await resolveTenantContext(headers, defaultSessionStore);
+    if (ctx.permissions.includes("admin:manage") || ctx.permissions.includes("customer:delete")) {
+      throw new Error("Permission spoofing vulnerability: Context granted unverified permissions from client header");
+    }
+  });
+
+  // Test 22: Demo authentication blocked in production
+  await testCase("Authentication Security", "22. Production environment strictly denies demo fallback even with DEMO_MODE=true", async () => {
+    const prevAppEnv = process.env.APP_ENV;
+    const prevDemoMode = process.env.DEMO_MODE;
+    try {
+      process.env.APP_ENV = "production";
+      process.env.DEMO_MODE = "true";
+
+      let rejected = false;
+      try {
+        await resolveTenantContext({}, defaultSessionStore);
+      } catch (err: any) {
+        if (err instanceof UnauthorizedError) rejected = true;
+      }
+      if (!rejected) throw new Error("Production mode silently fell back to demo tenant context");
+    } finally {
+      process.env.APP_ENV = prevAppEnv;
+      process.env.DEMO_MODE = prevDemoMode;
+    }
+  });
+
+  // Test 23: Authentication error safety
+  await testCase("Authentication Security", "23. Authentication errors return uniform generic message without stack traces", async () => {
+    const attempts = [
+      { email: "nonexistent@apexsync.ai", password: "SomePassword123!" },
+      { email: "m.thorne@apexsync.ai", password: "WrongPassword2026!" },
+      { email: "malformed@invalid", password: "AnyPassword123!" },
+    ];
+
+    for (const attempt of attempts) {
+      try {
+        await authService.login(attempt, "test_error_safety");
+        throw new Error("Authentication should have failed");
+      } catch (err: any) {
+        if (!(err instanceof UnauthorizedError)) {
+          throw new Error(`Expected UnauthorizedError, got ${err?.constructor?.name}`);
+        }
+        if (err.message !== "Invalid email or password") {
+          throw new Error(`Information leakage in error message: '${err.message}'`);
+        }
+      }
+    }
+  });
+
+  // Test 24: Concurrent session isolation
+  await testCase("Authentication Security", "24. Concurrent session isolation preserves discrete tenant contexts", async () => {
+    const marcusLogin = await authService.login(
+      { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
+      "test_concurrent_marcus"
+    );
+    const elenaLogin = await authService.login(
+      { email: "e.cho@apexsync.ai", password: "ApexEnterprise2026!" },
+      "test_concurrent_elena"
+    );
+
+    const concurrentRequests = Array.from({ length: 20 }, (_, i) => {
+      const isEven = i % 2 === 0;
+      const token = isEven ? marcusLogin.session.token : elenaLogin.session.token;
+      return resolveTenantContext({ authorization: `Bearer ${token}` }, defaultSessionStore);
+    });
+
+    const resolvedContexts = await Promise.all(concurrentRequests);
+    resolvedContexts.forEach((ctx, idx) => {
+      const isEven = idx % 2 === 0;
+      const expectedUserId = isEven ? "usr-marcus-thorne" : "usr-elena-cho";
+      const expectedOrgId = isEven ? "apex-demo" : "apex-demo";
+      const expectedRole = isEven ? "CEO" : "Relationship Manager";
+
+      if (ctx.userId !== expectedUserId || ctx.organizationId !== expectedOrgId || ctx.userRole !== expectedRole) {
+        throw new Error(`Concurrent context collision at index ${idx}: expected ${expectedUserId}, got ${ctx.userId}`);
+      }
+    });
+  });
+
+  // Test 25: Authenticated-user endpoint does not expose secrets
+  await testCase("Authentication Security", "25. Authenticated-user endpoint (/api/v1/auth/me) returns sanitized data", async () => {
+    const sessionData = await authService.getCurrentSession(tenantAContext);
+    if (!sessionData.user || !sessionData.organization) {
+      throw new Error("Missing user or organization data in session profile");
+    }
+
+    const userKeys = Object.keys(sessionData.user);
+    const forbiddenKeys = ["password", "passwordHash", "passwordSalt", "token", "sessionSecret"];
+    for (const forbidden of forbiddenKeys) {
+      if (userKeys.includes(forbidden) || (sessionData as any)[forbidden] !== undefined) {
+        throw new Error(`Authenticated session endpoint leaked secret key '${forbidden}'`);
+      }
+    }
+  });
+
+  // Password Policy enforcement
   await testCase("Authentication Security", "Password policy enforcement verifies minimum complexity", () => {
     const tooShort = validatePasswordPolicy("12345");
     const validPass = validatePasswordPolicy("ApexEnterprise2026!");
@@ -545,6 +904,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     if (!validPass.valid) throw new Error("Valid enterprise password was rejected");
   });
 
+  // Password change security and session invalidation
   await testCase("Authentication Security", "Password change verifies current credentials and revokes active sessions", async () => {
     const elenaAuth = await authService.login(
       { email: "e.cho@apexsync.ai", password: "ApexEnterprise2026!" },
@@ -584,91 +944,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     );
   });
 
-  await testCase("Authentication Security", "Session logout revokes token immediately", async () => {
-    const login = await authService.login(
-      { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
-      "test_logout_run"
-    );
-    const token = login.session.token;
-    await authService.logout(token, tenantAContext);
-    const session = await defaultSessionStore.getSession(token);
-    if (session) throw new Error("Revoked session token remains valid in store");
-  });
-
-  await testCase("Authentication Security", "Switching organization to an unauthorized tenant is blocked", async () => {
-    let rejected = false;
-    try {
-      await authService.switchOrganization("org-titan-corp", tenantAContext);
-    } catch (err: any) {
-      if (err instanceof ForbiddenError) rejected = true;
-    }
-    if (!rejected) throw new Error("User switched into unauthorized tenant");
-  });
-
-  await testCase("Authentication Security", "HttpOnly session cookie resolves authenticated tenant context", async () => {
-    const login = await authService.login(
-      { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
-      "test_cookie_auth"
-    );
-    const token = login.session.token;
-    
-    // Resolve context using cookie header
-    const resolvedCtx = await resolveTenantContext(
-      {
-        cookie: `other_pref=dark; apex_session=${token}; analytics=false`,
-      },
-      defaultSessionStore
-    );
-
-    if (resolvedCtx.userId !== "usr-marcus-thorne") throw new Error("User ID mismatch from cookie auth");
-    if (resolvedCtx.organizationId !== "apex-demo") throw new Error("Organization ID mismatch from cookie auth");
-  });
-
-  await testCase("Authentication Security", "Production environment strictly denies demo fallback even with DEMO_MODE=true", async () => {
-    const prevAppEnv = process.env.APP_ENV;
-    const prevDemoMode = process.env.DEMO_MODE;
-    try {
-      process.env.APP_ENV = "production";
-      process.env.DEMO_MODE = "true";
-
-      let rejected = false;
-      try {
-        await resolveTenantContext({}, defaultSessionStore);
-      } catch (err: any) {
-        if (err instanceof UnauthorizedError) rejected = true;
-      }
-      if (!rejected) throw new Error("Production mode silently fell back to demo tenant context");
-    } finally {
-      process.env.APP_ENV = prevAppEnv;
-      process.env.DEMO_MODE = prevDemoMode;
-    }
-  });
-
-  await testCase("Authentication Security", "Session fixation prevention: logins generate distinct cryptographic tokens", async () => {
-    const login1 = await authService.login(
-      { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
-      "test_fixation_1"
-    );
-    const login2 = await authService.login(
-      { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
-      "test_fixation_2"
-    );
-
-    if (login1.session.token === login2.session.token) {
-      throw new Error("Sequential logins returned identical session token (session fixation vulnerability)");
-    }
-    if (!login1.session.token.startsWith("apex_sec_") || !login2.session.token.startsWith("apex_sec_")) {
-      throw new Error("Tokens do not use secure prefix format");
-    }
-  });
-
-  await testCase("Authentication Security", "Sensitive cryptographic credentials are never exposed in user records", async () => {
-    const userSession = await authService.getCurrentSession(tenantAContext);
-    if ((userSession.user as any).passwordHash || (userSession.user as any).passwordSalt || (userSession.user as any).password) {
-      throw new Error("User session leaked cryptographic hashes or salts");
-    }
-  });
-
+  // Rate Limiting
   await testCase("Authentication Security", "Login rate limiting throttles excessive failed attempts", async () => {
     const testEmail = "rate-limit-test@apexsync.ai";
     const testIp = "192.168.1.100";

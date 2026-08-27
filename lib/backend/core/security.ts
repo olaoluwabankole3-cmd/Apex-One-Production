@@ -133,6 +133,46 @@ export const ROLE_PERMISSIONS: Record<string, PermissionCapability[]> = {
   ],
 };
 
+export const AUTH_COOKIE_NAME = "apex_session";
+
+export interface SessionCookieOptions {
+  name: string;
+  value: string;
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: "lax" | "strict" | "none";
+  path: string;
+  maxAge: number;
+  expires?: Date;
+}
+
+export function getSessionCookieOptions(ttlSeconds: number = 86400): Omit<SessionCookieOptions, "value"> {
+  const isProduction = process.env.NODE_ENV === "production" || process.env.APP_ENV === "production";
+  return {
+    name: AUTH_COOKIE_NAME,
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: "lax",
+    path: "/",
+    maxAge: ttlSeconds,
+    expires: new Date(Date.now() + ttlSeconds * 1000),
+  };
+}
+
+export function getClearSessionCookieOptions(): SessionCookieOptions {
+  const isProduction = process.env.NODE_ENV === "production" || process.env.APP_ENV === "production";
+  return {
+    name: AUTH_COOKIE_NAME,
+    value: "",
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+    expires: new Date(0),
+  };
+}
+
 export function generateRequestId(): string {
   return generateSecureRequestId();
 }

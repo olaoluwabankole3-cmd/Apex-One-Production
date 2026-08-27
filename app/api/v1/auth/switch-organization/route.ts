@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveTenantContext } from "@/lib/backend/core/security";
+import { resolveTenantContext, getSessionCookieOptions } from "@/lib/backend/core/security";
 import { authService } from "@/lib/backend/domains/auth/authService";
 import { BackendError, ValidationError } from "@/lib/backend/core/errors";
 
@@ -16,7 +16,6 @@ export async function POST(req: NextRequest) {
 
     const response = NextResponse.json({
       success: true,
-      token: session.token,
       user: {
         id: session.userId,
         email: session.userEmail,
@@ -32,13 +31,8 @@ export async function POST(req: NextRequest) {
     });
 
     response.cookies.set({
-      name: "apex_session",
+      ...getSessionCookieOptions(86400),
       value: session.token,
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 86400,
     });
 
     return response;

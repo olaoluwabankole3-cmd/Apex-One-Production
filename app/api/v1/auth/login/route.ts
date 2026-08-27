@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authService } from "@/lib/backend/domains/auth/authService";
 import { BackendError, UnauthorizedError, ValidationError, ForbiddenError } from "@/lib/backend/core/errors";
-import { generateRequestId } from "@/lib/backend/core/security";
+import { generateRequestId, getSessionCookieOptions } from "@/lib/backend/core/security";
 
 export async function POST(req: NextRequest) {
   const requestId = generateRequestId();
@@ -32,10 +32,9 @@ export async function POST(req: NextRequest) {
       { ipAddress, userAgent }
     );
 
-    // Build sanitized response payload (Strictly no password hashes, salts, or internal cryptographic secrets)
+    // Build sanitized response payload (Strictly NO raw session tokens, password hashes, salts, or internal cryptographic secrets)
     const response = NextResponse.json({
       success: true,
-      token: result.session.token,
       user: {
         id: result.session.userId,
         email: result.session.userEmail,
@@ -51,16 +50,10 @@ export async function POST(req: NextRequest) {
       expiresAt: result.session.expiresAt,
     });
 
-    // Set secure HttpOnly cookie for session management
-    const isProduction = process.env.NODE_ENV === "production";
+    // Set secure HttpOnly cookie for session management (the ONLY vector for session secrets)
     response.cookies.set({
-      name: "apex_session",
+      ...getSessionCookieOptions(86400),
       value: result.session.token,
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 86400, // 24 hours
     });
 
     return response;
