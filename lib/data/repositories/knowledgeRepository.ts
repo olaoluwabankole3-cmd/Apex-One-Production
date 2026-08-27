@@ -65,32 +65,23 @@ export class ApiKnowledgeRepository implements KnowledgeRepository {
   }
 
   async getHistoricalEvents(_organizationId?: string): Promise<HistoricalEvent[]> {
-    return [
-      {
-        year: "2026",
-        title: "Enterprise Multi-Tenant Isolation Architecture Verification",
-        category: "Compliance",
-        description: "Verified strict cryptographic tenant resolution across all domain boundaries.",
-        evidence: "Cryptographic tenant isolation test suite passed (100% boundary integrity).",
-        impactValue: "₦45.0M",
-      },
-      {
-        year: "2026",
-        title: "Clearing & Sweep Float Recovery Protocol Ratification",
-        category: "Strategy",
-        description: "Established automated end-of-day sweep protocols reducing float leakage.",
-        evidence: "Reconciled treasury ledger logs and automated settlement traces.",
-        impactValue: "₦18.4M",
-      },
-      {
-        year: "2026",
-        title: "AML Screening Rule Optimization Benchmark",
-        category: "Operations",
-        description: "Refined false-positive transaction screening matrices resulting in zero compliance penalty liabilities.",
-        evidence: "Zero compliance regulatory infractions across all commercial ops.",
-        impactValue: "₦12.0M",
+    try {
+      const res = await apiClient.get<{ success: boolean; data: any[] }>("/api/v1/memory");
+      if (res && Array.isArray(res.data)) {
+        return res.data.map(m => ({
+          year: new Date(m.createdAt || Date.now()).getFullYear().toString(),
+          title: m.title || "Organizational Memory Record",
+          category: (m.type === "decision" ? "Compliance" : "Strategy") as any,
+          description: m.content || "",
+          evidence: `Source: ${m.source || "System Telemetry"}`,
+          impactValue: "Verified",
+        }));
       }
-    ];
+      return [];
+    } catch (err) {
+      console.error("Failed to fetch historical events from API:", err);
+      return [];
+    }
   }
 
   async createKnowledgeItem(data: Partial<KnowledgeItemRecord>): Promise<KnowledgeSynapse> {

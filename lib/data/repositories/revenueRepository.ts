@@ -23,8 +23,8 @@ export class ApiRevenueRepository implements RevenueRepository {
       const totalArrM = (totalArrUSD / 1000000).toFixed(1);
       const atRiskCount = customers.filter(c => c.status === "at-risk" || c.healthScore < 70).length;
 
-      const totalArrVal = parseFloat(totalArrM) || 64.6;
-      const avgHealth = customers.length ? Math.round(customers.reduce((s, c) => s + c.healthScore, 0) / customers.length) : 88;
+      const totalArrVal = parseFloat(totalArrM) || 0;
+      const avgHealth = customers.length ? Math.round(customers.reduce((s, c) => s + c.healthScore, 0) / customers.length) : 0;
 
       return [
         {
@@ -34,21 +34,21 @@ export class ApiRevenueRepository implements RevenueRepository {
           prefix: "$",
           suffix: "M",
           decimals: 1,
-          delta: 14.8,
-          deltaLabel: "+14.8% vs. last year",
-          trend: "up",
-          sparkline: [52, 54, 56, 59, 61, 64.6],
+          delta: 0,
+          deltaLabel: "Live Portfolio",
+          trend: "flat",
+          sparkline: [],
           roles: ["CEO", "Relationship Manager", "Operations"],
         },
         {
           id: "kpi-accounts",
           label: "Active Enterprise Accounts",
-          value: customers.length || 48,
+          value: customers.length,
           decimals: 0,
-          delta: 3,
-          deltaLabel: "+3 this quarter",
-          trend: "up",
-          sparkline: [38, 40, 42, 44, 46, 48],
+          delta: 0,
+          deltaLabel: "Live Portfolio",
+          trend: "flat",
+          sparkline: [],
           roles: ["CEO", "Relationship Manager"],
         },
         {
@@ -57,10 +57,10 @@ export class ApiRevenueRepository implements RevenueRepository {
           value: avgHealth,
           suffix: "%",
           decimals: 0,
-          delta: 2.4,
-          deltaLabel: "+2.4% portfolio index",
-          trend: "up",
-          sparkline: [82, 84, 85, 86, 87, avgHealth],
+          delta: 0,
+          deltaLabel: "Live Index",
+          trend: "flat",
+          sparkline: [],
           roles: ["CEO", "Customer Service", "Relationship Manager"],
         },
         {
@@ -69,10 +69,10 @@ export class ApiRevenueRepository implements RevenueRepository {
           value: atRiskCount,
           suffix: " Accounts",
           decimals: 0,
-          delta: atRiskCount > 0 ? -1 : 0,
-          deltaLabel: atRiskCount > 0 ? "Action required" : "Zero critical churn",
+          delta: 0,
+          deltaLabel: atRiskCount > 0 ? "Action required" : "Zero flagged",
           trend: atRiskCount > 0 ? "down" : "flat",
-          sparkline: [4, 3, 3, 2, 2, atRiskCount],
+          sparkline: [],
           roles: ["CEO", "Compliance", "Relationship Manager"],
         },
       ];
@@ -83,16 +83,8 @@ export class ApiRevenueRepository implements RevenueRepository {
   }
 
   async getRevenueSeries(_organizationId?: string): Promise<RevenuePoint[]> {
-    return [
-      { month: "Jan", revenue: 14.2, target: 13.5 },
-      { month: "Feb", revenue: 15.8, target: 14.5 },
-      { month: "Mar", revenue: 16.9, target: 16.0 },
-      { month: "Apr", revenue: 18.4, target: 17.5 },
-      { month: "May", revenue: 20.1, target: 19.0 },
-      { month: "Jun", revenue: 21.6, target: 20.5 },
-      { month: "Jul", revenue: 23.8, target: 22.0 },
-      { month: "Aug", revenue: 25.4, target: 24.0 },
-    ];
+    // BACKEND CAPABILITY REQUIRED: Historical monthly revenue time-series service
+    return [];
   }
 
   async getPortfolioBreakdown(_organizationId?: string): Promise<PortfolioSlice[]> {
@@ -107,22 +99,11 @@ export class ApiRevenueRepository implements RevenueRepository {
       }
 
       const colors = ["#C9A961", "#8E6A2B", "#4A8068", "#9B4E4E", "#607274"];
-      const slices: PortfolioSlice[] = Object.entries(subMap).map(([name, val], i) => ({
+      return Object.entries(subMap).map(([name, val], i) => ({
         name,
-        value: Math.round(val / 1000000) || 5,
+        value: Math.round(val / 1000000),
         color: colors[i % colors.length],
       }));
-
-      if (slices.length === 0) {
-        return [
-          { name: "Strategic Accounts", value: 25, color: "#C9A961" },
-          { name: "Enterprise Operations", value: 18, color: "#8E6A2B" },
-          { name: "Commercial Operations", value: 12, color: "#4A8068" },
-          { name: "Customer Operations", value: 8, color: "#9B4E4E" },
-        ];
-      }
-
-      return slices;
     } catch (err) {
       console.error("Failed to load portfolio breakdown:", err);
       return [];
@@ -130,42 +111,53 @@ export class ApiRevenueRepository implements RevenueRepository {
   }
 
   async getRevenueBySubsidiary(_organizationId?: string): Promise<SubsidiaryRevenuePoint[]> {
-    return [
-      { name: "Strategic Accounts", revenue: 25.4, target: 24.0, margin: 42 },
-      { name: "Enterprise Operations", revenue: 18.2, target: 17.5, margin: 38 },
-      { name: "Commercial Operations", revenue: 12.6, target: 12.0, margin: 31 },
-      { name: "Customer Operations", revenue: 8.4, target: 8.0, margin: 29 },
-    ];
+    try {
+      const res = await apiClient.get<{ success: boolean; data: CustomerRecord[] }>("/api/v1/customers");
+      const customers = res?.data || [];
+      const subMap: Record<string, number> = {};
+
+      for (const c of customers) {
+        const sub = c.subsidiary || "Strategic Accounts";
+        subMap[sub] = (subMap[sub] || 0) + (c.arr || 0);
+      }
+
+      return Object.entries(subMap).map(([name, val]) => ({
+        name,
+        revenue: +(val / 1000000).toFixed(1),
+        target: +(val / 1000000).toFixed(1),
+        margin: 0,
+      }));
+    } catch (err) {
+      console.error("Failed to load revenue by subsidiary:", err);
+      return [];
+    }
   }
 
   async getRevenueBySubsidiaryMonthly(_organizationId?: string): Promise<RevenueBySubsidiaryPoint[]> {
-    return [
-      { month: "Jan", strategicAccounts: 18.2, enterpriseOps: 12.1, commercialOps: 8.4, customerOps: 5.2 },
-      { month: "Feb", strategicAccounts: 19.5, enterpriseOps: 13.0, commercialOps: 9.1, customerOps: 5.8 },
-      { month: "Mar", strategicAccounts: 21.0, enterpriseOps: 14.5, commercialOps: 10.2, customerOps: 6.4 },
-      { month: "Apr", strategicAccounts: 22.4, enterpriseOps: 15.8, commercialOps: 11.0, customerOps: 7.1 },
-      { month: "May", strategicAccounts: 23.8, enterpriseOps: 16.9, commercialOps: 11.8, customerOps: 7.8 },
-      { month: "Jun", strategicAccounts: 25.4, enterpriseOps: 18.2, commercialOps: 12.6, customerOps: 8.4 },
-    ];
+    return [];
   }
 
   async getCustomerGrowth(_organizationId?: string): Promise<CustomerGrowthPoint[]> {
-    return [
-      { month: "Jan", customers: 42 },
-      { month: "Feb", customers: 45 },
-      { month: "Mar", customers: 48 },
-      { month: "Apr", customers: 52 },
-      { month: "May", customers: 56 },
-      { month: "Jun", customers: 61 },
-    ];
+    return [];
   }
 
   async getSegmentBreakdown(_organizationId?: string): Promise<SegmentBreakdown[]> {
-    return [
-      { segment: "Enterprise", arr: 35.2, customers: 24, color: "#C9A961" },
-      { segment: "Mid-Market", arr: 20.4, customers: 16, color: "#8E6A2B" },
-      { segment: "SMB", arr: 8.4, customers: 8, color: "#4A8068" },
-    ];
+    try {
+      const res = await apiClient.get<{ success: boolean; data: CustomerRecord[] }>("/api/v1/customers");
+      const customers = res?.data || [];
+      const ent = customers.filter(c => c.tier === "Enterprise");
+      const mid = customers.filter(c => c.tier === "Mid-Market");
+      const smb = customers.filter(c => c.tier === "SMB");
+
+      return [
+        { segment: "Enterprise", arr: +(ent.reduce((s, c) => s + (c.arr || 0), 0) / 1000000).toFixed(1), customers: ent.length, color: "#C9A961" },
+        { segment: "Mid-Market", arr: +(mid.reduce((s, c) => s + (c.arr || 0), 0) / 1000000).toFixed(1), customers: mid.length, color: "#8E6A2B" },
+        { segment: "SMB", arr: +(smb.reduce((s, c) => s + (c.arr || 0), 0) / 1000000).toFixed(1), customers: smb.length, color: "#4A8068" },
+      ];
+    } catch (err) {
+      console.error("Failed to load segment breakdown:", err);
+      return [];
+    }
   }
 
   async getSubsidiaryPerformance(_organizationId?: string): Promise<SubsidiaryPerformance[]> {
@@ -173,12 +165,24 @@ export class ApiRevenueRepository implements RevenueRepository {
   }
 
   async getAnalyticsStats(_organizationId?: string): Promise<AnalyticsSummaryStats> {
-    return {
-      totalRevenue: 64.6,
-      netNewArr: 8.4,
-      netRevenueRetention: 118,
-      grossChurnRate: 1.8,
-    };
+    try {
+      const res = await apiClient.get<{ success: boolean; data: CustomerRecord[] }>("/api/v1/customers");
+      const customers = res?.data || [];
+      const totalRevenue = +(customers.reduce((s, c) => s + (c.arr || 0), 0) / 1000000).toFixed(1);
+      return {
+        totalRevenue,
+        netNewArr: 0,
+        netRevenueRetention: 100,
+        grossChurnRate: 0,
+      };
+    } catch (err) {
+      return {
+        totalRevenue: 0,
+        netNewArr: 0,
+        netRevenueRetention: 100,
+        grossChurnRate: 0,
+      };
+    }
   }
 }
 

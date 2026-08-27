@@ -44,41 +44,37 @@ function mapRecordToIntelDocument(d: DocumentRecord): IntelDocument {
     uploadedBy: d.uploadedBy,
     date: new Date(d.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
     size: d.size,
-    pages: d.metadata?.pageCount || 12,
+    pages: d.metadata?.pageCount || 1,
     status: d.status === "indexed" ? "processed" : "processing",
     usefulSummary: {
-      keyFinding: d.aiSummary || `Verified institutional record cataloged under ${d.category}.`,
-      obligations: [
-        "Quarterly reporting and compliance review within standard bounds.",
-        "Maintain SLA performance guarantees and audit readiness."
-      ],
-      risksDetail: [
-        "Standard 90-day review period applies for operational modifications.",
-        "Non-compliance flags automatically escalate to Governance desk."
-      ],
+      keyFinding: d.aiSummary || "",
+      obligations: [],
+      risksDetail: [],
       datesDetail: [
-        { event: "Record Created", date: new Date(d.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
-        { event: "Next Audit Interval", date: "Dec 15, 2026" }
+        { event: "Record Created", date: new Date(d.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) }
       ],
-      financialExposure: `₦${d.extractedFields?.find(f => f.label.includes("Exposure") || f.label.includes("Fee"))?.value || "25.4M"} active group exposure.`,
-      recommendedAction: "Confirm alignment with subsidiary lead and archive verification logs."
+      financialExposure: d.extractedFields?.find(f => f.label.toLowerCase().includes("exposure") || f.label.toLowerCase().includes("amount"))?.value || "Not available",
+      recommendedAction: d.extractedFields?.find(f => f.label.toLowerCase().includes("action"))?.value || "Not available"
     },
     entities: {
-      customers: d.tags || ["Apex Enterprise"],
-      contracts: [`DOC-${d.id.slice(-4).toUpperCase()}`],
-      financialValues: d.extractedFields?.map(f => f.value) || ["₦25.4M ARR Value"],
-      risks: ["Operational alignment", "SLA monitoring"],
+      customers: d.tags || [],
+      contracts: [],
+      financialValues: d.extractedFields?.map(f => f.value) || [],
+      risks: [],
       importantDates: [new Date(d.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })],
-      actions: ["Execute compliance review", "Verify ledger postings"],
+      actions: [],
       relatedDocs: [d.name]
     },
     relationships: {
-      relatedCustomer: { name: d.tags?.[0] || "Strategic Accounts Client", id: d.customerId || "cust-1" },
-      relatedContract: `Contract Mandate #CTR-${d.id.slice(-4).toUpperCase()}`,
-      relatedWorkflow: "Enterprise Document Intelligence Pipeline",
-      relatedEmployee: `${d.uploadedBy}`,
-      relatedTransaction: `TXN-DOC-${d.id.slice(-4).toUpperCase()}`,
-      relatedDecision: "Apex Board allocation and compliance sign-off"
+      relatedCustomer: {
+        name: d.tags?.[0] || d.customerId || "Unassigned",
+        id: d.customerId || "none",
+      },
+      relatedContract: "None",
+      relatedWorkflow: "None",
+      relatedEmployee: d.uploadedBy || "System",
+      relatedTransaction: "None",
+      relatedDecision: "None",
     }
   };
 }

@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { isDemoMode } from "@/lib/demo";
+import { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FileText,
@@ -21,294 +20,16 @@ import {
   Send,
   Lock,
   ArrowRight,
-  Info
+  Info,
+  Loader2
 } from "lucide-react";
-
-// Expanded metadata interfaces for rich Document Intelligence
-interface ExtractedEntities {
-  customers: string[];
-  contracts: string[];
-  financialValues: string[];
-  risks: string[];
-  importantDates: string[];
-  actions: string[];
-  relatedDocs: string[];
-}
-
-interface UsefulSummary {
-  keyFinding: string;
-  obligations: string[];
-  risksDetail: string[];
-  datesDetail: { event: string; date: string }[];
-  financialExposure: string;
-  recommendedAction: string;
-}
-
-interface DocRelationships {
-  relatedCustomer: { name: string; id: string };
-  relatedContract: string;
-  relatedWorkflow: string;
-  relatedEmployee: string;
-  relatedTransaction: string;
-  relatedDecision: string;
-}
-
-interface IntelDocument {
-  id: string;
-  name: string;
-  fileType: "pdf" | "doc" | "xlsx";
-  category: "Contract" | "Policy" | "Financial Document" | "Report" | "Compliance Document";
-  businessUnit: "Enterprise Operations" | "Commercial Operations" | "Strategic Accounts" | "Customer Operations";
-  uploadedBy: string;
-  date: string;
-  size: string;
-  pages: number;
-  status: "processed" | "processing";
-  usefulSummary: UsefulSummary;
-  entities: ExtractedEntities;
-  relationships: DocRelationships;
-}
-
-const defaultDocuments: IntelDocument[] = [
-    {
-      id: "doc-1",
-      name: "Strategic Accounts — Q2 Investment Management Agreement.pdf",
-      fileType: "pdf",
-      category: "Contract",
-      businessUnit: "Strategic Accounts",
-      uploadedBy: "Priya Nair",
-      date: "Jul 15, 2026",
-      size: "2.4 MB",
-      pages: 18,
-      status: "processed",
-      usefulSummary: {
-        keyFinding: "Apex Sync assumes discretionary asset placement rights for Ashford & Vale Wealth. Tiered fee scales are structured dynamically with a baseline commitment of ₦2.99B ($4.60M USD) AUM.",
-        obligations: [
-          "Quarterly reporting delivered within 15 business days of close.",
-          "Discretionary rebalancing restricted to high-liquidity indexes."
-        ],
-        risksDetail: [
-          "90-day static notice period is required for standard termination.",
-          "Performance penalty clauses trigger if standard index benchmarks lag by >4%."
-        ],
-        datesDetail: [
-          { event: "Agreement Effective", date: "Feb 1, 2026" },
-          { event: "Quarterly Audit Lock", date: "Aug 15, 2026" },
-          { event: "Auto-Renewal Review", date: "Jan 15, 2029" }
-        ],
-        financialExposure: "₦2.99B committed capital at 0.85% base (₦25.4M base ARR yield potential).",
-        recommendedAction: "Confirm with Priya Nair that Q2 rebalancing complies strictly with client's new carbon-neutral guidelines."
-      },
-      entities: {
-        customers: ["Ashford & Vale Wealth"],
-        contracts: ["IMA-2026-VALE-01"],
-        financialValues: ["₦2.99B AUM", "0.85% fee", "10% performance incentive"],
-        risks: ["90-day termination notice lockup", "Lag penalty index"],
-        importantDates: ["Feb 1, 2026", "Aug 15, 2026", "Jan 15, 2029"],
-        actions: ["Execute compliance re-verification", "Lock in Q2 ledger parameters"],
-        relatedDocs: ["Ashford & Vale Portfolio Statement Q1.xlsx", "Strategic Accounts Yield Ledger 2026.xlsx"]
-      },
-      relationships: {
-        relatedCustomer: { name: "Ashford & Vale Wealth", id: "cust-5" },
-        relatedContract: "Asset Placement Mandate #IMA-2026",
-        relatedWorkflow: "Discretionary Allocation & Trading Pipeline",
-        relatedEmployee: "Priya Nair (Senior Advisor)",
-        relatedTransaction: "TXN-9021-Capital-AUM",
-        relatedDecision: "Apex Board allocation approval of February 2026"
-      }
-    },
-    {
-      id: "doc-2",
-      name: "Meridian Logistics — Renewal Contract Draft.doc",
-      fileType: "doc",
-      category: "Contract",
-      businessUnit: "Commercial Operations",
-      uploadedBy: "Elena Cho",
-      date: "Jul 16, 2026",
-      size: "640 KB",
-      pages: 9,
-      status: "processed",
-      usefulSummary: {
-        keyFinding: "Draft renewal framework proposing standard 12-month extension terms for Meridian Logistics Group. A 3% tariff increase has been proposed by sales, but is currently contested.",
-        obligations: [
-          "Daily credit clearing windows locked to 24-hour cycles.",
-          "Overdraft clearing restricted to ₦10M baseline tiers."
-        ],
-        risksDetail: [
-          "Meridian has requested custom SLA response bounds of 2 hours, which exceeds standard 4-hour buffers.",
-          "No auto-renewal clauses exist — requires active executive signatures before September."
-        ],
-        datesDetail: [
-          { event: "Draft Expiration Window", date: "Aug 1, 2026" },
-          { event: "Core Contract Renewal Limit", date: "Sep 14, 2026" }
-        ],
-        financialExposure: "₦1.84M current ARR (proposing 3% growth margin lift).",
-        recommendedAction: "Loop in Elena Cho to negotiate a 2.5% increase compromise alongside custom SLA pricing overlays."
-      },
-      entities: {
-        customers: ["Meridian Logistics Group"],
-        contracts: ["CON-REN-LOG-02"],
-        financialValues: ["₦1.84M ARR", "3% tariff adjustment", "₦10M overdraft limits"],
-        risks: ["Contested pricing tiers", "Custom SLA overhead risk"],
-        importantDates: ["Aug 1, 2026", "Sep 14, 2026"],
-        actions: ["Settle tariff compromise rate", "Verify legal signatory credentials"],
-        relatedDocs: ["Meridian Q2 Logistics Invoice.pdf", "Apex Group Credit Guidelines v3.pdf"]
-      },
-      relationships: {
-        relatedCustomer: { name: "Meridian Logistics Group", id: "cust-1" },
-        relatedContract: "Corporate Credit Account Renewal #CON-REN-LOG",
-        relatedWorkflow: "Sales Renewal Pipeline v4",
-        relatedEmployee: "Elena Cho (Relationship Lead)",
-        relatedTransaction: "TXN-4821-Meridian-Clearing",
-        relatedDecision: "Commercial Operations credit risk committee review"
-      }
-    },
-    {
-      id: "doc-3",
-      name: "Enterprise Operations — Q2 2026 Financial Statement.xlsx",
-      fileType: "xlsx",
-      category: "Financial Document",
-      businessUnit: "Enterprise Operations",
-      uploadedBy: "Nina Torres",
-      date: "Jul 10, 2026",
-      size: "1.1 MB",
-      pages: 6,
-      status: "processed",
-      usefulSummary: {
-        keyFinding: "Consolidated Q2 performance shows asset base expanding by 4.1% quarter-on-quarter. Corporate credit products drove the majority of growth, compensating for retail volume slumps.",
-        obligations: [
-          "Submit verified regulatory filings to central banking regulators by mid-August.",
-          "Verify loan-loss reserve balances match ₦21M margin floor allocations."
-        ],
-        risksDetail: [
-          "Slight margin squeezing detected in consumer loan portfolios due to retail interest rate shifts.",
-          "Non-performing loan segments saw a transient 0.3% rise."
-        ],
-        datesDetail: [
-          { event: "Filing Submission Deadline", date: "Aug 15, 2026" },
-          { event: "Quarterly Board Review", date: "Aug 20, 2026" }
-        ],
-        financialExposure: "₦18.6B under-management balance sheet, with ₦142M net corporate yield.",
-        recommendedAction: "Deploy Automated Reserve Sweeps to hedge retail credit variance ahead of final Q3 calculations."
-      },
-      entities: {
-        customers: ["Internal - Enterprise Operations Treasury"],
-        contracts: ["FS-Q2-2026-BANK"],
-        financialValues: ["₦18.6B Balance Sheet", "₦142M Yield", "₦21M Loss Reserve"],
-        risks: ["Margin squeeze", "Slight non-performing debt drift"],
-        importantDates: ["Aug 15, 2026", "Aug 20, 2026"],
-        actions: ["File regulatory declarations", "Sync liquidity reserves"],
-        relatedDocs: ["Enterprise Operations Q1 Balance Sheet.xlsx", "Audit Clearance Statement.pdf"]
-      },
-      relationships: {
-        relatedCustomer: { name: "Internal Treasury Accounts", id: "cust-6" },
-        relatedContract: "Regulatory Compliance Audit #FS-Q2",
-        relatedWorkflow: "Regulatory Filing Reporting automation",
-        relatedEmployee: "Nina Torres (Treasury Lead)",
-        relatedTransaction: "TXN-0091-Reserve-Allocations",
-        relatedDecision: "August board strategy meeting agenda"
-      }
-    },
-    {
-      id: "doc-4",
-      name: "Customer Operations — Claims Audit Report.pdf",
-      fileType: "pdf",
-      category: "Report",
-      businessUnit: "Customer Operations",
-      uploadedBy: "Marcus Webb",
-      date: "Jul 12, 2026",
-      size: "3.0 MB",
-      pages: 24,
-      status: "processed",
-      usefulSummary: {
-        keyFinding: "Compliance audit of 340 claims profiles revealed a solid 91/100 score. The single critical outlier is processing delays occurring at the initial claims intake bottleneck.",
-        obligations: [
-          "Maintain clear SLA response times of 4 days for standard claims.",
-          "Re-verify manual processing locks on high-value reinsurance portfolios."
-        ],
-        risksDetail: [
-          "Persistent delays could trigger penalty SLA credit payouts to Meridian Logistics.",
-          "Manual interlocks in the claims ledger account for 45% of processing lag."
-        ],
-        datesDetail: [
-          { event: "Mitigation Pipeline Audited", date: "Jul 3, 2026" },
-          { event: "SLA Remediation Target", date: "Aug 30, 2026" }
-        ],
-        financialExposure: "₦3.8M potential monthly lag drag if intake delays are unresolved.",
-        recommendedAction: "Approve the immediate deployment of Claims Automation Phase 2 Vetting modules to bypass the manual block."
-      },
-      entities: {
-        customers: ["Solace Home Insurance Co.", "Meridian Logistics Group"],
-        contracts: ["AUD-CLAIMS-Q2"],
-        financialValues: ["340 Audit profiles", "91/100 Audit score", "₦3.8M lag impact"],
-        risks: ["SLA penalty payouts", "Manual interlock queue locks"],
-        importantDates: ["Jul 3, 2026", "Aug 30, 2026"],
-        actions: ["Approve intake automation workflow", "Issue client SLA warnings"],
-        relatedDocs: ["Claims Intake Workflow Diagram.png", "reinsurance_ledger_sync.pdf"]
-      },
-      relationships: {
-        relatedCustomer: { name: "Solace Home Insurance", id: "cust-3" },
-        relatedContract: "Claims Quality Audit #AUD-CLAIMS-Q2",
-        relatedWorkflow: "Claims Automation Phase 2 Integration",
-        relatedEmployee: "Marcus Webb (Risk Officer)",
-        relatedTransaction: "TXN-8821-SLA-Credits",
-        relatedDecision: "Operations Automation clear directives"
-      }
-    },
-    {
-      id: "doc-5",
-      name: "Customer Operations — AML Compliance Filing.pdf",
-      fileType: "pdf",
-      category: "Compliance Document",
-      businessUnit: "Customer Operations",
-      uploadedBy: "Priya Shah",
-      date: "Jul 8, 2026",
-      size: "1.8 MB",
-      pages: 14,
-      status: "processed",
-      usefulSummary: {
-        keyFinding: "Quarterly transaction review identified 12 transactions requiring secondary manual compliance clearance. All have been analyzed, cleared, and closed with zero regulatory exposure.",
-        obligations: [
-          "Report flagged files to regulatory bodies within 30 days of detection.",
-          "Archive verification records for audit continuity."
-        ],
-        risksDetail: [
-          "Delayed clearances can lead to transaction bottlenecks for high-volume accounts.",
-          "Audit trail gaps present compliance penalty risks if documents are misplaced."
-        ],
-        datesDetail: [
-          { event: "Clearance Lock", date: "Jul 28, 2026" },
-          { event: "Regulatory Filing Lock", date: "Aug 10, 2026" }
-        ],
-        financialExposure: "₦0 regulatory penalty exposure (all 12 flags successfully cleared).",
-        recommendedAction: "Review transaction screening rule parameters to reduce false-positive rates by 15%."
-      },
-      entities: {
-        customers: ["Brightwell Regional Bank"],
-        contracts: ["AML-Q2-2026-REG"],
-        financialValues: ["12 Flagged profiles", "30-day reporting limit", "0 penalty liability"],
-        risks: ["Auditing trail gaps", "High false-positive rate lag"],
-        importantDates: ["Jul 28, 2026", "Aug 10, 2026"],
-        actions: ["Optimize compliance scoring parameters", "Archive AML transaction metadata"],
-        relatedDocs: ["AML Screening Rules Profile.docx", "Flagged_Trans_Log_Q2.xlsx"]
-      },
-      relationships: {
-        relatedCustomer: { name: "Brightwell Regional Bank", id: "cust-4" },
-        relatedContract: "AML Regulatory Audit Filing #AML-Q2",
-        relatedWorkflow: "Compliance KYC Auto-Scans Pipeline",
-        relatedEmployee: "Priya Shah (Compliance Manager)",
-        relatedTransaction: "TXN-3011-Compliance-Audit",
-        relatedDecision: "Risk Committee compliance filing checkoff"
-      }
-    }
-];
+import { IntelDocument } from "@/lib/data/demo";
+import { documentRepository } from "@/lib/data/repositories";
 
 export default function DocumentsWorkspace() {
-  const [documents, setDocuments] = useState<IntelDocument[]>(
-    isDemoMode() ? defaultDocuments : []
-  );
-
-  const [selectedId, setSelectedId] = useState<string>("doc-1");
+  const [documents, setDocuments] = useState<IntelDocument[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [selectedId, setSelectedId] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [uploading, setUploading] = useState<boolean>(false);
@@ -318,32 +39,46 @@ export default function DocumentsWorkspace() {
   const [chatInput, setChatInput] = useState<string>("");
   const [thinking, setThinking] = useState<boolean>(false);
 
+  useEffect(() => {
+    let isMounted = true;
+    documentRepository.getIntelDocuments()
+      .then((docs) => {
+        if (isMounted) {
+          setDocuments(docs);
+          if (docs.length > 0) {
+            setSelectedId(docs[0].id);
+          }
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load documents:", err);
+        if (isMounted) {
+          setDocuments([]);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const selectedDoc = useMemo(() => {
     return documents.find((d) => d.id === selectedId) || documents[0] || null;
   }, [documents, selectedId]);
 
   // Compute stats dynamically for DOCUMENT OVERVIEW section
   const documentOverview = useMemo(() => {
-    if (!isDemoMode()) {
-      return {
-        total: documents.length,
-        contracts: documents.filter((d) => d.category === "Contract").length,
-        policies: documents.filter((d) => d.category === "Policy").length,
-        financials: documents.filter((d) => d.category === "Financial Document").length,
-        reports: documents.filter((d) => d.category === "Report").length,
-        compliance: documents.filter((d) => d.category === "Compliance Document").length,
-        recentlyChanged: 0
-      };
-    }
-    const total = documents.length + 144; // Real-looking base
-    const contracts = documents.filter((d) => d.category === "Contract").length + 62;
-    const policies = documents.filter((d) => d.category === "Policy").length + 22;
-    const financials = documents.filter((d) => d.category === "Financial Document").length + 31;
-    const reports = documents.filter((d) => d.category === "Report").length + 18;
-    const compliance = documents.filter((d) => d.category === "Compliance Document").length + 11;
-    const recentlyChanged = 4;
-
-    return { total, contracts, policies, financials, reports, compliance, recentlyChanged };
+    return {
+      total: documents.length,
+      contracts: documents.filter((d) => d.category === "Contract").length,
+      policies: documents.filter((d) => d.category === "Policy").length,
+      financials: documents.filter((d) => d.category === "Financial Document").length,
+      reports: documents.filter((d) => d.category === "Report").length,
+      compliance: documents.filter((d) => d.category === "Compliance Document").length,
+      recentlyChanged: documents.filter((d) => d.status === "processing").length
+    };
   }, [documents]);
 
   const filteredDocuments = useMemo(() => {
@@ -355,58 +90,29 @@ export default function DocumentsWorkspace() {
     });
   }, [documents, searchQuery, selectedCategory]);
 
-  const handleSimulateUpload = () => {
+  const handleSimulateUpload = async () => {
     if (uploading) return;
     setUploading(true);
 
-    const id = `doc-${Date.now()}`;
-    const newDoc: IntelDocument = {
-      id,
-      name: "Customer Operations — Onboarding Services Agreement.pdf",
-      fileType: "pdf",
-      category: "Contract",
-      businessUnit: "Customer Operations",
-      uploadedBy: "Elena Cho",
-      date: "Aug 18, 2026",
-      size: "1.3 MB",
-      pages: 11,
-      status: "processing",
-      usefulSummary: {
-        keyFinding: "Agreement covering onboarding services framework. This legal binding guarantees automated workflows integration guidelines.",
-        obligations: ["Delivery of system parameters within 30 days.", "Provide level 1 core client services access."],
-        risksDetail: ["Subject to standard dispute arbitration limits.", "No secondary liability clauses are configured."],
-        datesDetail: [{ event: "Execution Launch", date: "Aug 18, 2026" }],
-        financialExposure: "$420K standard contract volume (₦352M equivalent ARR).",
-        recommendedAction: "Review automated integration steps with founder Elena Cho."
-      },
-      entities: {
-        customers: ["Sterling & Ives Underwriters"],
-        contracts: ["CON-STERL-2026"],
-        financialValues: ["$420K contract volume", "15% standard commission tier"],
-        risks: ["Standard arbitration boundaries"],
-        importantDates: ["Aug 18, 2026"],
-        actions: ["Approve digital services scope"],
-        relatedDocs: ["Sterling Services Statement.xlsx"]
-      },
-      relationships: {
-        relatedCustomer: { name: "Sterling & Ives Underwriters", id: "cust-7" },
-        relatedContract: "Onboarding Services Protocol #CON-STERL",
-        relatedWorkflow: "Client Ingestion Protocol Pipeline",
-        relatedEmployee: "Elena Cho (Integration Executive)",
-        relatedTransaction: "TXN-2911-Sterling-Onboard",
-        relatedDecision: "Advisory desk authorization profile"
-      }
-    };
+    try {
+      const createdItem = await documentRepository.createDocument({
+        name: "Enterprise Service Level Agreement.pdf",
+        category: "Contract",
+        fileType: "pdf",
+        size: "1.8 MB",
+        uploadedBy: "Current User",
+        status: "indexed",
+        tags: ["Strategic Accounts"]
+      });
 
-    setDocuments((prev) => [newDoc, ...prev]);
-    setSelectedId(id);
-
-    setTimeout(() => {
-      setDocuments((prev) =>
-        prev.map((d) => (d.id === id ? { ...d, status: "processed" } : d))
-      );
+      const updatedDocs = await documentRepository.getIntelDocuments();
+      setDocuments(updatedDocs);
+      setSelectedId(createdItem.id);
+    } catch (err) {
+      console.error("Failed to create document:", err);
+    } finally {
       setUploading(false);
-    }, 2000);
+    }
   };
 
   // Pre-configured questions for Document Memory
@@ -417,7 +123,7 @@ export default function DocumentsWorkspace() {
     "What financial commitments are contained here?"
   ];
 
-  const handleSendQuery = (text: string) => {
+  const handleSendQuery = async (text: string) => {
     const trimmed = text.trim();
     if (!trimmed || thinking || !selectedDoc) return;
 
@@ -431,29 +137,23 @@ export default function DocumentsWorkspace() {
     setChatInput("");
     setThinking(true);
 
-    setTimeout(() => {
-      let answer = "";
-      const q = trimmed.toLowerCase();
-
-      if (q.includes("change") || q.includes("between")) {
-        answer = `Comparing this draft with our historical baseline: Standard core terms remain aligned with company regulations. However, custom clauses in the appendix introduce a 3% price fluctuation rate and lock standard SLA support response expectations.`;
-      } else if (q.includes("obligation")) {
-        answer = `Under section 4.2 of this agreement, the following strict legal obligations exist:\n\n1. ${selectedDoc.usefulSummary.obligations.join("\n2. ")}\n\nNon-compliance triggers automated penalty review mechanisms.`;
-      } else if (q.includes("customer")) {
-        answer = `This document explicitly mentions and binds client entity "${selectedDoc.entities.customers.join(", ")}", referencing core parent organizational profiles within the group ledger.`;
-      } else if (q.includes("financial") || q.includes("commitment") || q.includes("value")) {
-        answer = `Financial Exposure: ${selectedDoc.usefulSummary.financialExposure}. This commitment has been registered and synced automatically to Apex Sync's live Value Opportunity pipeline.`;
-      } else {
-        answer = `Document Intelligence Synthesis:\n\nKey Finding: ${selectedDoc.usefulSummary.keyFinding}\n\nRisks Flagged: ${selectedDoc.usefulSummary.risksDetail.join(", ")}`;
-      }
-
+    try {
+      const answer = await documentRepository.getDocumentAnswer(trimmed, selectedDoc);
       const assistantMsg = { id: `msg-a-${Date.now()}`, role: "assistant" as const, content: answer };
       setChatsByDoc((prev) => ({
         ...prev,
         [currentDocId]: [...(prev[currentDocId] || []), assistantMsg]
       }));
+    } catch (err) {
+      console.error("Error answering document query:", err);
+      const errorMsg = { id: `msg-a-${Date.now()}`, role: "assistant" as const, content: "Unable to retrieve document answer at this time." };
+      setChatsByDoc((prev) => ({
+        ...prev,
+        [currentDocId]: [...(prev[currentDocId] || []), errorMsg]
+      }));
+    } finally {
       setThinking(false);
-    }, 800);
+    }
   };
 
   const currentChats = selectedDoc ? (chatsByDoc[selectedDoc.id] || []) : [];
@@ -585,36 +285,47 @@ export default function DocumentsWorkspace() {
           {/* DOCUMENTS LIST QUEUE */}
           <div className="rounded-xl border border-white/[0.06] bg-charcoal/40 p-3 space-y-2 shadow-glass max-h-[480px] overflow-y-auto scrollbar-none">
             <p className="text-[10px] font-mono text-ivory/30 uppercase tracking-wider pl-2 mb-1">Index Feed</p>
-            {filteredDocuments.map((docItem) => {
-              const isSelected = docItem.id === selectedId;
-              const isProcessing = docItem.status === "processing";
-              return (
-                <button
-                  key={docItem.id}
-                  onClick={() => setSelectedId(docItem.id)}
-                  className={`w-full text-left rounded-lg p-3 transition-all flex items-start gap-3 border ${
-                    isSelected 
-                      ? "bg-white/[0.05] border-gold/40 shadow-gold-glow-soft" 
-                      : "bg-white/[0.01] border-white/[0.04] hover:bg-white/[0.03]"
-                  }`}
-                >
-                  <FileText size={18} className={`mt-0.5 shrink-0 ${isSelected ? "text-gold" : "text-ivory/40"}`} />
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-[12.5px] font-bold text-ivory truncate">{docItem.name}</h4>
-                    <div className="flex items-center gap-2 text-[10px] text-ivory/45 font-mono mt-1">
-                      <span className="bg-white/5 px-1 py-0.1 rounded uppercase text-[8.5px]">{docItem.category}</span>
-                      <span>·</span>
-                      <span>{docItem.size}</span>
-                      {isProcessing && (
-                        <span className="text-gold font-bold flex items-center gap-1 animate-pulse">
-                          <RefreshCw size={8} className="animate-spin" /> Ingesting
-                        </span>
-                      )}
+            {loading ? (
+              <div className="flex items-center justify-center py-12 text-ivory/40 gap-2 text-xs">
+                <Loader2 className="animate-spin text-gold" size={16} />
+                <span>Loading index...</span>
+              </div>
+            ) : filteredDocuments.length === 0 ? (
+              <div className="text-center py-10 text-ivory/30 text-xs font-mono">
+                No matching documents
+              </div>
+            ) : (
+              filteredDocuments.map((docItem) => {
+                const isSelected = docItem.id === selectedId;
+                const isProcessing = docItem.status === "processing";
+                return (
+                  <button
+                    key={docItem.id}
+                    onClick={() => setSelectedId(docItem.id)}
+                    className={`w-full text-left rounded-lg p-3 transition-all flex items-start gap-3 border ${
+                      isSelected 
+                        ? "bg-white/[0.05] border-gold/40 shadow-gold-glow-soft" 
+                        : "bg-white/[0.01] border-white/[0.04] hover:bg-white/[0.03]"
+                    }`}
+                  >
+                    <FileText size={18} className={`mt-0.5 shrink-0 ${isSelected ? "text-gold" : "text-ivory/40"}`} />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-[12.5px] font-bold text-ivory truncate">{docItem.name}</h4>
+                      <div className="flex items-center gap-2 text-[10px] text-ivory/45 font-mono mt-1">
+                        <span className="bg-white/5 px-1 py-0.1 rounded uppercase text-[8.5px]">{docItem.category}</span>
+                        <span>·</span>
+                        <span>{docItem.size}</span>
+                        {isProcessing && (
+                          <span className="text-gold font-bold flex items-center gap-1 animate-pulse">
+                            <RefreshCw size={8} className="animate-spin" /> Ingesting
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })
+            )}
           </div>
 
         </div>

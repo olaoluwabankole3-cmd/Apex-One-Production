@@ -19,20 +19,20 @@ export class ApiIntelligenceRepository implements IntelligenceRepository {
       const totalArrUSD = customers.reduce((sum, c) => sum + (c.arr || 0), 0);
       const totalArrM = (totalArrUSD / 1000000).toFixed(1);
       const atRiskCount = customers.filter(c => c.status === "at-risk" || c.healthScore < 70).length;
-      const totalCaptured = valRes?.data?.totalCapturedValue ? (valRes.data.totalCapturedValue / 1000000).toFixed(1) : "18.4";
+      const totalCaptured = valRes?.data?.totalCapturedValue ? (valRes.data.totalCapturedValue / 1000000).toFixed(1) : "0.0";
 
       if (role === "CEO") {
-        return `Enterprise portfolio ARR stands at $${totalArrM}M across ${customers.length} institutional accounts. ₦${totalCaptured}M in verified value has been captured, with ${atRiskCount} accounts flagged for proactive mitigation.`;
+        return `Enterprise portfolio ARR stands at $${totalArrM}M across ${customers.length} accounts. ₦${totalCaptured}M in verified captured value recorded.`;
       } else if (role === "Operations") {
-        return `Operations capacity index stable at 72%. All workflow pipelines are active across 4 operational units, with zero critical regulatory compliance breaches.`;
+        return `Workflow pipelines and system telemetry active across organizational infrastructure.`;
       } else if (role === "Compliance") {
-        return `Governance and regulatory compliance index stands at 99.4%. Audit logs and multi-tenant cryptographic boundaries verified.`;
+        return `Multi-tenant security boundaries and immutable audit logs active.`;
       } else {
-        return `Relationship portfolio monitoring ${customers.length} active enterprise client engagements. ${atRiskCount} retention opportunities are currently prioritized for engagement.`;
+        return `Relationship portfolio monitoring ${customers.length} active enterprise accounts with ${atRiskCount} accounts flagged for review.`;
       }
     } catch (err) {
       console.error("Failed to generate executive summary:", err);
-      return "Organizational memory active. System telemetry monitoring enterprise customer health, revenue capture, and operations.";
+      return "Executive intelligence summary not available.";
     }
   }
 

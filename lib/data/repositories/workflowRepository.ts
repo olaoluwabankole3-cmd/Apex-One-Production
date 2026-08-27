@@ -42,23 +42,20 @@ function mapRecordToCustomWorkflow(w: WorkflowRecord): CustomWorkflowDef {
     subsidiary: (w.subsidiary as any) || "Strategic Accounts",
     businessUnit: (w.subsidiary as any) || "Strategic Accounts",
     status: w.status === "active" ? "active" : "draft",
-    successRate: (w as any).successRate || 94.5,
-    runsPerWeek: (w as any).runsPerWeek || 42,
-    lastRun: (w as any).lastRun || "3 hours ago",
+    successRate: (w as any).successRate || 100,
+    runsPerWeek: (w as any).runsPerWeek || 0,
+    lastRun: (w as any).lastRun || "Never",
     nodes: (w as any).nodes || defaultNodes,
     connections: (w as any).connections || defaultConnections,
     contextAwareDetails: {
-      trigger: { label: "Trigger: Telemetry Event", details: `${w.name} active event monitor.`, active: false, done: false },
-      context: { label: "Context: Health & Governance", details: "Active contract verification in effect.", active: false, done: false },
-      aiReasoning: { label: "AI Cognitive Analysis", details: "Evaluating risk indices...", active: false, done: false, content: `Continuous cognitive pipeline active for ${w.name}.` },
-      decision: { label: "Strategic AI Recommendation", details: "Routing optimal path...", active: false, done: false, content: "Deploy targeted automated remediation." },
-      action: { label: "Action: Executive Sign-Off", details: "Awaiting approval...", active: false, done: false, content: "Execute play with verified lead.", approvalRequired: true },
-      outcome: { label: "Outcome: Enterprise Sync Completed", details: "Updated ledgers...", active: false, done: false, content: "Pipeline executed successfully and logged to institutional memory." }
+      trigger: { label: "Trigger: Telemetry Event", details: `${w.name} trigger definition.`, active: false, done: false },
+      context: { label: "Context: Health & Governance", details: "Active verification rules in effect.", active: false, done: false },
+      aiReasoning: { label: "AI Cognitive Analysis", details: "Evaluating risk indicators...", active: false, done: false, content: `Continuous cognitive pipeline active for ${w.name}.` },
+      decision: { label: "Strategic AI Recommendation", details: "Evaluating pathway...", active: false, done: false, content: "Deploy automated remediation." },
+      action: { label: "Action: Sign-Off Gate", details: "Awaiting execution trigger...", active: false, done: false, content: "Execute with verified parameters.", approvalRequired: true },
+      outcome: { label: "Outcome: Ledger Synchronization", details: "Commit status...", active: false, done: false, content: "Logged to organizational memory." }
     },
-    history: [
-      { id: `run-${w.id}-1`, status: "success", timestamp: "Aug 18, 2026, 11:20", duration: "1.6s", triggeredBy: "System Automation", outcomeText: "Completed successfully with full audit trail.", logs: ["Trigger received", "Risk model evaluated", "Action executed", "Audit committed"] },
-      { id: `run-${w.id}-2`, status: "success", timestamp: "Aug 16, 2026, 09:45", duration: "2.1s", triggeredBy: "Elena Cho", outcomeText: "Manual trigger executed with verified sign-off.", logs: ["Manual trigger initiated", "Evaluated params", "Dispatched notice"] }
-    ]
+    history: []
   };
 }
 

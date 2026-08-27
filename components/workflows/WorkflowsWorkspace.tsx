@@ -26,10 +26,11 @@ import {
   User,
   Zap,
   Calendar,
-  Check
+  Check,
+  Loader2
 } from "lucide-react";
 import { WorkflowDef, WorkflowNode, WorkflowNodeStatus, WorkflowNodeType, WorkflowConnection } from "@/lib/types";
-import { isDemoMode } from "@/lib/demo";
+import { workflowRepository } from "@/lib/data/repositories";
 import WorkflowsHeader from "./WorkflowsHeader";
 import WorkflowCanvas from "./WorkflowCanvas";
 import NodePalette from "./NodePalette";
@@ -69,174 +70,36 @@ function nextNodeId() {
 }
 
 export default function WorkflowsWorkspace() {
-  // Model our advanced local context-aware workflows
-  const [workflowsState, setWorkflowsState] = useState<CustomWorkflowDef[]>([
-    {
-      id: "wf-1",
-      name: "Strategic Accounts — Context-Aware Churn Prevention",
-      description: "Monitors account metrics and triggers AI retention routing on decline signals.",
-      subsidiary: "Strategic Accounts",
-      businessUnit: "Strategic Accounts",
-      status: "active",
-      successRate: 95.8,
-      runsPerWeek: 48,
-      lastRun: "2 hours ago",
-      nodes: [
-        { id: "n1", type: "trigger", label: "Customer Usage Declines", subtitle: "Usage dropped >15% over 30d", x: 40, y: 50 },
-        { id: "n2", type: "context", label: "Multi-Signal Context Evaluator", subtitle: "Renewal < 90d AND Tickets > 3", x: 280, y: 50 },
-        { id: "n3", type: "ai_analyze", label: "AI Analyze Account Health", subtitle: "Correlate financial exposure metrics", x: 520, y: 50 },
-        { id: "n4", type: "ai_predict", label: "AI Predict Churn Risk", subtitle: "Calculated risk score: 92% probability", x: 760, y: 50 },
-        { id: "n5", type: "ai_recommend", label: "AI Recommend RM Routing", subtitle: "Suggest route to Elena Cho", x: 760, y: 180 },
-        { id: "n6", type: "ai_decide_approval", label: "AI Decide RM Assignment", subtitle: "Awaiting Senior Sign-Off", x: 520, y: 180 },
-        { id: "n7", type: "action", label: "Human Approval Desk", subtitle: "RM review & verification of proposal", x: 280, y: 180 },
-        { id: "n8", type: "ai_generate", label: "AI Generate Retention Dossier", subtitle: "Create alignment briefing & script", x: 40, y: 180 },
-        { id: "n9", type: "integration", label: "Google Calendar Sync", subtitle: "Auto-schedule client strategic review", x: 40, y: 310 }
-      ],
-      connections: [
-        { id: "c1", from: "n1", to: "n2" },
-        { id: "c2", from: "n2", to: "n3" },
-        { id: "c3", from: "n3", to: "n4" },
-        { id: "c4", from: "n4", to: "n5" },
-        { id: "c5", from: "n5", to: "n6" },
-        { id: "c6", from: "n6", to: "n7" },
-        { id: "c7", from: "n7", to: "n8" },
-        { id: "c8", from: "n8", to: "n9" }
-      ],
-      contextAwareDetails: {
-        trigger: { label: "Trigger: Churn Signal Detect", details: "Meridian Logistics platform API logs dropped by 18.4% over 30 days.", active: false, done: false },
-        context: { label: "Context: Compounding Hazards", details: "Core subscription renewal falls on Sep 14 (within 90d Limit) AND active support load holds 2 open SLA level-1 warnings.", active: false, done: false },
-        aiReasoning: { label: "AI Cognitive Analysis", details: "Evaluating multi-faceted exposure vectors...", active: false, done: false, content: "CRITICAL ALERT: Compounded financial exposure model calculates a 92.4% probability of churn. Total group ARR at risk equals ₦1.84M." },
-        decision: { label: "Strategic AI Recommendation", details: "Recommending premium strategic path...", active: false, done: false, content: "Deploy high-touch customer protection playbook. Route account relationship manager assignment to senior lead Elena Cho." },
-        action: { label: "Action: Human Approver Signal", details: "Verifying advisor credentials...", active: false, done: false, content: "Assign Elena Cho. Await senior director execution sign-off on the generated client remediation briefing.", approvalRequired: true },
-        outcome: { label: "Outcome: Enterprise Sync Completed", details: "Updating core databases...", active: false, done: false, content: "Remediation dossier archived to Knowledge Hub. Strategic alignment session scheduled in Google Calendar for Aug 20, 2026." }
-      },
-      history: [
-        { id: "run-904", status: "success", timestamp: "Aug 18, 2026, 09:12", duration: "1.8s", triggeredBy: "System Cron", outcomeText: "Remediation scheduled with Sarah Below, Priya Nair assigned.", logs: ["Trigger: Flag raised on Sarah Below", "Context: High risk profile met", "AI Decision: Auto-assigned RM", "Outcome: Event synced"] },
-        { id: "run-903", status: "modified", timestamp: "Aug 17, 2026, 14:02", duration: "2.4s", triggeredBy: "Elena Cho", outcomeText: "Assigned advisor overrode from Elena Cho to Marcus Webb", logs: ["Trigger: Manual start by Elena Cho", "AI Recommended: Elena Cho", "Human Action: Changed routing to Marcus Webb", "Outcome: Overrode success"] },
-        { id: "run-902", status: "escalated", timestamp: "Aug 15, 2026, 11:30", duration: "0.9s", triggeredBy: "System Cron", outcomeText: "Escalated to Compliance Director", logs: ["Trigger: Usage Drop detect", "Context: AML audit overlap found", "AI: Critical regulatory signal", "Outcome: Blocked and Escalated"] },
-        { id: "run-901", status: "failed", timestamp: "Aug 12, 2026, 08:24", duration: "3.2s", triggeredBy: "System Cron", outcomeText: "Execution aborted: external CRM timeout", logs: ["Trigger: Flag raised", "AI: Executing routing", "Error: CRM API connection lost", "Status: Failed"] }
-      ]
-    },
-    {
-      id: "wf-2",
-      name: "Commercial Operations — Credit Overdraft Escalation",
-      description: "Detects overdraft balance spikes and deploys compliant holds dynamically.",
-      subsidiary: "Commercial Operations",
-      businessUnit: "Commercial Operations",
-      status: "active",
-      successRate: 89.2,
-      runsPerWeek: 112,
-      lastRun: "1 day ago",
-      nodes: [
-        { id: "n1", type: "trigger", label: "Overdraft Breach Detect", subtitle: "Balance below compliance baseline", x: 40, y: 50 },
-        { id: "n2", type: "context", label: "Exposure Context Evaluation", subtitle: "Overdraft > ₦10M AND history flag true", x: 280, y: 50 },
-        { id: "n3", type: "ai_classify", label: "AI Classify Compliance", subtitle: "Auto-tag as High Risk Exposure", x: 520, y: 50 },
-        { id: "n4", type: "ai_decide_approval", label: "AI Decide Account Hold", subtitle: "Requires legal check", x: 760, y: 50 },
-        { id: "n5", type: "action", label: "Human Limit Verification", subtitle: "Apply hold parameters", x: 760, y: 180 },
-        { id: "n6", type: "integration", label: "Notify Compliance Slack", subtitle: "Broadcast transaction reference", x: 520, y: 180 }
-      ],
-      connections: [
-        { id: "c1", from: "n1", to: "n2" },
-        { id: "c2", from: "n2", to: "n3" },
-        { id: "c3", from: "n3", to: "n4" },
-        { id: "c4", from: "n4", to: "n5" },
-        { id: "c5", from: "n5", to: "n6" }
-      ],
-      contextAwareDetails: {
-        trigger: { label: "Trigger: Balance Drop Alert", details: "Institutional account ledger registered credit drop of ₦14.5M.", active: false, done: false },
-        context: { label: "Context: Credit Portfolio limits", details: "Overdraft exceeds ₦10M threshold margin AND account history reports zero prior breaches.", active: false, done: false },
-        aiReasoning: { label: "AI Cognitive Analysis", details: "Calculating capital regulatory impact...", active: false, done: false, content: "MODERATE RISK: Liquidity parameters remain stable, but overdraft limit exceeds standard commercial portfolio buffers." },
-        decision: { label: "AI Classification Choice", details: "Classifying exception type...", active: false, done: false, content: "Classified as TIER-2 COMMERCIAL EXPOSURE. Automated limits hold proposed pending relationship verification." },
-        action: { label: "Action: Signatory Review", details: "Awaiting auditor verification...", active: false, done: false, content: "Initiate secondary credit verification with signatory lead Elena Cho. Hold status flagged as pending.", approvalRequired: true },
-        outcome: { label: "Outcome: Slack Notification Broadcast", details: "Writing security notification logs...", active: false, done: false, content: "Overdraft context details broadcast to internal compliance Slack channel. Account parameters synced cleanly." }
-      },
-      history: [
-        { id: "run-802", status: "success", timestamp: "Aug 18, 2026, 08:00", duration: "1.4s", triggeredBy: "Ledger Webhook", outcomeText: "Exception routed, verified overdraft accepted", logs: ["Trigger: Overdraft ₦12M", "Context: Checked limits", "Human Action: Accepted", "Outcome: Logged"] },
-        { id: "run-801", status: "success", timestamp: "Aug 16, 2026, 17:45", duration: "1.5s", triggeredBy: "Ledger Webhook", outcomeText: "Exception routed, verified overdraft accepted", logs: ["Trigger: Overdraft ₦11M", "Context: Checked limits", "Human Action: Accepted", "Outcome: Logged"] }
-      ]
-    },
-    {
-      id: "wf-3",
-      name: "Customer Operations — Claims Bottleneck Bypass",
-      description: "Monitors processing queue and triggers bypass workflows dynamically.",
-      subsidiary: "Customer Operations",
-      businessUnit: "Customer Operations",
-      status: "paused",
-      successRate: 91.5,
-      runsPerWeek: 15,
-      lastRun: "3 days ago",
-      nodes: [
-        { id: "n1", type: "trigger", label: "Processing Delay Detect", subtitle: "Claims intake lag > 4 business days", x: 40, y: 50 },
-        { id: "n2", type: "context", label: "SLA Severity Evaluation", subtitle: "Pending claims > ₦5M AND tier is high", x: 280, y: 50 },
-        { id: "n3", type: "ai_analyze", label: "AI Analyze Queue Block", subtitle: "Locate bottlenecks & friction nodes", x: 520, y: 50 },
-        { id: "n4", type: "ai_recommend", label: "AI Recommend Bypass", subtitle: "Route via Secondary Vetting", x: 760, y: 50 },
-        { id: "n5", type: "ai_decide_approval", label: "AI Decide Queue Bypass", subtitle: "Awaiting Ops Director signoff", x: 760, y: 180 },
-        { id: "n6", type: "action", label: "Deploy Bypass Modules", subtitle: "Human override bypass trigger", x: 520, y: 180 },
-        { id: "n7", type: "integration", label: "Sync Claims Dashboard", subtitle: "Write bypass flag to core database", x: 280, y: 180 }
-      ],
-      connections: [
-        { id: "c1", from: "n1", to: "n2" },
-        { id: "c2", from: "n2", to: "n3" },
-        { id: "c3", from: "n3", to: "n4" },
-        { id: "c4", from: "n4", to: "n5" },
-        { id: "c5", from: "n5", to: "n6" },
-        { id: "c6", from: "n6", to: "n7" }
-      ],
-      contextAwareDetails: {
-        trigger: { label: "Trigger: SLA Threshold Met", details: "Claims intake lag registers standard delay of 4.2 business days.", active: false, done: false },
-        context: { label: "Context: Client SLA liabilities", details: "Total claims pending exceeds ₦5.8M ARR equivalent AND 2 high-tier enterprise accounts are impacted.", active: false, done: false },
-        aiReasoning: { label: "AI Cognitive Analysis", details: "Calculating queue speed multipliers...", active: false, done: false, content: "HIGH DELAY WARNING: SLA credit penalty exposure calculated at ₦3.8M. Bottleneck traced to manual claims intake verification locks." },
-        decision: { label: "AI Routing Recommendation", details: "Drafting queue acceleration pathway...", active: false, done: false, content: "Propose direct queue bypass. Reroute incoming claims profiles via Automated Claims Vetting Phase 2 module." },
-        action: { label: "Action: Senior Sign-Off", details: "Verifying bypass safety protocols...", active: false, done: false, content: "Deploy Auto-Vetting module immediately. Re-allocate ₦2.1M reserves to hedge transient processing error risks.", approvalRequired: true },
-        outcome: { label: "Outcome: Core Database Synchronized", details: "Writing queue status logs...", active: false, done: false, content: "Bypass modules deployed successfully. Claims intake buffer reduced back to 1.8 hours. Core stats synced to dashboard." }
-      },
-      history: [
-        { id: "run-702", status: "success", timestamp: "Aug 18, 2026, 02:30", duration: "1.9s", triggeredBy: "Scheduler", outcomeText: "Bypass deployed, processing speeds restored", logs: ["Trigger: Intake delay > 4d", "AI Recommended: Deploy bypass", "Human Action: Approved", "Outcome: Speed restored"] },
-        { id: "run-701", status: "modified", timestamp: "Aug 14, 2026, 11:15", duration: "2.1s", triggeredBy: "Marcus Webb", outcomeText: "Bypass triggered manually by Marcus Webb ahead of schedule", logs: ["Trigger: Manual start", "AI: Proposed bypass delay check", "Human Action: Immediate override", "Outcome: Deployed bypass"] }
-      ]
-    },
-    {
-      id: "wf-4",
-      name: "Enterprise Operations — Audit Exception Reconciliation",
-      description: "Auto-flags nightly audit reconciliation mismatches and proposes corrections.",
-      subsidiary: "Enterprise Operations",
-      businessUnit: "Enterprise Operations",
-      status: "draft",
-      successRate: 78.4,
-      runsPerWeek: 7,
-      lastRun: "6 days ago",
-      nodes: [
-        { id: "n1", type: "trigger", label: "Nightly Reconciliation Run", subtitle: "00:00 UTC database batch job", x: 40, y: 50 },
-        { id: "n2", type: "condition", label: "Mismatch Detected?", subtitle: "Core bank vs ledger statements", x: 280, y: 50 },
-        { id: "n3", type: "ai_analyze", label: "AI Analyze Discrepancy", subtitle: "Cross-reference logs and exceptions", x: 520, y: 50 },
-        { id: "n4", type: "ai_predict", label: "AI Predict Matching Source", subtitle: "Probability of standard ledger code", x: 760, y: 50 },
-        { id: "n5", type: "ai_decide_approval", label: "AI Recommend Auto-Reconcile", subtitle: "Awaiting Finance Auditor verify", x: 760, y: 180 },
-        { id: "n6", type: "action", label: "Apply Auto-Reconciliation", subtitle: "Write back corrections", x: 520, y: 180 }
-      ],
-      connections: [
-        { id: "c1", from: "n1", to: "n2" },
-        { id: "c2", from: "n2", to: "n3" },
-        { id: "c3", from: "n3", to: "n4" },
-        { id: "c4", from: "n4", to: "n5" },
-        { id: "c5", from: "n5", to: "n6" }
-      ],
-      contextAwareDetails: {
-        trigger: { label: "Trigger: Mismatch Detected", details: "Core accounting reconciliation run outputs 1 balance exception discrepancy.", active: false, done: false },
-        context: { label: "Context: Nightly Audit Logs", details: "Discrepancy amount equals ₦1.12M. Transaction matches retail interest deposits pattern.", active: false, done: false },
-        aiReasoning: { label: "AI Cognitive Analysis", details: "Comparing against historical exception patterns...", active: false, done: false, content: "LOW EXPOSURE WARNING: Pattern match indicates a standard timezone settlement delay. No regulatory reporting exposure." },
-        decision: { label: "AI Auto-Reconcile Choice", details: "Recommending clearing adjustment...", active: false, done: false, content: "Generate settlement clearance journal entry. Propose auto-reconciliation parameters." },
-        action: { label: "Action: Auditor Verification", details: "Awaiting ledger signoff...", active: false, done: false, content: "Finance Auditor manual reconciliation verification required to sync ledger parameters.", approvalRequired: true },
-        outcome: { label: "Outcome: Ledger Synchronized", details: "Writing batch ledger data...", active: false, done: false, content: "Exception cleared. Core accounting systems updated cleanly, regulatory file updated." }
-      },
-      history: [
-        { id: "run-602", status: "success", timestamp: "Aug 18, 2026, 00:05", duration: "1.5s", triggeredBy: "Scheduler", outcomeText: "Exception corrected, ledger adjusted", logs: ["Trigger: Nightly discrepancy", "AI Recommended: timezone settlement offset", "Human Action: Auditor approved", "Outcome: Sync completed"] },
-        { id: "run-601", status: "failed", timestamp: "Aug 17, 2026, 00:05", duration: "3.5s", triggeredBy: "Scheduler", outcomeText: "Aborted: database lock wait threshold exceeded", logs: ["Trigger: Nightly discrepancy", "Status: Failed DB lock timeout"] }
-      ]
-    }
-  ]);
-
-  const [selectedId, setSelectedId] = useState<string>("wf-1");
+  const [workflowsState, setWorkflowsState] = useState<CustomWorkflowDef[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState<string>("");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    workflowRepository.getCustomWorkflows()
+      .then((wfs) => {
+        if (isMounted) {
+          const list = (wfs || []) as CustomWorkflowDef[];
+          setWorkflowsState(list);
+          if (list.length > 0) {
+            setSelectedId(list[0].id);
+          }
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load workflows from API:", err);
+        if (isMounted) {
+          setWorkflowsState([]);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Simulation execution state
   const [running, setRunning] = useState<boolean>(false);
@@ -252,12 +115,16 @@ export default function WorkflowsWorkspace() {
   const [currentLogs, setCurrentLogs] = useState<ContextAwareLog | null>(null);
 
   const selectedWorkflow = useMemo(() => {
-    return workflowsState.find((w) => w.id === selectedId) || workflowsState[0];
+    return workflowsState.find((w) => w.id === selectedId) || workflowsState[0] || null;
   }, [workflowsState, selectedId]);
 
   // Sync current workflow's context logs on change
   useEffect(() => {
-    setCurrentLogs(JSON.parse(JSON.stringify(selectedWorkflow.contextAwareDetails)));
+    if (selectedWorkflow) {
+      setCurrentLogs(JSON.parse(JSON.stringify(selectedWorkflow.contextAwareDetails)));
+    } else {
+      setCurrentLogs(null);
+    }
     setNodeStatuses({});
     setSimulationStep(0);
     setRunning(false);
@@ -276,10 +143,12 @@ export default function WorkflowsWorkspace() {
   };
 
   const handleNodesChange = (nodes: WorkflowNode[]) => {
+    if (!selectedWorkflow) return;
     updateWorkflow({ ...selectedWorkflow, nodes });
   };
 
   const handleAddNode = (type: WorkflowNodeType) => {
+    if (!selectedWorkflow) return;
     const id = nextNodeId();
     const count = selectedWorkflow.nodes.length;
     const newNode: WorkflowNode = {
@@ -295,6 +164,7 @@ export default function WorkflowsWorkspace() {
   };
 
   const handleDeleteNode = (id: string) => {
+    if (!selectedWorkflow) return;
     updateWorkflow({
       ...selectedWorkflow,
       nodes: selectedWorkflow.nodes.filter((n) => n.id !== id),
@@ -304,6 +174,7 @@ export default function WorkflowsWorkspace() {
   };
 
   const handleUpdateNode = (id: string, updates: Partial<WorkflowNode>) => {
+    if (!selectedWorkflow) return;
     updateWorkflow({
       ...selectedWorkflow,
       nodes: selectedWorkflow.nodes.map((n) => (n.id === id ? { ...n, ...updates } : n)),
@@ -312,12 +183,15 @@ export default function WorkflowsWorkspace() {
 
   // Run the sequential simulated workflow execution
   const handleRun = () => {
-    if (running) return;
+    if (running || !selectedWorkflow) return;
     setRunning(true);
     setRanJustNow(false);
     setAwaitingApproval(false);
     setApprovalDecision(null);
     setSimulationStep(1);
+
+    // Call API backend to log execution
+    workflowRepository.runWorkflow(selectedWorkflow.id).catch(console.error);
 
     // Initial state setup: reset nodes and context logs
     setNodeStatuses({});
@@ -496,7 +370,7 @@ export default function WorkflowsWorkspace() {
     }, delay + 200);
   };
 
-  const selectedNode = selectedWorkflow.nodes.find((n) => n.id === selectedNodeId) || null;
+  const selectedNode = selectedWorkflow?.nodes.find((n) => n.id === selectedNodeId) || null;
 
   return (
     <div className="space-y-6" id="workflows-redesign-workspace">
@@ -520,7 +394,12 @@ export default function WorkflowsWorkspace() {
         </div>
       </div>
 
-      {!isDemoMode() ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-24 text-ivory/40 gap-2 text-xs">
+          <Loader2 className="animate-spin text-gold" size={20} />
+          <span>Synchronizing workflow pipelines...</span>
+        </div>
+      ) : workflowsState.length === 0 || !selectedWorkflow ? (
         <div className="rounded-2xl border border-white/[0.07] bg-charcoal/40 p-12 text-center shadow-glass max-w-2xl mx-auto my-12">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gold/5 border border-gold/15 text-gold mb-5">
             <Zap size={24} className="animate-pulse" />

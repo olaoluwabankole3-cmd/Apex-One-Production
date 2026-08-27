@@ -22,16 +22,18 @@ export class ApiAIRepository implements AIRepository {
       const res = await apiClient.post<{ success: boolean; data?: { text?: string; response?: string }; text?: string }>("/api/v1/ai/chat", {
         message: prompt,
       });
-      return res?.data?.text || res?.data?.response || res?.text || "Strategic telemetry evaluation processed.";
+      const responseText = res?.data?.text || res?.data?.response || res?.text;
+      if (responseText) return responseText;
     } catch (e: any) {
       try {
         const fallback = await apiClient.post<{ text: string }>("/api/gemini", { prompt });
-        return fallback?.text || "Enterprise executive analysis complete.";
+        if (fallback?.text) return fallback.text;
       } catch (err) {
-        console.error("AI Repository Error:", err);
-        return `Enterprise intelligence assessment completed for "${prompt}". System operating normally.`;
+        console.error("AI service failure:", err);
+        throw new Error("AI intelligence service is currently unavailable.");
       }
     }
+    throw new Error("AI intelligence service returned an empty response.");
   }
 
   async getConversationHistory(_conversationId: string): Promise<AIConversationMessage[]> {

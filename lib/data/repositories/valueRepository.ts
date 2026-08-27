@@ -79,22 +79,20 @@ export class ApiValueRepository implements ValueRepository {
         return res.data.map(c => {
           const isAtRisk = c.status === "at-risk" || c.healthScore < 70;
           const currentRev = c.arr;
-          const expansion = currentRev * 0.2;
-          const potential = currentRev + expansion;
 
           return {
             id: c.id,
             name: c.name,
             tier: c.tier,
             contractValue: currentRev,
-            potentialValue: potential,
-            expansionOpportunity: expansion,
+            potentialValue: currentRev,
+            expansionOpportunity: 0,
             confidence: c.healthScore,
             recommended: isAtRisk
-              ? "Deploy high-touch customer retention sequence immediately."
-              : "Pitch annual multi-tier expansion retainer.",
+              ? "Review account churn signals and SLA compliance."
+              : "Account operating within normal health parameters.",
             churnRisk: (isAtRisk ? "High" : c.healthScore < 85 ? "Medium" : "Low") as "High" | "Medium" | "Low",
-            lastAuditDate: "2026-08-15",
+            lastAuditDate: new Date(c.updatedAt || Date.now()).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
           };
         });
       }
@@ -106,44 +104,8 @@ export class ApiValueRepository implements ValueRepository {
   }
 
   async getCapacityMetrics(_organizationId?: string): Promise<CapacityMetric[]> {
-    return [
-      {
-        name: "People Capacity",
-        allocated: 100,
-        utilized: 68,
-        wasteValue: 9600000,
-        department: "People & Engineering Capacity",
-        unusedHours: 320,
-        potentialBillableHours: 256,
-      },
-      {
-        name: "Technology Capacity",
-        allocated: 100,
-        utilized: 54,
-        wasteValue: 14200000,
-        department: "Cloud Infrastructure & Subscriptions",
-        unusedHours: 460,
-        potentialBillableHours: 368,
-      },
-      {
-        name: "Operational Workflow Capacity",
-        allocated: 100,
-        utilized: 74,
-        wasteValue: 6800000,
-        department: "Operations & Transaction Pipelines",
-        unusedHours: 260,
-        potentialBillableHours: 208,
-      },
-      {
-        name: "Capital & Float Capacity",
-        allocated: 100,
-        utilized: 61,
-        wasteValue: 3600000,
-        department: "Treasury & Clearing Buffers",
-        unusedHours: 390,
-        potentialBillableHours: 312,
-      }
-    ];
+    // BACKEND CAPABILITY REQUIRED: People, Tech, and Capital utilization telemetry service
+    return [];
   }
 
   async getPlays(_organizationId?: string): Promise<ExecutionPlay[]> {
@@ -153,7 +115,7 @@ export class ApiValueRepository implements ValueRepository {
         return res.data.map(p => ({
           id: p.id,
           title: p.recommendation,
-          description: p.decisionDetail || p.insightSource || "Automated strategic execution play.",
+          description: p.decisionDetail || p.insightSource || "Action item",
           targetId: p.id,
           type: "opportunity" as const,
           estimatedGain: p.expectedValue,
@@ -177,7 +139,7 @@ export class ApiValueRepository implements ValueRepository {
         return res.data.map(c => ({
           id: c.id,
           date: c.realizationDate,
-          playTitle: c.opportunityTitle || "Clearing Sweep Float Optimization",
+          playTitle: c.opportunityTitle || "Captured Value Record",
           category: c.category,
           amountCaptured: c.capturedValue,
           impactMetrics: c.evidenceDescription,

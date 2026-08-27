@@ -41,7 +41,6 @@ function mapRecordToCustomer(c: CustomerRecord): Customer {
 
 function mapRecordToUnifiedCustomer(c: CustomerRecord): UnifiedCustomer {
   const isAtRisk = c.status === "at-risk" || c.healthScore < 70;
-  const isDormant = c.status === "dormant";
   const arrUSD = c.arr / 1000000; // in Millions USD
   const arrNaira = (c.arr * 1500) / 1000000; // in Millions NGN
   const status: UnifiedCustomer["status"] = c.status === "dormant" ? "at-risk" : c.status;
@@ -55,36 +54,30 @@ function mapRecordToUnifiedCustomer(c: CustomerRecord): UnifiedCustomer {
     healthScore: c.healthScore,
     arrUSD,
     arrNaira,
-    ltvUSD: arrUSD * 3.5,
-    ltvNaira: arrNaira * 3.5,
+    ltvUSD: arrUSD,
+    ltvNaira: arrNaira,
     since: c.since || "2024",
     owner: c.owner,
     contactName: c.contactName,
     contactRole: c.contactRole,
     contactEmail: c.contactEmail,
-    industry: (c as any).industry || "Financial Services",
-    growthYoY: isAtRisk ? -4.2 : 18.5,
+    industry: (c as any).industry || "Enterprise",
+    growthYoY: 0,
     engagementLevel: c.healthScore,
-    contractStatus: isAtRisk ? "Expiring in 60 Days" : "Active Master Agreement",
-    supportActivity: isAtRisk ? "3 open escalation tickets" : "0 unresolved tickets",
-    supportTickets: isAtRisk ? 3 : 0,
-    paymentBehavior: isAtRisk ? "Delayed 15 days" : "Pristine Net-30",
-    paymentStatus: isAtRisk ? "delayed" : "pristine",
-    riskLevel: isAtRisk ? "High Risk" : "Low Risk",
-    riskScore: isAtRisk ? Math.min(95, 100 - c.healthScore + 30) : Math.max(5, 100 - c.healthScore),
-    expansionPotential: isAtRisk ? "Low" : "High",
-    potentialArrNaira: arrNaira * 1.2,
-    opportunityNaira: arrNaira * 0.2,
-    opportunityReason: "Cross-subsidiary API integration expansion",
-    riskReasons: isAtRisk
-      ? ["Usage decline detected over last 60 days", "Support ticket resolution latency exceeds SLA threshold"]
-      : [],
-    aiInsight: isAtRisk
-      ? `AI Risk Detector flags potential retention concern for ${c.name}. Recommended proactive outreach.`
-      : isDormant
-      ? `Account is currently dormant. Expansion opportunities identified in automated advisory pipelines.`
-      : `Healthy tier-1 account with strong SLA adherence and potential for +15% expansion ARR.`,
-    recommendedAction: isAtRisk ? "Trigger Churn Prevention Workflow" : "Schedule Quarterly Business Review",
+    contractStatus: "Active",
+    supportActivity: "Not available",
+    supportTickets: 0,
+    paymentBehavior: "Not available",
+    paymentStatus: "standard",
+    riskLevel: isAtRisk ? "At Risk" : "Healthy",
+    riskScore: Math.max(0, 100 - c.healthScore),
+    expansionPotential: "Low",
+    potentialArrNaira: arrNaira,
+    opportunityNaira: 0,
+    opportunityReason: "Not available",
+    riskReasons: isAtRisk ? ["Account health score below target threshold"] : [],
+    aiInsight: isAtRisk ? "Account health score is below the target threshold." : "",
+    recommendedAction: isAtRisk ? "Review account health" : "No action required",
     tags: c.tags || [],
   };
 }
@@ -117,35 +110,8 @@ export class ApiCustomerRepository implements CustomerRepository {
   }
 
   async getRelationshipHistory(customerId?: string): Promise<Record<string, RelationshipEvent[]>> {
-    try {
-      const customers = await this.getCustomers();
-      const history: Record<string, RelationshipEvent[]> = {};
-
-      for (const c of customers) {
-        history[c.id] = [
-          {
-            year: 2026,
-            category: "meetings",
-            title: `Executive Briefing with ${c.contactName}`,
-            description: `Discussed operational capacity and SLA governance with ${c.name}.`,
-          },
-          {
-            year: 2026,
-            category: "contracts",
-            title: "Annual Retainer Reconciliation",
-            description: `Validated ARR allocation of ₦${(c.arr / 1000000).toFixed(1)}M under ${c.subsidiary}.`,
-          },
-        ];
-      }
-
-      if (customerId) {
-        return { [customerId]: history[customerId] || [] };
-      }
-      return history;
-    } catch (err) {
-      console.error("Failed to fetch relationship history:", err);
-      return {};
-    }
+    // Relationship event history requires a dedicated customer audit/activity endpoint
+    return {};
   }
 
   async getCustomer(id: string): Promise<Customer | undefined> {
@@ -176,27 +142,8 @@ export class ApiCustomerRepository implements CustomerRepository {
     }
   }
 
-  async getTimeline(customerId: string): Promise<TimelineEvent[]> {
-    return [
-      {
-        id: `tl-${customerId}-1`,
-        customerId,
-        date: "Aug 18, 2026",
-        title: "SLA Adherence Verified",
-        description: "Automated monthly SLA performance certificate published.",
-        type: "system",
-        actor: "System Automation",
-      },
-      {
-        id: `tl-${customerId}-2`,
-        customerId,
-        date: "Jul 22, 2026",
-        title: "Contract Allocation Refreshed",
-        description: "Updated service tier allocations with account lead.",
-        type: "deal",
-        actor: "Account Director",
-      }
-    ];
+  async getTimeline(_customerId: string): Promise<TimelineEvent[]> {
+    return [];
   }
 
   async getNotes(_customerId: string): Promise<CustomerNote[]> {
@@ -224,10 +171,8 @@ export class ApiCustomerRepository implements CustomerRepository {
         name: c.name,
         subsidiary: c.subsidiary,
         arr: c.arr,
-        riskScore: Math.min(95, 100 - c.healthScore + 20),
-        reason: c.healthScore < 60
-          ? "Critical health index drop below SLA baseline thresholds."
-          : "Approaching renewal period with unverified service tickets.",
+        riskScore: Math.max(0, 100 - c.healthScore),
+        reason: "Customer health score below baseline threshold",
       }));
   }
 
