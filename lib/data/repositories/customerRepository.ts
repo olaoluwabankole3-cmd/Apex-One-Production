@@ -41,8 +41,6 @@ function mapRecordToCustomer(c: CustomerRecord): Customer {
 }
 
 function mapRecordToUnifiedCustomer(c: CustomerRecord): UnifiedCustomer {
-  const arrUSD = c.arr / 1000000; // in Millions USD
-  const arrNaira = (c.arr * 1500) / 1000000; // in Millions NGN
   const status: UnifiedCustomer["status"] = c.status === "dormant" ? "at-risk" : c.status;
 
   return {
@@ -52,10 +50,11 @@ function mapRecordToUnifiedCustomer(c: CustomerRecord): UnifiedCustomer {
     tier: c.tier,
     status,
     healthScore: c.healthScore,
-    arrUSD,
-    arrNaira,
-    ltvUSD: arrUSD,
-    ltvNaira: arrNaira,
+    arr: c.arr,
+    arrUSD: null,
+    arrNaira: null,
+    ltvUSD: null,
+    ltvNaira: null,
     since: c.since ?? null,
     owner: c.owner,
     contactName: c.contactName,

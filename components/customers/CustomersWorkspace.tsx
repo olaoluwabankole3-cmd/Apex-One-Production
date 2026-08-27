@@ -109,11 +109,13 @@ export default function CustomersWorkspace() {
   // Portfolio level answers to our custom questions
   const auditFeedback = useMemo(() => {
     if (!currentCustomers.length) return null;
+    const getArrM = (c: UnifiedCustomer) => (c.arr ? c.arr / 1000000 : (c.arrNaira ?? 0));
+
     switch (auditFilter) {
       case "important": {
-        const strategic = currentCustomers.filter(c => c.tier === "Enterprise" || c.arrUSD >= 2.0);
-        const totalStrategicArr = strategic.reduce((sum, c) => sum + c.arrNaira, 0);
-        const totalArr = currentCustomers.reduce((sum, c) => sum + c.arrNaira, 0);
+        const strategic = currentCustomers.filter(c => c.tier === "Enterprise" || (c.arrUSD ?? 0) >= 2.0 || getArrM(c) >= 2000);
+        const totalStrategicArr = strategic.reduce((sum, c) => sum + getArrM(c), 0);
+        const totalArr = currentCustomers.reduce((sum, c) => sum + getArrM(c), 0);
         const pct = totalArr > 0 ? Math.round((totalStrategicArr / totalArr) * 100) : 0;
         return {
           title: "Tier-1 Strategic Customer Audit",
@@ -131,7 +133,7 @@ export default function CustomersWorkspace() {
       }
       case "risk": {
         const atRisk = currentCustomers.filter(c => c.status === "at-risk" || c.healthScore < 70);
-        const exposure = atRisk.reduce((sum, c) => sum + c.arrNaira, 0);
+        const exposure = atRisk.reduce((sum, c) => sum + getArrM(c), 0);
         return {
           title: "Revenue & Platform Drift Exposure",
           text: `Portfolio Audit: ${atRisk.length} account(s) flagged with active risk profiles (Total Exposure: ₦${(exposure / 1000).toFixed(2)}B).`,
@@ -201,7 +203,7 @@ export default function CustomersWorkspace() {
     // Filter by Smart Audit Tab Clicked
     if (auditFilter !== "all") {
       if (auditFilter === "important") {
-        result = result.filter(c => c.tier === "Enterprise" || c.arrUSD >= 2.0);
+        result = result.filter(c => c.tier === "Enterprise" || (c.arrUSD ?? 0) >= 2.0 || (c.arr && c.arr >= 2000000) || (c.arrNaira && c.arrNaira >= 2000));
       } else if (auditFilter === "changing") {
         result = result.filter(c => c.status === "onboarding" || (c.riskReasons || []).some(r => r.includes("sponsor") || r.includes("handover")));
       } else if (auditFilter === "risk") {
@@ -217,10 +219,12 @@ export default function CustomersWorkspace() {
 
     // Sort the resulting list
     result.sort((a, b) => {
-      if (sortField === "revenue") return b.arrNaira - a.arrNaira;
+      const aArr = a.arr ?? (a.arrNaira ? a.arrNaira * 1000000 : 0);
+      const bArr = b.arr ?? (b.arrNaira ? b.arrNaira * 1000000 : 0);
+      if (sortField === "revenue") return bArr - aArr;
       if (sortField === "growth") return (b.growthYoY ?? -Infinity) - (a.growthYoY ?? -Infinity);
       if (sortField === "risk") return (b.riskScore ?? -Infinity) - (a.riskScore ?? -Infinity);
-      if (sortField === "ltv") return b.ltvNaira - a.ltvNaira;
+      if (sortField === "ltv") return (b.ltvNaira ?? 0) - (a.ltvNaira ?? 0);
       if (sortField === "opportunity") return (b.opportunityNaira ?? 0) - (a.opportunityNaira ?? 0);
       if (sortField === "engagement") return (b.engagementLevel ?? 0) - (a.engagementLevel ?? 0);
       return 0;
@@ -260,8 +264,9 @@ export default function CustomersWorkspace() {
 
     try {
       const buLabel = activeCustomer.businessUnit ? activeCustomer.businessUnit : "Unassigned BU";
+      const arrText = activeCustomer.arr ? `ARR: ₦${(activeCustomer.arr / 1000000).toLocaleString()}M` : activeCustomer.arrNaira ? `ARR: ₦${activeCustomer.arrNaira}M` : "ARR: Unavailable";
       const text = await aiRepository.ask(
-        `Synthesize relationship memory for ${activeCustomer.name} (${buLabel}, ARR: ₦${activeCustomer.arrNaira}M, Status: ${activeCustomer.status}, Health Score: ${activeCustomer.healthScore}%). Summarize historical milestones and operational posture.`
+        `Synthesize relationship memory for ${activeCustomer.name} (${buLabel}, ${arrText}, Status: ${activeCustomer.status}, Health Score: ${activeCustomer.healthScore}%). Summarize historical milestones and operational posture.`
       );
       setMemoryAnswer(text);
     } catch (err: any) {
@@ -385,7 +390,7 @@ export default function CustomersWorkspace() {
             {currentCustomers.filter(c => c.status === "at-risk").length}
           </p>
           <p className="mt-1 text-[10.5px] text-crimson/70 font-mono">
-            ₦{(currentCustomers.filter(c => c.status === "at-risk").reduce((sum, c) => sum + c.arrNaira, 0) / 1000).toFixed(2)}B exposure
+            ₦{(currentCustomers.filter(c => c.status === "at-risk").reduce((sum, c) => sum + (c.arr ? c.arr / 1000000 : (c.arrNaira ?? 0)), 0) / 1000).toFixed(2)}B exposure
           </p>
         </div>
 
@@ -418,12 +423,25 @@ export default function CustomersWorkspace() {
             <span className="text-[11px] font-mono uppercase tracking-wider text-ivory/40">Consolidated LTV</span>
             <Wallet size={14} className="text-gold" />
           </div>
-          <p className="mt-1.5 font-display text-[22px] font-bold text-ivory">
-            ₦{(currentCustomers.reduce((sum, c) => sum + c.ltvNaira, 0) / 1000).toFixed(1)}B
-          </p>
-          <p className="mt-1 text-[10.5px] text-emerald font-mono flex items-center gap-1">
-            <TrendingUp size={10} /> Multi-year total
-          </p>
+          {currentCustomers.some(c => c.ltvNaira !== null && c.ltvNaira !== undefined) ? (
+            <>
+              <p className="mt-1.5 font-display text-[22px] font-bold text-ivory">
+                ₦{(currentCustomers.reduce((sum, c) => sum + (c.ltvNaira ?? 0), 0) / 1000).toFixed(1)}B
+              </p>
+              <p className="mt-1 text-[10.5px] text-emerald font-mono flex items-center gap-1">
+                <TrendingUp size={10} /> Multi-year total
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mt-1.5 font-display text-[16px] font-medium text-ivory/50">
+                Not available
+              </p>
+              <p className="mt-1 text-[10.5px] text-ivory/40 font-mono">
+                Requires multi-year tenure data
+              </p>
+            </>
+          )}
         </div>
       </div>
 
@@ -837,7 +855,7 @@ export default function CustomersWorkspace() {
 
                           {/* Mini ARR tag on right side of node */}
                           <text x="70" y="3" textAnchor="end" fill="#eab308" fontSize="8" fontFamily="monospace" opacity="0.8">
-                            ₦{customerData.arrNaira}M
+                            {customerData.arr ? `₦${(customerData.arr / 1000000).toLocaleString()}M` : customerData.arrNaira ? `₦${customerData.arrNaira}M` : "—"}
                           </text>
                         </g>
                       );
@@ -897,11 +915,27 @@ export default function CustomersWorkspace() {
                           <div className="mt-4 grid grid-cols-2 gap-3 border-y border-white/[0.04] py-2.5">
                             <div>
                               <p className="text-[10px] text-ivory/40 uppercase font-mono tracking-wider">ANNUAL VALUE (ARR)</p>
-                              <p className="font-display text-[13px] font-bold text-ivory">₦{c.arrNaira}M <span className="text-[11px] text-ivory/50 font-normal">(${c.arrUSD.toFixed(1)}M)</span></p>
+                              <p className="font-display text-[13px] font-bold text-ivory">
+                                {c.arr ? `₦${(c.arr / 1000000).toLocaleString()}M` : c.arrNaira ? `₦${c.arrNaira}M` : "Not available"}
+                                {c.arrUSD !== null && c.arrUSD !== undefined && (
+                                  <span className="text-[11px] text-ivory/50 font-normal"> (${c.arrUSD.toFixed(1)}M)</span>
+                                )}
+                              </p>
                             </div>
                             <div>
                               <p className="text-[10px] text-ivory/40 uppercase font-mono tracking-wider">LIFETIME VALUE (LTV)</p>
-                              <p className="font-display text-[13px] font-bold text-gold">₦{(c.ltvNaira / 1000).toFixed(1)}B <span className="text-[11px] text-gold/60 font-normal">(${c.ltvUSD.toFixed(1)}M)</span></p>
+                              <p className="font-display text-[13px] font-bold text-gold">
+                                {c.ltvNaira !== null && c.ltvNaira !== undefined ? (
+                                  <>
+                                    ₦{(c.ltvNaira / 1000).toFixed(1)}B
+                                    {c.ltvUSD !== null && c.ltvUSD !== undefined && (
+                                      <span className="text-[11px] text-gold/60 font-normal"> (${c.ltvUSD.toFixed(1)}M)</span>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span className="text-ivory/40 font-normal text-[12px]">Not available</span>
+                                )}
+                              </p>
                             </div>
                           </div>
 
@@ -996,11 +1030,17 @@ export default function CustomersWorkspace() {
             <div className="mt-5 grid grid-cols-3 gap-2 border-t border-white/[0.05] pt-4">
               <div>
                 <p className="text-[9.5px] font-mono text-ivory/40 uppercase">ARR VALUE</p>
-                <p className="text-[13px] font-bold text-ivory mt-0.5">₦{activeCustomer.arrNaira}M</p>
+                <p className="text-[13px] font-bold text-ivory mt-0.5">
+                  {activeCustomer.arr ? `₦${(activeCustomer.arr / 1000000).toLocaleString()}M` : activeCustomer.arrNaira ? `₦${activeCustomer.arrNaira}M` : "—"}
+                </p>
               </div>
               <div>
                 <p className="text-[9.5px] font-mono text-ivory/40 uppercase">LIFETIME VALUE</p>
-                <p className="text-[13px] font-bold text-gold mt-0.5">₦{(activeCustomer.ltvNaira / 1000).toFixed(1)}B</p>
+                <p className="text-[13px] font-bold text-gold mt-0.5">
+                  {activeCustomer.ltvNaira !== null && activeCustomer.ltvNaira !== undefined
+                    ? `₦${(activeCustomer.ltvNaira / 1000).toFixed(1)}B`
+                    : "Not available"}
+                </p>
               </div>
               <div className="flex flex-col items-end">
                 <p className="text-[9.5px] font-mono text-ivory/40 uppercase">HEALTH INDEX</p>
@@ -1090,7 +1130,12 @@ export default function CustomersWorkspace() {
               </div>
               <div className="flex gap-2">
                 <span className="text-gold shrink-0">▸ Major Milestones:</span>
-                <span>LTV expanded to ₦{activeCustomer.ltvNaira}M{activeCustomer.businessUnit ? ` | ${activeCustomer.businessUnit} mapped` : ""}</span>
+                <span>
+                  {activeCustomer.ltvNaira !== null && activeCustomer.ltvNaira !== undefined
+                    ? `LTV expanded to ₦${activeCustomer.ltvNaira}M`
+                    : "Multi-year enterprise relationship"}
+                  {activeCustomer.businessUnit ? ` | ${activeCustomer.businessUnit} mapped` : ""}
+                </span>
               </div>
               <div className="flex gap-2">
                 <span className="text-gold shrink-0">▸ Key Decision Makers:</span>
@@ -1196,7 +1241,9 @@ export default function CustomersWorkspace() {
             <div className="mt-4 grid grid-cols-3 gap-2 border-b border-white/[0.05] pb-3 text-center">
               <div>
                 <p className="text-[9.5px] font-mono text-ivory/40">CURRENT ARR</p>
-                <p className="font-display text-[14.5px] font-bold text-ivory mt-0.5">₦{activeCustomer.arrNaira}M</p>
+                <p className="font-display text-[14.5px] font-bold text-ivory mt-0.5">
+                  {activeCustomer.arr ? `₦${(activeCustomer.arr / 1000000).toLocaleString()}M` : activeCustomer.arrNaira ? `₦${activeCustomer.arrNaira}M` : "—"}
+                </p>
               </div>
               <div>
                 <p className="text-[9.5px] font-mono text-ivory/40">POTENTIAL ARR</p>

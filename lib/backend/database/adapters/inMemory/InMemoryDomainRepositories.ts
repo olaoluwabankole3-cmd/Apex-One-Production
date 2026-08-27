@@ -27,6 +27,8 @@ import {
   ICustomerRepository,
   IContractRepository,
   ITransactionRepository,
+  FinancialTotalsResult,
+  FinancialTotalsByCurrency,
   ISignalRepository,
   IValueOpportunityRepository,
   IValueCapturedRepository,
@@ -39,6 +41,7 @@ import {
   IAuditLogRepository,
 } from "../../repository";
 import { TenantContext } from "../../../core/errors";
+import { Validator } from "../../../core/validation";
 
 export class InMemoryCustomerRepository
   extends InMemoryTenantRepository<CustomerRecord>
@@ -75,18 +78,70 @@ export class InMemoryTransactionRepository
     return this.findMany(ctx, (t) => t.customerId === customerId);
   }
 
-  public async calculateFinancialTotals(ctx: TenantContext): Promise<{ totalRevenue: number; totalCosts: number }> {
+  public async calculateFinancialTotals(ctx: TenantContext): Promise<FinancialTotalsResult> {
     const records = await this.findMany(ctx);
-    let totalRevenue = 0;
-    let totalCosts = 0;
+    const byCurrency: Record<string, FinancialTotalsByCurrency> = {};
+
     for (const rec of records) {
-      if (rec.type === "revenue" && rec.status === "cleared") {
-        totalRevenue += rec.amount;
-      } else if (rec.type === "cost" && rec.status === "cleared") {
-        totalCosts += rec.amount;
+      const canonicalCurrency = Validator.normalizeCurrency(rec.currency);
+      if (!canonicalCurrency) {
+        // Skip unaggregatable / invalid / missing currencies without silently converting or corrupting totals
+        continue;
+      }
+
+      if (!byCurrency[canonicalCurrency]) {
+        byCurrency[canonicalCurrency] = {
+          totalRevenue: 0,
+          totalCosts: 0,
+          net: 0,
+          transactionCount: 0,
+        };
+      }
+
+      // Only cleared status counts toward realized revenue and costs
+      if (rec.status === "cleared") {
+        byCurrency[canonicalCurrency].transactionCount += 1;
+        if (rec.type === "revenue") {
+          byCurrency[canonicalCurrency].totalRevenue += rec.amount;
+        } else if (rec.type === "cost") {
+          byCurrency[canonicalCurrency].totalCosts += rec.amount;
+        }
+        byCurrency[canonicalCurrency].net =
+          byCurrency[canonicalCurrency].totalRevenue - byCurrency[canonicalCurrency].totalCosts;
       }
     }
-    return { totalRevenue, totalCosts };
+
+    const activeCurrencies = Object.keys(byCurrency);
+
+    if (activeCurrencies.length === 1) {
+      const singleCurrency = activeCurrencies[0];
+      return {
+        byCurrency,
+        isMixedCurrency: false,
+        currency: singleCurrency,
+        totalRevenue: byCurrency[singleCurrency].totalRevenue,
+        totalCosts: byCurrency[singleCurrency].totalCosts,
+      };
+    }
+
+    if (activeCurrencies.length === 0) {
+      return {
+        byCurrency: {},
+        isMixedCurrency: false,
+        currency: null,
+        totalRevenue: 0,
+        totalCosts: 0,
+      };
+    }
+
+    // Mixed currencies: never sum amounts across different currencies!
+    return {
+      byCurrency,
+      isMixedCurrency: true,
+      currency: null,
+      totalRevenue: null,
+      totalCosts: null,
+    };
   }
 }
 

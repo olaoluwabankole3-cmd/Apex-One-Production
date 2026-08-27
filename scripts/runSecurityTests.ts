@@ -5,24 +5,39 @@
 import { runTenantIsolationTestSuite } from "../lib/backend/tests/tenantIsolation.test";
 import { runFrontendAuthCompatibilityTestSuite } from "../lib/backend/tests/frontendAuthCompatibility.test";
 import { runCustomerDataTruthfulnessTestSuite } from "../lib/backend/tests/customerDataTruthfulness.test";
+import { runFinancialIntegrityTestSuite } from "../lib/backend/tests/financialIntegrity.test";
 
 async function main() {
   console.log("================================================================================");
-  console.log("APEX ONE PRODUCTION — TENANT ISOLATION & DATA TRUTHFULNESS SECURITY TEST SUITE");
+  console.log("APEX ONE PRODUCTION — TENANT ISOLATION & FINANCIAL TRUTHFULNESS TEST SUITE");
   console.log("================================================================================\n");
 
   const start = performance.now();
-  const [backendSummary, frontendSummary, customerSummary] = await Promise.all([
+  const [backendSummary, frontendSummary, customerSummary, financialSummary] = await Promise.all([
     runTenantIsolationTestSuite(),
     runFrontendAuthCompatibilityTestSuite(),
     runCustomerDataTruthfulnessTestSuite(),
+    runFinancialIntegrityTestSuite(),
   ]);
   const duration = Math.round(performance.now() - start);
 
-  const allResults = [...backendSummary.results, ...frontendSummary.results, ...customerSummary.results];
-  const total = backendSummary.total + frontendSummary.total + customerSummary.total;
-  const passedCount = backendSummary.passedCount + frontendSummary.passedCount + customerSummary.passedCount;
-  const failedCount = backendSummary.failedCount + frontendSummary.failedCount + customerSummary.failedCount;
+  const allResults = [
+    ...backendSummary.results,
+    ...frontendSummary.results,
+    ...customerSummary.results,
+    ...financialSummary.results,
+  ];
+  const total = backendSummary.total + frontendSummary.total + customerSummary.total + financialSummary.total;
+  const passedCount =
+    backendSummary.passedCount +
+    frontendSummary.passedCount +
+    customerSummary.passedCount +
+    financialSummary.passedCount;
+  const failedCount =
+    backendSummary.failedCount +
+    frontendSummary.failedCount +
+    customerSummary.failedCount +
+    financialSummary.failedCount;
   const passed = failedCount === 0;
 
   // Group results by suite

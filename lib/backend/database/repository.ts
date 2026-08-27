@@ -42,9 +42,24 @@ export interface IContractRepository extends ITenantScopedRepository<ContractRec
   findExpiringSoon(daysThreshold: number, ctx: TenantContext): Promise<ContractRecord[]>;
 }
 
+export interface FinancialTotalsByCurrency {
+  totalRevenue: number;
+  totalCosts: number;
+  net: number;
+  transactionCount: number;
+}
+
+export interface FinancialTotalsResult {
+  byCurrency: Record<string, FinancialTotalsByCurrency>;
+  isMixedCurrency: boolean;
+  currency?: string | null;
+  totalRevenue?: number | null;
+  totalCosts?: number | null;
+}
+
 export interface ITransactionRepository extends ITenantScopedRepository<TransactionRecord> {
   findByCustomer(customerId: string, ctx: TenantContext): Promise<TransactionRecord[]>;
-  calculateFinancialTotals(ctx: TenantContext): Promise<{ totalRevenue: number; totalCosts: number }>;
+  calculateFinancialTotals(ctx: TenantContext): Promise<FinancialTotalsResult>;
 }
 
 export interface ISignalRepository extends ITenantScopedRepository<SignalRecord> {

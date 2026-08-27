@@ -91,12 +91,9 @@ export class ValueService {
     const activeContractsValue = contracts
       .filter((c) => c.status === "active" || c.status === "expiring_soon")
       .reduce((sum, c) => sum + (c.contractValue || 0), 0);
-    const recordedRevenue = txns
-      .filter((t) => t.type === "revenue" && t.status === "cleared")
-      .reduce((sum, t) => sum + t.amount, 0);
-    const recordedCosts = txns
-      .filter((t) => t.type === "cost" && t.status === "cleared")
-      .reduce((sum, t) => sum + t.amount, 0);
+    const txnTotals = await this.database.transactionsRepo.calculateFinancialTotals(ctx);
+    const recordedRevenue = txnTotals.totalRevenue ?? 0;
+    const recordedCosts = txnTotals.totalCosts ?? 0;
 
     // 3. Potential Value Identified (Sum of open/active opportunities)
     const activeOpps = opps.filter((o) => o.status !== "Captured");
@@ -327,20 +324,20 @@ export class ValueService {
     requirePermission(ctx, "value:read");
 
     // Dynamically derive baseline from tenant's real customer ARR and contract telemetry
-    const [customers, contracts, txns] = await Promise.all([
+    const [customers, contracts, txnTotals] = await Promise.all([
       this.database.customersRepo.findMany(ctx),
       this.database.contractsRepo.findMany(ctx),
-      this.database.transactionsRepo.findMany(ctx),
+      this.database.transactionsRepo.calculateFinancialTotals(ctx),
     ]);
+
+    const org = this.database.organizations.get(ctx.organizationId);
+    const currency = org?.currency || txnTotals.currency || "NGN";
+    const currencySymbol = org?.currencySymbol || (currency === "USD" ? "$" : "₦");
 
     const arrSum = customers.reduce((sum, c) => sum + (c.arr || 0), 0);
     const contractSum = contracts.reduce((sum, c) => sum + (c.contractValue || 0), 0);
-    const clearedRevenue = txns
-      .filter((t) => t.type === "revenue" && t.status === "cleared")
-      .reduce((sum, t) => sum + t.amount, 0);
-    const clearedCosts = txns
-      .filter((t) => t.type === "cost" && t.status === "cleared")
-      .reduce((sum, t) => sum + t.amount, 0);
+    const clearedRevenue = txnTotals.totalRevenue ?? 0;
+    const clearedCosts = txnTotals.totalCosts ?? 0;
 
     // Dynamic base revenue selection: prefer ARR, fallback to contract sum or recorded transactions
     const baseRevenue = arrSum > 0 ? arrSum : contractSum > 0 ? contractSum : clearedRevenue;
@@ -355,8 +352,8 @@ export class ValueService {
         projectedRevenue: 0,
         projectedCosts: 0,
         projectedGain: 0,
-        currency: "NGN",
-        currencySymbol: "₦",
+        currency,
+        currencySymbol,
         calculationEvidence: "Organization baseline is currently 0. Add customers or contracts to compute live financial simulations.",
         confidence: 100,
         parametersEvaluated: params,
@@ -372,7 +369,7 @@ export class ValueService {
     const calculatedCosts = Math.round(baseCosts * (params.headcountPct / 100) * (1 - params.automationPct / 400));
     const projectedGain = calculatedRevenue - calculatedCosts - (baseRevenue - baseCosts);
 
-    const evidence = `Computed simulation using tenant dynamic baseline of ${customers.length} customer accounts (ARR: ₦${baseRevenue.toLocaleString()}) and operating baseline (Costs: ₦${baseCosts.toLocaleString()}).`;
+    const evidence = `Computed simulation using tenant dynamic baseline of ${customers.length} customer accounts (ARR: ${currencySymbol}${baseRevenue.toLocaleString()}) and operating baseline (Costs: ${currencySymbol}${baseCosts.toLocaleString()}).`;
 
     return {
       baselineRevenue: baseRevenue,
@@ -380,8 +377,8 @@ export class ValueService {
       projectedRevenue: calculatedRevenue,
       projectedCosts: calculatedCosts,
       projectedGain,
-      currency: "NGN",
-      currencySymbol: "₦",
+      currency,
+      currencySymbol,
       calculationEvidence: evidence,
       confidence: 92,
       parametersEvaluated: params,

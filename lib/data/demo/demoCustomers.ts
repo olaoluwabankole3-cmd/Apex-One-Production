@@ -5,10 +5,11 @@ export interface UnifiedCustomer {
   tier: "Enterprise" | "Mid-Market" | "SMB";
   status: "active" | "at-risk" | "onboarding";
   healthScore: number;
-  arrNaira: number; // in Millions Naira (e.g. 1200 = ₦1.2B)
-  arrUSD: number; // in Millions USD
-  ltvNaira: number; // in Millions Naira
-  ltvUSD: number;
+  arr?: number | null;
+  arrNaira?: number | null; // in Millions Naira (e.g. 1200 = ₦1.2B)
+  arrUSD?: number | null; // in Millions USD
+  ltvNaira?: number | null; // in Millions Naira
+  ltvUSD?: number | null;
   since?: string | null;
   owner: string;
   contactName: string;

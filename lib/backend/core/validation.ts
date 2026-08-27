@@ -7,6 +7,53 @@
 
 import { ValidationError, InvalidStateTransitionError } from "./errors";
 
+export type SupportedCurrency = "NGN" | "USD" | "GBP" | "EUR" | "GHS" | "ZAR" | "KES";
+export const SUPPORTED_CURRENCIES: readonly SupportedCurrency[] = [
+  "NGN",
+  "USD",
+  "GBP",
+  "EUR",
+  "GHS",
+  "ZAR",
+  "KES",
+] as const;
+
+const CURRENCY_NORMALIZATION_MAP: Record<string, SupportedCurrency> = {
+  ngn: "NGN",
+  naira: "NGN",
+  "₦": "NGN",
+  usd: "USD",
+  dollar: "USD",
+  dollars: "USD",
+  "us dollar": "USD",
+  "us dollars": "USD",
+  "$": "USD",
+  gbp: "GBP",
+  pound: "GBP",
+  pounds: "GBP",
+  "british pound": "GBP",
+  "£": "GBP",
+  eur: "EUR",
+  euro: "EUR",
+  euros: "EUR",
+  "€": "EUR",
+  ghs: "GHS",
+  cedi: "GHS",
+  cedis: "GHS",
+  "ghana cedi": "GHS",
+  "ghana cedis": "GHS",
+  "₵": "GHS",
+  zar: "ZAR",
+  rand: "ZAR",
+  rands: "ZAR",
+  "south african rand": "ZAR",
+  r: "ZAR",
+  kes: "KES",
+  ksh: "KES",
+  "kenyan shilling": "KES",
+  "kenyan shillings": "KES",
+};
+
 export class Validator {
   /**
    * Ensure value is a non-empty string.
@@ -128,6 +175,48 @@ export class Validator {
       throw new ValidationError(`Field '${fieldName}' contains invalid characters. Must be 3-64 alphanumeric characters, dashes, or underscores`);
     }
     return str;
+  }
+
+  /**
+   * Normalize an incoming currency identifier or return undefined if ambiguous/unsupported.
+   * Standardizes strings to ISO 4217 standard codes (e.g., 'NGN', 'USD', 'GBP', 'EUR', 'GHS').
+   */
+  public static normalizeCurrency(value: unknown): SupportedCurrency | undefined {
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+
+    const upper = trimmed.toUpperCase();
+    if (SUPPORTED_CURRENCIES.includes(upper as SupportedCurrency)) {
+      return upper as SupportedCurrency;
+    }
+
+    const lower = trimmed.toLowerCase();
+    return CURRENCY_NORMALIZATION_MAP[lower];
+  }
+
+  /**
+   * Ensure value is a valid, supported ISO 4217 currency.
+   * Rejects missing, empty, malformed, or unsupported currencies with ValidationError.
+   */
+  public static requireCurrency(value: unknown, fieldName: string = "currency"): SupportedCurrency {
+    if (value === undefined || value === null || value === "") {
+      throw new ValidationError(`Field '${fieldName}' is required and must be a supported ISO currency`);
+    }
+    const normalized = this.normalizeCurrency(value);
+    if (!normalized) {
+      throw new ValidationError(
+        `Invalid or unsupported currency '${String(value)}' for '${fieldName}'. Supported ISO currencies: [${SUPPORTED_CURRENCIES.join(", ")}]`
+      );
+    }
+    return normalized;
+  }
+
+  /**
+   * Validate a monetary amount (must be finite, non-negative number).
+   */
+  public static requireMonetaryAmount(value: unknown, fieldName: string = "amount"): number {
+    return this.requireNumber(value, fieldName, { min: 0 });
   }
 
   /**

@@ -406,10 +406,11 @@ export interface UnifiedCustomer {
   tier: "Enterprise" | "Mid-Market" | "SMB";
   status: "active" | "at-risk" | "onboarding";
   healthScore: number;
-  arrNaira: number;
-  arrUSD: number;
-  ltvNaira: number;
-  ltvUSD: number;
+  arr?: number | null;
+  arrNaira?: number | null;
+  arrUSD?: number | null;
+  ltvNaira?: number | null;
+  ltvUSD?: number | null;
   since?: string | null;
   owner: string;
   contactName: string;
