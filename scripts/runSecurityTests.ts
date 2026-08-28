@@ -2,6 +2,8 @@
  * APEX ONE — Command-Line Tenant Isolation Security Test Runner
  */
 
+process.env.TEST_ENV = "true";
+
 import { runTenantIsolationTestSuite } from "../lib/backend/tests/tenantIsolation.test";
 import { runFrontendAuthCompatibilityTestSuite } from "../lib/backend/tests/frontendAuthCompatibility.test";
 import { runCustomerDataTruthfulnessTestSuite } from "../lib/backend/tests/customerDataTruthfulness.test";

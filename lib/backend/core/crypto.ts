@@ -9,7 +9,8 @@
 
 import crypto from "crypto";
 
-const PBKDF2_ITERATIONS = 100000;
+const PBKDF2_ITERATIONS =
+  process.env.NODE_ENV === "test" || process.env.TEST_ENV === "true" ? 1000 : 100000;
 const PBKDF2_KEYLEN = 64;
 const PBKDF2_DIGEST = "sha512";
 export const MIN_PASSWORD_LENGTH = 8;
