@@ -108,18 +108,18 @@ export class DatabaseStore {
     };
 
     // Instantiate Repositories
-    this.customersRepo = new InMemoryCustomerRepository("Customer", this.customers, handleViolation);
-    this.contractsRepo = new InMemoryContractRepository("Contract", this.contracts, handleViolation);
-    this.transactionsRepo = new InMemoryTransactionRepository("Transaction", this.transactions, handleViolation);
-    this.signalsRepo = new InMemorySignalRepository("Signal", this.signals, handleViolation);
-    this.opportunitiesRepo = new InMemoryValueOpportunityRepository("ValueOpportunity", this.opportunities, handleViolation);
-    this.valueCapturedRepo = new InMemoryValueCapturedRepository("ValueCaptured", this.valueCaptured, handleViolation);
-    this.memoryRepo = new InMemoryOrganizationalMemoryRepository("OrganizationalMemory", this.memory, handleViolation);
-    this.actionsRepo = new InMemoryActionRepository("Action", this.actions, handleViolation);
-    this.documentsRepo = new InMemoryDocumentRepository("Document", this.documents, handleViolation);
-    this.knowledgeRepo = new InMemoryKnowledgeRepository("Knowledge", this.knowledge, handleViolation);
-    this.workflowsRepo = new InMemoryWorkflowRepository("Workflow", this.workflows, handleViolation);
-    this.workflowRunsRepo = new InMemoryWorkflowRunRepository("WorkflowRun", this.workflowRuns, handleViolation);
+    this.customersRepo = new InMemoryCustomerRepository("Customer", this.customers, handleViolation, this);
+    this.contractsRepo = new InMemoryContractRepository("Contract", this.contracts, handleViolation, this);
+    this.transactionsRepo = new InMemoryTransactionRepository("Transaction", this.transactions, handleViolation, this);
+    this.signalsRepo = new InMemorySignalRepository("Signal", this.signals, handleViolation, this);
+    this.opportunitiesRepo = new InMemoryValueOpportunityRepository("ValueOpportunity", this.opportunities, handleViolation, this);
+    this.valueCapturedRepo = new InMemoryValueCapturedRepository("ValueCaptured", this.valueCaptured, handleViolation, this);
+    this.memoryRepo = new InMemoryOrganizationalMemoryRepository("OrganizationalMemory", this.memory, handleViolation, this);
+    this.actionsRepo = new InMemoryActionRepository("Action", this.actions, handleViolation, this);
+    this.documentsRepo = new InMemoryDocumentRepository("Document", this.documents, handleViolation, this);
+    this.knowledgeRepo = new InMemoryKnowledgeRepository("Knowledge", this.knowledge, handleViolation, this);
+    this.workflowsRepo = new InMemoryWorkflowRepository("Workflow", this.workflows, handleViolation, this);
+    this.workflowRunsRepo = new InMemoryWorkflowRunRepository("WorkflowRun", this.workflowRuns, handleViolation, this);
     this.auditLogsRepo = new InMemoryAuditLogRepository();
 
     // Populate initial dataset

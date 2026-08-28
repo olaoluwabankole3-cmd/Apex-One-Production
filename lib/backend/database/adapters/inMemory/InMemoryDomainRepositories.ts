@@ -42,11 +42,24 @@ import {
 } from "../../repository";
 import { TenantContext } from "../../../core/errors";
 import { Validator } from "../../../core/validation";
+import {
+  RelationshipValidator,
+  IEntityLookupStore,
+} from "../../relationshipValidator";
 
 export class InMemoryCustomerRepository
   extends InMemoryTenantRepository<CustomerRecord>
   implements ICustomerRepository
 {
+  constructor(
+    collectionName: string,
+    store: Map<string, CustomerRecord>,
+    onAuditViolation?: (ctx: TenantContext, resourceId: string, attemptedOrg: string) => void,
+    protected readonly entityLookupStore?: IEntityLookupStore
+  ) {
+    super(collectionName, store, onAuditViolation);
+  }
+
   public async findByEmail(email: string, ctx: TenantContext): Promise<CustomerRecord | undefined> {
     const list = await this.findMany(ctx, (c) => c.contactEmail.toLowerCase() === email.toLowerCase());
     return list[0];
@@ -61,6 +74,41 @@ export class InMemoryContractRepository
   extends InMemoryTenantRepository<ContractRecord>
   implements IContractRepository
 {
+  constructor(
+    collectionName: string,
+    store: Map<string, ContractRecord>,
+    onAuditViolation?: (ctx: TenantContext, resourceId: string, attemptedOrg: string) => void,
+    protected readonly entityLookupStore?: IEntityLookupStore
+  ) {
+    super(collectionName, store, onAuditViolation);
+  }
+
+  public override async create(
+    data: Omit<ContractRecord, "organizationId">,
+    ctx: TenantContext
+  ): Promise<ContractRecord> {
+    RelationshipValidator.validateCustomerBelongsToTenant(data.customerId, ctx, this.entityLookupStore, {
+      optional: false,
+      resourceContext: "Contract",
+    });
+    return super.create(data, ctx);
+  }
+
+  public override async update(
+    id: string,
+    updates: Partial<ContractRecord>,
+    ctx: TenantContext,
+    resourceName: string = this.collectionName
+  ): Promise<ContractRecord> {
+    if (updates.customerId !== undefined) {
+      RelationshipValidator.validateCustomerBelongsToTenant(updates.customerId, ctx, this.entityLookupStore, {
+        optional: false,
+        resourceContext: "Contract",
+      });
+    }
+    return super.update(id, updates, ctx, resourceName);
+  }
+
   public async findByCustomer(customerId: string, ctx: TenantContext): Promise<ContractRecord[]> {
     return this.findMany(ctx, (c) => c.customerId === customerId);
   }
@@ -74,6 +122,41 @@ export class InMemoryTransactionRepository
   extends InMemoryTenantRepository<TransactionRecord>
   implements ITransactionRepository
 {
+  constructor(
+    collectionName: string,
+    store: Map<string, TransactionRecord>,
+    onAuditViolation?: (ctx: TenantContext, resourceId: string, attemptedOrg: string) => void,
+    protected readonly entityLookupStore?: IEntityLookupStore
+  ) {
+    super(collectionName, store, onAuditViolation);
+  }
+
+  public override async create(
+    data: Omit<TransactionRecord, "organizationId">,
+    ctx: TenantContext
+  ): Promise<TransactionRecord> {
+    RelationshipValidator.validateCustomerBelongsToTenant(data.customerId, ctx, this.entityLookupStore, {
+      optional: false,
+      resourceContext: "Transaction",
+    });
+    return super.create(data, ctx);
+  }
+
+  public override async update(
+    id: string,
+    updates: Partial<TransactionRecord>,
+    ctx: TenantContext,
+    resourceName: string = this.collectionName
+  ): Promise<TransactionRecord> {
+    if (updates.customerId !== undefined) {
+      RelationshipValidator.validateCustomerBelongsToTenant(updates.customerId, ctx, this.entityLookupStore, {
+        optional: false,
+        resourceContext: "Transaction",
+      });
+    }
+    return super.update(id, updates, ctx, resourceName);
+  }
+
   public async findByCustomer(customerId: string, ctx: TenantContext): Promise<TransactionRecord[]> {
     return this.findMany(ctx, (t) => t.customerId === customerId);
   }
@@ -149,6 +232,15 @@ export class InMemorySignalRepository
   extends InMemoryTenantRepository<SignalRecord>
   implements ISignalRepository
 {
+  constructor(
+    collectionName: string,
+    store: Map<string, SignalRecord>,
+    onAuditViolation?: (ctx: TenantContext, resourceId: string, attemptedOrg: string) => void,
+    protected readonly entityLookupStore?: IEntityLookupStore
+  ) {
+    super(collectionName, store, onAuditViolation);
+  }
+
   public async findActiveByCategory(category: string, ctx: TenantContext): Promise<SignalRecord[]> {
     return this.findMany(ctx, (s) => s.status === "active" && (category === "all" || s.category === category));
   }
@@ -158,6 +250,50 @@ export class InMemoryValueOpportunityRepository
   extends InMemoryTenantRepository<ValueOpportunityRecord>
   implements IValueOpportunityRepository
 {
+  constructor(
+    collectionName: string,
+    store: Map<string, ValueOpportunityRecord>,
+    onAuditViolation?: (ctx: TenantContext, resourceId: string, attemptedOrg: string) => void,
+    protected readonly entityLookupStore?: IEntityLookupStore
+  ) {
+    super(collectionName, store, onAuditViolation);
+  }
+
+  public override async create(
+    data: Omit<ValueOpportunityRecord, "organizationId">,
+    ctx: TenantContext
+  ): Promise<ValueOpportunityRecord> {
+    RelationshipValidator.validatePolymorphicSourceEntity(
+      data.sourceEntityType,
+      data.sourceEntityId,
+      ctx,
+      this.entityLookupStore
+    );
+    return super.create(data, ctx);
+  }
+
+  public override async update(
+    id: string,
+    updates: Partial<ValueOpportunityRecord>,
+    ctx: TenantContext,
+    resourceName: string = this.collectionName
+  ): Promise<ValueOpportunityRecord> {
+    if (updates.sourceEntityType !== undefined || updates.sourceEntityId !== undefined) {
+      const existing = await this.findById(id, ctx, resourceName);
+      const effectiveType =
+        updates.sourceEntityType !== undefined ? updates.sourceEntityType : existing.sourceEntityType;
+      const effectiveId =
+        updates.sourceEntityId !== undefined ? updates.sourceEntityId : existing.sourceEntityId;
+      RelationshipValidator.validatePolymorphicSourceEntity(
+        effectiveType,
+        effectiveId,
+        ctx,
+        this.entityLookupStore
+      );
+    }
+    return super.update(id, updates, ctx, resourceName);
+  }
+
   public async findByCategory(category: string, ctx: TenantContext): Promise<ValueOpportunityRecord[]> {
     return this.findMany(ctx, (o) => category === "all" || o.category === category);
   }
@@ -171,6 +307,41 @@ export class InMemoryValueCapturedRepository
   extends InMemoryTenantRepository<ValueCapturedRecord>
   implements IValueCapturedRepository
 {
+  constructor(
+    collectionName: string,
+    store: Map<string, ValueCapturedRecord>,
+    onAuditViolation?: (ctx: TenantContext, resourceId: string, attemptedOrg: string) => void,
+    protected readonly entityLookupStore?: IEntityLookupStore
+  ) {
+    super(collectionName, store, onAuditViolation);
+  }
+
+  public override async create(
+    data: Omit<ValueCapturedRecord, "organizationId">,
+    ctx: TenantContext
+  ): Promise<ValueCapturedRecord> {
+    RelationshipValidator.validateOpportunityBelongsToTenant(data.opportunityId, ctx, this.entityLookupStore, {
+      optional: true,
+      resourceContext: "ValueCaptured",
+    });
+    return super.create(data, ctx);
+  }
+
+  public override async update(
+    id: string,
+    updates: Partial<ValueCapturedRecord>,
+    ctx: TenantContext,
+    resourceName: string = this.collectionName
+  ): Promise<ValueCapturedRecord> {
+    if (updates.opportunityId !== undefined && updates.opportunityId !== null && updates.opportunityId !== "") {
+      RelationshipValidator.validateOpportunityBelongsToTenant(updates.opportunityId, ctx, this.entityLookupStore, {
+        optional: true,
+        resourceContext: "ValueCaptured",
+      });
+    }
+    return super.update(id, updates, ctx, resourceName);
+  }
+
   public async calculateTotalCaptured(ctx: TenantContext): Promise<number> {
     const list = await this.findMany(ctx);
     return list.reduce((sum, item) => sum + item.capturedValue, 0);
@@ -181,6 +352,15 @@ export class InMemoryOrganizationalMemoryRepository
   extends InMemoryTenantRepository<OrganizationalMemoryRecord>
   implements IOrganizationalMemoryRepository
 {
+  constructor(
+    collectionName: string,
+    store: Map<string, OrganizationalMemoryRecord>,
+    onAuditViolation?: (ctx: TenantContext, resourceId: string, attemptedOrg: string) => void,
+    protected readonly entityLookupStore?: IEntityLookupStore
+  ) {
+    super(collectionName, store, onAuditViolation);
+  }
+
   public async searchKeywords(keywords: string[], ctx: TenantContext): Promise<OrganizationalMemoryRecord[]> {
     const lowerKeys = keywords.map((k) => k.toLowerCase());
     return this.findMany(ctx, (m) => {
@@ -194,6 +374,15 @@ export class InMemoryActionRepository
   extends InMemoryTenantRepository<ActionRecord>
   implements IActionRepository
 {
+  constructor(
+    collectionName: string,
+    store: Map<string, ActionRecord>,
+    onAuditViolation?: (ctx: TenantContext, resourceId: string, attemptedOrg: string) => void,
+    protected readonly entityLookupStore?: IEntityLookupStore
+  ) {
+    super(collectionName, store, onAuditViolation);
+  }
+
   public async findByStatus(status: string, ctx: TenantContext): Promise<ActionRecord[]> {
     return this.findMany(ctx, (a) => status === "all" || a.status === status);
   }
@@ -203,6 +392,53 @@ export class InMemoryDocumentRepository
   extends InMemoryTenantRepository<DocumentRecord>
   implements IDocumentRepository
 {
+  constructor(
+    collectionName: string,
+    store: Map<string, DocumentRecord>,
+    onAuditViolation?: (ctx: TenantContext, resourceId: string, attemptedOrg: string) => void,
+    protected readonly entityLookupStore?: IEntityLookupStore
+  ) {
+    super(collectionName, store, onAuditViolation);
+  }
+
+  public override async create(
+    data: Omit<DocumentRecord, "organizationId">,
+    ctx: TenantContext
+  ): Promise<DocumentRecord> {
+    RelationshipValidator.validateCustomerBelongsToTenant(data.customerId, ctx, this.entityLookupStore, {
+      optional: true,
+      resourceContext: "Document",
+    });
+    if (data.uploadedBy) {
+      RelationshipValidator.validateUserMembershipBelongsToTenant(data.uploadedBy, ctx, this.entityLookupStore, {
+        optional: true,
+        resourceContext: "Document.uploadedBy",
+      });
+    }
+    return super.create(data, ctx);
+  }
+
+  public override async update(
+    id: string,
+    updates: Partial<DocumentRecord>,
+    ctx: TenantContext,
+    resourceName: string = this.collectionName
+  ): Promise<DocumentRecord> {
+    if (updates.customerId !== undefined && updates.customerId !== null && updates.customerId !== "") {
+      RelationshipValidator.validateCustomerBelongsToTenant(updates.customerId, ctx, this.entityLookupStore, {
+        optional: true,
+        resourceContext: "Document",
+      });
+    }
+    if (updates.uploadedBy !== undefined && updates.uploadedBy !== null && updates.uploadedBy !== "") {
+      RelationshipValidator.validateUserMembershipBelongsToTenant(updates.uploadedBy, ctx, this.entityLookupStore, {
+        optional: true,
+        resourceContext: "Document.uploadedBy",
+      });
+    }
+    return super.update(id, updates, ctx, resourceName);
+  }
+
   public async findByCategory(category: string, ctx: TenantContext): Promise<DocumentRecord[]> {
     return this.findMany(ctx, (d) => category === "all" || d.category === category);
   }
@@ -220,6 +456,41 @@ export class InMemoryKnowledgeRepository
   extends InMemoryTenantRepository<KnowledgeItemRecord>
   implements IKnowledgeRepository
 {
+  constructor(
+    collectionName: string,
+    store: Map<string, KnowledgeItemRecord>,
+    onAuditViolation?: (ctx: TenantContext, resourceId: string, attemptedOrg: string) => void,
+    protected readonly entityLookupStore?: IEntityLookupStore
+  ) {
+    super(collectionName, store, onAuditViolation);
+  }
+
+  public override async create(
+    data: Omit<KnowledgeItemRecord, "organizationId">,
+    ctx: TenantContext
+  ): Promise<KnowledgeItemRecord> {
+    RelationshipValidator.validateDocumentBelongsToTenant(data.sourceDocId, ctx, this.entityLookupStore, {
+      optional: true,
+      resourceContext: "KnowledgeItem",
+    });
+    return super.create(data, ctx);
+  }
+
+  public override async update(
+    id: string,
+    updates: Partial<KnowledgeItemRecord>,
+    ctx: TenantContext,
+    resourceName: string = this.collectionName
+  ): Promise<KnowledgeItemRecord> {
+    if (updates.sourceDocId !== undefined && updates.sourceDocId !== null && updates.sourceDocId !== "") {
+      RelationshipValidator.validateDocumentBelongsToTenant(updates.sourceDocId, ctx, this.entityLookupStore, {
+        optional: true,
+        resourceContext: "KnowledgeItem",
+      });
+    }
+    return super.update(id, updates, ctx, resourceName);
+  }
+
   public async findByCategory(category: string, ctx: TenantContext): Promise<KnowledgeItemRecord[]> {
     return this.findMany(ctx, (k) => category === "all" || k.category === category);
   }
@@ -245,6 +516,15 @@ export class InMemoryWorkflowRepository
   extends InMemoryTenantRepository<WorkflowRecord>
   implements IWorkflowRepository
 {
+  constructor(
+    collectionName: string,
+    store: Map<string, WorkflowRecord>,
+    onAuditViolation?: (ctx: TenantContext, resourceId: string, attemptedOrg: string) => void,
+    protected readonly entityLookupStore?: IEntityLookupStore
+  ) {
+    super(collectionName, store, onAuditViolation);
+  }
+
   public async findActive(ctx: TenantContext): Promise<WorkflowRecord[]> {
     return this.findMany(ctx, (w) => w.status === "active");
   }
@@ -254,6 +534,53 @@ export class InMemoryWorkflowRunRepository
   extends InMemoryTenantRepository<WorkflowRunRecord>
   implements IWorkflowRunRepository
 {
+  constructor(
+    collectionName: string,
+    store: Map<string, WorkflowRunRecord>,
+    onAuditViolation?: (ctx: TenantContext, resourceId: string, attemptedOrg: string) => void,
+    protected readonly entityLookupStore?: IEntityLookupStore
+  ) {
+    super(collectionName, store, onAuditViolation);
+  }
+
+  public override async create(
+    data: Omit<WorkflowRunRecord, "organizationId">,
+    ctx: TenantContext
+  ): Promise<WorkflowRunRecord> {
+    RelationshipValidator.validateWorkflowBelongsToTenant(data.workflowId, ctx, this.entityLookupStore, {
+      optional: false,
+      resourceContext: "WorkflowRun",
+    });
+    if (data.triggeredBy) {
+      RelationshipValidator.validateUserMembershipBelongsToTenant(data.triggeredBy, ctx, this.entityLookupStore, {
+        optional: false,
+        resourceContext: "WorkflowRun.triggeredBy",
+      });
+    }
+    return super.create(data, ctx);
+  }
+
+  public override async update(
+    id: string,
+    updates: Partial<WorkflowRunRecord>,
+    ctx: TenantContext,
+    resourceName: string = this.collectionName
+  ): Promise<WorkflowRunRecord> {
+    if (updates.workflowId !== undefined) {
+      RelationshipValidator.validateWorkflowBelongsToTenant(updates.workflowId, ctx, this.entityLookupStore, {
+        optional: false,
+        resourceContext: "WorkflowRun",
+      });
+    }
+    if (updates.triggeredBy !== undefined) {
+      RelationshipValidator.validateUserMembershipBelongsToTenant(updates.triggeredBy, ctx, this.entityLookupStore, {
+        optional: false,
+        resourceContext: "WorkflowRun.triggeredBy",
+      });
+    }
+    return super.update(id, updates, ctx, resourceName);
+  }
+
   public async findByWorkflow(workflowId: string, ctx: TenantContext): Promise<WorkflowRunRecord[]> {
     return this.findMany(ctx, (r) => r.workflowId === workflowId);
   }
@@ -288,3 +615,4 @@ export class InMemoryAuditLogRepository implements IAuditLogRepository {
     this.logs = [];
   }
 }
+

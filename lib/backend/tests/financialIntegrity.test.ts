@@ -104,8 +104,27 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
         organizationId: "org-same-curr-test",
         userId: "usr-tester",
         userRole: "admin",
-        permissions: ["transaction:read", "transaction:write"],
+        permissions: ["transaction:read", "transaction:write", "customer:read", "customer:write"],
       };
+
+      await db.customersRepo.create(
+        {
+          id: "cust-1",
+          name: "Test Customer 1",
+          tier: "Enterprise",
+          status: "active",
+          healthScore: 90,
+          arr: 1000000,
+          owner: "test@apex.local",
+          contactName: "Contact 1",
+          contactRole: "Director",
+          contactEmail: "c1@test.local",
+          tags: ["Test"],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        testCtx
+      );
 
       // Insert 3 NGN transactions: 1,000, 2,500, 500
       await db.transactionsRepo.create(
@@ -184,8 +203,46 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
         organizationId: "org-mixed-curr-test",
         userId: "usr-tester",
         userRole: "admin",
-        permissions: ["transaction:read", "transaction:write"],
+        permissions: ["transaction:read", "transaction:write", "customer:read", "customer:write"],
       };
+
+      await db.customersRepo.create(
+        {
+          id: "cust-1",
+          name: "Test Customer 1",
+          tier: "Enterprise",
+          status: "active",
+          healthScore: 90,
+          arr: 1000000,
+          owner: "test@apex.local",
+          contactName: "Contact 1",
+          contactRole: "Director",
+          contactEmail: "c1@test.local",
+          tags: ["Test"],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        testCtx
+      );
+
+      await db.customersRepo.create(
+        {
+          id: "cust-2",
+          name: "Test Customer 2",
+          tier: "Enterprise",
+          status: "active",
+          healthScore: 90,
+          arr: 1000000,
+          owner: "test@apex.local",
+          contactName: "Contact 2",
+          contactRole: "Director",
+          contactEmail: "c2@test.local",
+          tags: ["Test"],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        testCtx
+      );
 
       // Insert 1000 NGN and 100 USD
       await db.transactionsRepo.create(
@@ -314,8 +371,27 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
         organizationId: "org-status-filter-test",
         userId: "usr-tester",
         userRole: "admin",
-        permissions: ["transaction:read", "transaction:write"],
+        permissions: ["transaction:read", "transaction:write", "customer:read", "customer:write"],
       };
+
+      await db.customersRepo.create(
+        {
+          id: "cust-1",
+          name: "Test Customer 1",
+          tier: "Enterprise",
+          status: "active",
+          healthScore: 90,
+          arr: 1000000,
+          owner: "test@apex.local",
+          contactName: "Contact 1",
+          contactRole: "Director",
+          contactEmail: "c1@test.local",
+          tags: ["Test"],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        testCtx
+      );
 
       // 1000 cleared revenue
       await db.transactionsRepo.create(
