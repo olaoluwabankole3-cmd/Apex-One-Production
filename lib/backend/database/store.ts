@@ -55,9 +55,30 @@ import {
   InMemoryAuditLogRepository,
 } from "./adapters/inMemory/InMemoryDomainRepositories";
 import { IDataProvider, ProductionDataProvider } from "./demoDataProvider";
-import { TenantContext } from "../core/errors";
+import { TenantContext, CrossTenantViolationError, ValidationError } from "../core/errors";
+import { IUnitOfWork, IUnitOfWorkProvider, InMemoryUnitOfWork } from "./unitOfWork";
 
-export class DatabaseStore {
+export interface DatabaseStateSnapshot {
+  organizations: Map<string, OrganizationRecord>;
+  users: Map<string, UserRecord>;
+  memberships: Map<string, OrganizationMembershipRecord>;
+  customers: Map<string, CustomerRecord>;
+  contracts: Map<string, ContractRecord>;
+  transactions: Map<string, TransactionRecord>;
+  documents: Map<string, DocumentRecord>;
+  knowledge: Map<string, KnowledgeItemRecord>;
+  memory: Map<string, OrganizationalMemoryRecord>;
+  events: Map<string, EventRecord>;
+  signals: Map<string, SignalRecord>;
+  opportunities: Map<string, ValueOpportunityRecord>;
+  valueCaptured: Map<string, ValueCapturedRecord>;
+  workflows: Map<string, WorkflowRecord>;
+  workflowRuns: Map<string, WorkflowRunRecord>;
+  actions: Map<string, ActionRecord>;
+  auditLogs: AuditLogRecord[];
+}
+
+export class DatabaseStore implements IUnitOfWorkProvider {
   // In-Memory Collections (Isolated state for Phase 2)
   public organizations: Map<string, OrganizationRecord> = new Map();
   public users: Map<string, UserRecord> = new Map();
@@ -195,6 +216,164 @@ export class DatabaseStore {
       }
     }
     return undefined;
+  }
+
+  // --------------------------------------------------------------------------
+  // Transaction & Unit of Work Management
+  // --------------------------------------------------------------------------
+
+  private activeTransactionContext: Readonly<TenantContext> | null = null;
+
+  private cloneMap<T>(source: Map<string, T>): Map<string, T> {
+    const target = new Map<string, T>();
+    for (const [k, v] of source.entries()) {
+      target.set(k, typeof structuredClone === "function" ? structuredClone(v) : JSON.parse(JSON.stringify(v)));
+    }
+    return target;
+  }
+
+  private restoreMap<T>(target: Map<string, T>, snapshot: Map<string, T>): void {
+    target.clear();
+    for (const [k, v] of snapshot.entries()) {
+      target.set(k, v);
+    }
+  }
+
+  /**
+   * Captures an isolated snapshot of all entity tables and audit logs.
+   */
+  public createSnapshot(): DatabaseStateSnapshot {
+    return {
+      organizations: this.cloneMap(this.organizations),
+      users: this.cloneMap(this.users),
+      memberships: this.cloneMap(this.memberships),
+      customers: this.cloneMap(this.customers),
+      contracts: this.cloneMap(this.contracts),
+      transactions: this.cloneMap(this.transactions),
+      documents: this.cloneMap(this.documents),
+      knowledge: this.cloneMap(this.knowledge),
+      memory: this.cloneMap(this.memory),
+      events: this.cloneMap(this.events),
+      signals: this.cloneMap(this.signals),
+      opportunities: this.cloneMap(this.opportunities),
+      valueCaptured: this.cloneMap(this.valueCaptured),
+      workflows: this.cloneMap(this.workflows),
+      workflowRuns: this.cloneMap(this.workflowRuns),
+      actions: this.cloneMap(this.actions),
+      auditLogs:
+        this.auditLogsRepo instanceof InMemoryAuditLogRepository
+          ? this.auditLogsRepo.getSnapshot()
+          : [],
+    };
+  }
+
+  /**
+   * Restores database state to a previously captured snapshot.
+   */
+  public restoreSnapshot(snapshot: DatabaseStateSnapshot): void {
+    this.restoreMap(this.organizations, snapshot.organizations);
+    this.restoreMap(this.users, snapshot.users);
+    this.restoreMap(this.memberships, snapshot.memberships);
+    this.restoreMap(this.customers, snapshot.customers);
+    this.restoreMap(this.contracts, snapshot.contracts);
+    this.restoreMap(this.transactions, snapshot.transactions);
+    this.restoreMap(this.documents, snapshot.documents);
+    this.restoreMap(this.knowledge, snapshot.knowledge);
+    this.restoreMap(this.memory, snapshot.memory);
+    this.restoreMap(this.events, snapshot.events);
+    this.restoreMap(this.signals, snapshot.signals);
+    this.restoreMap(this.opportunities, snapshot.opportunities);
+    this.restoreMap(this.valueCaptured, snapshot.valueCaptured);
+    this.restoreMap(this.workflows, snapshot.workflows);
+    this.restoreMap(this.workflowRuns, snapshot.workflowRuns);
+    this.restoreMap(this.actions, snapshot.actions);
+    if (this.auditLogsRepo instanceof InMemoryAuditLogRepository) {
+      this.auditLogsRepo.restoreSnapshot(snapshot.auditLogs);
+    }
+  }
+
+  /**
+   * Executes a business operation within an atomic transaction / Unit of Work.
+   * 
+   * Guarantees:
+   * 1. Multi-repository atomicity: all mutations commit together or roll back on error.
+   * 2. Audit atomicity: business audit logs roll back if the business operation fails.
+   * 3. Tenant immutability: tenant context is locked for the duration of the transaction.
+   * 4. Error preservation: original domain error instances and types are preserved on rollback.
+   * 5. Nested participation: nested transactions participate in the ambient transaction
+   *    and enforce matching tenant isolation.
+   */
+  public async runInTransaction<T>(
+    ctx: TenantContext,
+    work: (uow: IUnitOfWork) => Promise<T>
+  ): Promise<T> {
+    if (
+      !ctx ||
+      !ctx.organizationId ||
+      typeof ctx.organizationId !== "string" ||
+      ctx.organizationId.trim().length === 0
+    ) {
+      throw new ValidationError("TenantContext with a valid organizationId is required for transaction execution");
+    }
+
+    // Nested transaction handling (Propagation: REQUIRED)
+    if (this.activeTransactionContext) {
+      if (this.activeTransactionContext.organizationId !== ctx.organizationId) {
+        throw new CrossTenantViolationError(ctx.organizationId, this.activeTransactionContext.organizationId);
+      }
+
+      const nestedUow = new InMemoryUnitOfWork(
+        this.activeTransactionContext,
+        this.customersRepo,
+        this.contractsRepo,
+        this.transactionsRepo,
+        this.signalsRepo,
+        this.opportunitiesRepo,
+        this.valueCapturedRepo,
+        this.memoryRepo,
+        this.actionsRepo,
+        this.documentsRepo,
+        this.knowledgeRepo,
+        this.workflowsRepo,
+        this.workflowRunsRepo,
+        this.auditLogsRepo,
+        this
+      );
+
+      return work(nestedUow);
+    }
+
+    // New top-level transaction boundary
+    const snapshot = this.createSnapshot();
+    const uow = new InMemoryUnitOfWork(
+      ctx,
+      this.customersRepo,
+      this.contractsRepo,
+      this.transactionsRepo,
+      this.signalsRepo,
+      this.opportunitiesRepo,
+      this.valueCapturedRepo,
+      this.memoryRepo,
+      this.actionsRepo,
+      this.documentsRepo,
+      this.knowledgeRepo,
+      this.workflowsRepo,
+      this.workflowRunsRepo,
+      this.auditLogsRepo,
+      this
+    );
+
+    this.activeTransactionContext = uow.context;
+
+    try {
+      const result = await work(uow);
+      return result;
+    } catch (error) {
+      this.restoreSnapshot(snapshot);
+      throw error;
+    } finally {
+      this.activeTransactionContext = null;
+    }
   }
 }
 

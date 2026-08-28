@@ -43,27 +43,18 @@ export class CustomerService {
    */
   public async getCustomers(
     ctx: TenantContext,
-    filters?: { tier?: string; status?: string; search?: string }
+    filters?: { tier?: "Enterprise" | "Mid-Market" | "SMB" | "all" | string; status?: "active" | "at-risk" | "onboarding" | "dormant" | "all" | string; search?: string; limit?: number; offset?: number }
   ): Promise<CustomerRecord[]> {
     requirePermission(ctx, "customer:read");
 
-    return this.database.customersRepo.findMany(ctx, (c) => {
-      if (filters?.tier && filters.tier !== "all" && c.tier !== filters.tier) {
-        return false;
-      }
-      if (filters?.status && filters.status !== "all" && c.status !== filters.status) {
-        return false;
-      }
-      if (filters?.search) {
-        const q = filters.search.toLowerCase();
-        const matches =
-          c.name.toLowerCase().includes(q) ||
-          c.contactName.toLowerCase().includes(q) ||
-          c.contactEmail.toLowerCase().includes(q) ||
-          (c.subsidiary || "").toLowerCase().includes(q);
-        if (!matches) return false;
-      }
-      return true;
+    return this.database.customersRepo.findMany(ctx, {
+      filter: {
+        tier: filters?.tier as any,
+        status: filters?.status as any,
+        search: filters?.search,
+      },
+      limit: filters?.limit,
+      offset: filters?.offset,
     });
   }
 
@@ -110,22 +101,24 @@ export class CustomerService {
       updatedAt: now,
     };
 
-    const record = await this.database.customersRepo.create(recordData, ctx);
+    return this.database.runInTransaction(ctx, async (uow) => {
+      const record = await uow.customers.create(recordData, uow.context);
 
-    this.database.recordAuditLog({
-      organizationId: ctx.organizationId,
-      actorId: ctx.userId,
-      actorEmail: ctx.userEmail,
-      action: "customer:create",
-      resource: "Customer",
-      resourceId: id,
-      requestId: ctx.requestId,
-      status: "success",
-      metadata: { customerName: validatedName, arr: validatedArr },
-      timestamp: now,
+      await uow.recordAuditLog({
+        organizationId: uow.context.organizationId,
+        actorId: uow.context.userId,
+        actorEmail: uow.context.userEmail,
+        action: "customer:create",
+        resource: "Customer",
+        resourceId: id,
+        requestId: uow.context.requestId,
+        status: "success",
+        metadata: { customerName: validatedName, arr: validatedArr },
+        timestamp: now,
+      });
+
+      return record;
     });
-
-    return record;
   }
 
   /**
@@ -164,22 +157,24 @@ export class CustomerService {
     if (updates.contactRole !== undefined) validatedUpdates.contactRole = updates.contactRole.trim();
     if (updates.tags !== undefined) validatedUpdates.tags = updates.tags;
 
-    const updated = await this.database.customersRepo.update(id, validatedUpdates, ctx, "Customer");
+    return this.database.runInTransaction(ctx, async (uow) => {
+      const updated = await uow.customers.update(id, validatedUpdates, uow.context, "Customer");
 
-    this.database.recordAuditLog({
-      organizationId: ctx.organizationId,
-      actorId: ctx.userId,
-      actorEmail: ctx.userEmail,
-      action: "customer:update",
-      resource: "Customer",
-      resourceId: id,
-      requestId: ctx.requestId,
-      status: "success",
-      metadata: { modifiedFields: Object.keys(validatedUpdates) },
-      timestamp: new Date().toISOString(),
+      await uow.recordAuditLog({
+        organizationId: uow.context.organizationId,
+        actorId: uow.context.userId,
+        actorEmail: uow.context.userEmail,
+        action: "customer:update",
+        resource: "Customer",
+        resourceId: id,
+        requestId: uow.context.requestId,
+        status: "success",
+        metadata: { modifiedFields: Object.keys(validatedUpdates) },
+        timestamp: new Date().toISOString(),
+      });
+
+      return updated;
     });
-
-    return updated;
   }
 
   /**
@@ -189,21 +184,23 @@ export class CustomerService {
     requirePermission(ctx, "customer:delete");
     Validator.requireId(id, "customerId");
 
-    const deleted = await this.database.customersRepo.delete(id, ctx, "Customer");
+    return this.database.runInTransaction(ctx, async (uow) => {
+      const deleted = await uow.customers.delete(id, uow.context, "Customer");
 
-    this.database.recordAuditLog({
-      organizationId: ctx.organizationId,
-      actorId: ctx.userId,
-      actorEmail: ctx.userEmail,
-      action: "customer:delete",
-      resource: "Customer",
-      resourceId: id,
-      requestId: ctx.requestId,
-      status: "success",
-      timestamp: new Date().toISOString(),
+      await uow.recordAuditLog({
+        organizationId: uow.context.organizationId,
+        actorId: uow.context.userId,
+        actorEmail: uow.context.userEmail,
+        action: "customer:delete",
+        resource: "Customer",
+        resourceId: id,
+        requestId: uow.context.requestId,
+        status: "success",
+        timestamp: new Date().toISOString(),
+      });
+
+      return deleted;
     });
-
-    return deleted;
   }
 }
 

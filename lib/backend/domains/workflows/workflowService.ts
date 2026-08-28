@@ -24,11 +24,10 @@ export class WorkflowService {
   public async getWorkflows(ctx: TenantContext, filter?: { status?: string }): Promise<WorkflowRecord[]> {
     requirePermission(ctx, "workflow:read");
 
-    return this.database.workflowsRepo.findMany(ctx, (w) => {
-      if (filter?.status && filter.status !== "all" && w.status !== filter.status) {
-        return false;
-      }
-      return true;
+    return this.database.workflowsRepo.findMany(ctx, {
+      filter: {
+        status: filter?.status && filter.status !== "all" ? (filter.status as any) : undefined,
+      },
     });
   }
 
@@ -53,6 +52,7 @@ export class WorkflowService {
     WorkflowValidator.validateWorkflowGraph(dto.nodes, dto.connections);
 
     const id = `wf-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const now = new Date().toISOString();
     const newWf: WorkflowRecord = {
       id,
       organizationId: ctx.organizationId,
@@ -65,11 +65,28 @@ export class WorkflowService {
       connections: dto.connections,
       runsCount: 0,
       successRate: 100,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
 
-    return this.database.workflowsRepo.create(newWf, ctx);
+    return this.database.runInTransaction(ctx, async (uow) => {
+      const created = await uow.workflows.create(newWf, uow.context);
+
+      await uow.recordAuditLog({
+        organizationId: uow.context.organizationId,
+        actorId: uow.context.userId,
+        actorEmail: uow.context.userEmail,
+        action: "workflow:create",
+        resource: "Workflow",
+        resourceId: id,
+        requestId: uow.context.requestId,
+        status: "success",
+        metadata: { workflowName: dto.name, nodeCount: dto.nodes.length },
+        timestamp: now,
+      });
+
+      return created;
+    });
   }
 
   /**
@@ -82,24 +99,41 @@ export class WorkflowService {
   ): Promise<WorkflowRecord> {
     requirePermission(ctx, "workflow:write");
 
-    const existing = await this.database.workflowsRepo.findById(id, ctx, "Workflow");
+    return this.database.runInTransaction(ctx, async (uow) => {
+      const existing = await uow.workflows.findById(id, uow.context, "Workflow");
 
-    const nextNodes = dto.nodes || existing.nodes;
-    const nextConnections = dto.connections || existing.connections;
+      const nextNodes = dto.nodes || existing.nodes;
+      const nextConnections = dto.connections || existing.connections;
 
-    if (dto.nodes || dto.connections) {
-      WorkflowValidator.validateWorkflowGraph(nextNodes, nextConnections);
-    }
+      if (dto.nodes || dto.connections) {
+        WorkflowValidator.validateWorkflowGraph(nextNodes, nextConnections);
+      }
 
-    return this.database.workflowsRepo.update(
-      id,
-      {
-        ...dto,
-        version: existing.version + 1,
-      },
-      ctx,
-      "Workflow"
-    );
+      const updated = await uow.workflows.update(
+        id,
+        {
+          ...dto,
+          version: existing.version + 1,
+        },
+        uow.context,
+        "Workflow"
+      );
+
+      await uow.recordAuditLog({
+        organizationId: uow.context.organizationId,
+        actorId: uow.context.userId,
+        actorEmail: uow.context.userEmail,
+        action: "workflow:update",
+        resource: "Workflow",
+        resourceId: id,
+        requestId: uow.context.requestId,
+        status: "success",
+        metadata: { version: existing.version + 1 },
+        timestamp: new Date().toISOString(),
+      });
+
+      return updated;
+    });
   }
 
   /**
@@ -108,46 +142,64 @@ export class WorkflowService {
   public async triggerWorkflowRun(dto: TriggerWorkflowRunDto, ctx: TenantContext): Promise<WorkflowRunRecord> {
     requirePermission(ctx, "workflow:execute");
 
-    const wf = await this.database.workflowsRepo.findById(dto.workflowId, ctx, "Workflow");
-    if (wf.status !== "active") {
-      throw new ValidationError(`Cannot execute workflow in status '${wf.status}'`);
-    }
+    return this.database.runInTransaction(ctx, async (uow) => {
+      const wf = await uow.workflows.findById(dto.workflowId, uow.context, "Workflow");
+      if (wf.status !== "active") {
+        throw new ValidationError(`Cannot execute workflow in status '${wf.status}'`);
+      }
 
-    // Build execution step queue starting from triggers
-    const steps: WorkflowRunStepRecord[] = wf.nodes.map((node, index) => ({
-      stepId: `step-${index + 1}-${node.id}`,
-      nodeId: node.id,
-      nodeTitle: node.title,
-      status: index === 0 ? "completed" : index === 1 ? "executing" : "pending",
-      startedAt: new Date().toISOString(),
-      completedAt: index === 0 ? new Date().toISOString() : undefined,
-    }));
+      // Build execution step queue starting from triggers
+      const steps: WorkflowRunStepRecord[] = wf.nodes.map((node, index) => ({
+        stepId: `step-${index + 1}-${node.id}`,
+        nodeId: node.id,
+        nodeTitle: node.title,
+        status: index === 0 ? "completed" : index === 1 ? "executing" : "pending",
+        startedAt: new Date().toISOString(),
+        completedAt: index === 0 ? new Date().toISOString() : undefined,
+      }));
 
-    const runId = `run-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    const runRecord: WorkflowRunRecord = {
-      id: runId,
-      organizationId: ctx.organizationId,
-      workflowId: wf.id,
-      workflowVersion: wf.version,
-      triggeredBy: ctx.userEmail,
-      triggerType: dto.triggerType || "manual",
-      status: "running",
-      steps,
-      contextData: dto.contextData || {},
-      startedAt: new Date().toISOString(),
-    };
+      const runId = `run-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+      const runRecord: WorkflowRunRecord = {
+        id: runId,
+        organizationId: uow.context.organizationId,
+        workflowId: wf.id,
+        workflowVersion: wf.version,
+        triggeredBy: uow.context.userEmail,
+        triggerType: dto.triggerType || "manual",
+        status: "running",
+        steps,
+        contextData: dto.contextData || {},
+        startedAt: new Date().toISOString(),
+      };
 
-    // Increment runs count
-    await this.database.workflowsRepo.update(
-      wf.id,
-      {
-        runsCount: wf.runsCount + 1,
-      },
-      ctx,
-      "Workflow"
-    );
+      // Increment runs count on workflow repository
+      await uow.workflows.update(
+        wf.id,
+        {
+          runsCount: wf.runsCount + 1,
+        },
+        uow.context,
+        "Workflow"
+      );
 
-    return this.database.workflowRunsRepo.create(runRecord, ctx);
+      // Create workflow run record on runs repository
+      const createdRun = await uow.workflowRuns.create(runRecord, uow.context);
+
+      await uow.recordAuditLog({
+        organizationId: uow.context.organizationId,
+        actorId: uow.context.userId,
+        actorEmail: uow.context.userEmail,
+        action: "workflow:trigger_run",
+        resource: "WorkflowRun",
+        resourceId: runId,
+        requestId: uow.context.requestId,
+        status: "success",
+        metadata: { workflowId: wf.id, runId },
+        timestamp: new Date().toISOString(),
+      });
+
+      return createdRun;
+    });
   }
 
   /**
@@ -156,35 +208,52 @@ export class WorkflowService {
   public async advanceWorkflowStep(dto: AdvanceWorkflowStepDto, ctx: TenantContext): Promise<WorkflowRunRecord> {
     requirePermission(ctx, "workflow:execute");
 
-    const run = await this.database.workflowRunsRepo.findById(dto.runId, ctx, "WorkflowRun");
+    return this.database.runInTransaction(ctx, async (uow) => {
+      const run = await uow.workflowRuns.findById(dto.runId, uow.context, "WorkflowRun");
 
-    const updatedSteps = run.steps.map((step) => {
-      if (step.stepId === dto.stepId) {
-        return {
-          ...step,
-          status: dto.decision === "rejected" ? ("failed" as const) : ("completed" as const),
-          output: dto.output || { decision: dto.decision, comments: dto.comments },
-          completedAt: new Date().toISOString(),
-        };
-      }
-      return step;
+      const updatedSteps = run.steps.map((step) => {
+        if (step.stepId === dto.stepId) {
+          return {
+            ...step,
+            status: dto.decision === "rejected" ? ("failed" as const) : ("completed" as const),
+            output: dto.output || { decision: dto.decision, comments: dto.comments },
+            completedAt: new Date().toISOString(),
+          };
+        }
+        return step;
+      });
+
+      const isAllCompleted = updatedSteps.every((s) => s.status === "completed");
+      const hasFailed = updatedSteps.some((s) => s.status === "failed");
+
+      const nextStatus = hasFailed ? "failed" : isAllCompleted ? "completed" : "running";
+
+      const updated = await uow.workflowRuns.update(
+        run.id,
+        {
+          steps: updatedSteps,
+          status: nextStatus,
+          completedAt: nextStatus === "completed" || nextStatus === "failed" ? new Date().toISOString() : undefined,
+        },
+        uow.context,
+        "WorkflowRun"
+      );
+
+      await uow.recordAuditLog({
+        organizationId: uow.context.organizationId,
+        actorId: uow.context.userId,
+        actorEmail: uow.context.userEmail,
+        action: "workflow:advance_step",
+        resource: "WorkflowRun",
+        resourceId: run.id,
+        requestId: uow.context.requestId,
+        status: "success",
+        metadata: { stepId: dto.stepId, decision: dto.decision, nextStatus },
+        timestamp: new Date().toISOString(),
+      });
+
+      return updated;
     });
-
-    const isAllCompleted = updatedSteps.every((s) => s.status === "completed");
-    const hasFailed = updatedSteps.some((s) => s.status === "failed");
-
-    const nextStatus = hasFailed ? "failed" : isAllCompleted ? "completed" : "running";
-
-    return this.database.workflowRunsRepo.update(
-      run.id,
-      {
-        steps: updatedSteps,
-        status: nextStatus,
-        completedAt: nextStatus === "completed" || nextStatus === "failed" ? new Date().toISOString() : undefined,
-      },
-      ctx,
-      "WorkflowRun"
-    );
   }
 
   /**

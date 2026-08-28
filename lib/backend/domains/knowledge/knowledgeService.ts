@@ -19,24 +19,12 @@ export class KnowledgeService {
   public async getKnowledgeItems(ctx: TenantContext, filters?: KnowledgeFilterDto): Promise<KnowledgeItemRecord[]> {
     requirePermission(ctx, "knowledge:read");
 
-    return this.database.knowledgeRepo.findMany(ctx, (k) => {
-      if (filters?.category && filters.category !== "all" && k.category !== filters.category) {
-        return false;
-      }
-      if (filters?.tags && filters.tags.length > 0) {
-        const matchesTag = filters.tags.some((t) => k.tags.includes(t));
-        if (!matchesTag) return false;
-      }
-      if (filters?.query && filters.query.trim().length > 0) {
-        const q = filters.query.toLowerCase().trim();
-        return (
-          k.title.toLowerCase().includes(q) ||
-          k.content.toLowerCase().includes(q) ||
-          (k.summary && k.summary.toLowerCase().includes(q)) ||
-          k.tags.some((t) => t.toLowerCase().includes(q))
-        );
-      }
-      return true;
+    return this.database.knowledgeRepo.findMany(ctx, {
+      filter: {
+        category: filters?.category && filters.category !== "all" ? (filters.category as any) : undefined,
+        tags: filters?.tags,
+        search: filters?.query,
+      },
     });
   }
 
@@ -62,6 +50,7 @@ export class KnowledgeService {
     }
 
     const id = `know-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const now = new Date().toISOString();
     const newItem: KnowledgeItemRecord = {
       id,
       organizationId: ctx.organizationId,
@@ -74,11 +63,28 @@ export class KnowledgeService {
       tags: dto.tags || [dto.category],
       isPublicPlatformKnowledge: dto.isPublicPlatformKnowledge || false,
       version: 1,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
     };
 
-    return this.database.knowledgeRepo.create(newItem, ctx);
+    return this.database.runInTransaction(ctx, async (uow) => {
+      const created = await uow.knowledge.create(newItem, uow.context);
+
+      await uow.recordAuditLog({
+        organizationId: uow.context.organizationId,
+        actorId: uow.context.userId,
+        actorEmail: uow.context.userEmail,
+        action: "knowledge:create",
+        resource: "KnowledgeItem",
+        resourceId: id,
+        requestId: uow.context.requestId,
+        status: "success",
+        metadata: { title: dto.title, category: dto.category },
+        timestamp: now,
+      });
+
+      return created;
+    });
   }
 
   /**
@@ -91,18 +97,35 @@ export class KnowledgeService {
   ): Promise<KnowledgeItemRecord> {
     requirePermission(ctx, "knowledge:write");
 
-    const existing = await this.database.knowledgeRepo.findById(id, ctx, "KnowledgeItem");
-    const nextVersion = existing.version + 1;
+    return this.database.runInTransaction(ctx, async (uow) => {
+      const existing = await uow.knowledge.findById(id, uow.context, "KnowledgeItem");
+      const nextVersion = existing.version + 1;
 
-    return this.database.knowledgeRepo.update(
-      id,
-      {
-        ...dto,
-        version: nextVersion,
-      },
-      ctx,
-      "KnowledgeItem"
-    );
+      const updated = await uow.knowledge.update(
+        id,
+        {
+          ...dto,
+          version: nextVersion,
+        },
+        uow.context,
+        "KnowledgeItem"
+      );
+
+      await uow.recordAuditLog({
+        organizationId: uow.context.organizationId,
+        actorId: uow.context.userId,
+        actorEmail: uow.context.userEmail,
+        action: "knowledge:update",
+        resource: "KnowledgeItem",
+        resourceId: id,
+        requestId: uow.context.requestId,
+        status: "success",
+        metadata: { version: nextVersion },
+        timestamp: new Date().toISOString(),
+      });
+
+      return updated;
+    });
   }
 
   /**
@@ -110,7 +133,24 @@ export class KnowledgeService {
    */
   public async deleteKnowledgeItem(id: string, ctx: TenantContext): Promise<boolean> {
     requirePermission(ctx, "knowledge:write");
-    return this.database.knowledgeRepo.delete(id, ctx, "KnowledgeItem");
+
+    return this.database.runInTransaction(ctx, async (uow) => {
+      const result = await uow.knowledge.delete(id, uow.context, "KnowledgeItem");
+
+      await uow.recordAuditLog({
+        organizationId: uow.context.organizationId,
+        actorId: uow.context.userId,
+        actorEmail: uow.context.userEmail,
+        action: "knowledge:delete",
+        resource: "KnowledgeItem",
+        resourceId: id,
+        requestId: uow.context.requestId,
+        status: "success",
+        timestamp: new Date().toISOString(),
+      });
+
+      return result;
+    });
   }
 }
 

@@ -370,3 +370,183 @@ export interface AuditLogRecord {
   metadata?: Record<string, unknown>;
   timestamp: string;
 }
+
+// -------------------------------------------------------------
+// REPOSITORY UPDATE CONTRACTS (IMMUTABLE FIELD DEFENSE)
+// -------------------------------------------------------------
+// These types strictly enforce that callers cannot attempt to mutate
+// immutable persistence fields (id, organizationId, createdAt, etc.)
+// at compile time.
+
+export interface UpdateCustomerInput {
+  name?: string;
+  subsidiary?: string | null;
+  tier?: "Enterprise" | "Mid-Market" | "SMB";
+  status?: "active" | "at-risk" | "onboarding" | "dormant";
+  healthScore?: number;
+  arr?: number;
+  owner?: string;
+  contactName?: string;
+  contactRole?: string;
+  contactEmail?: string;
+  since?: string | null;
+  tags?: string[];
+  industry?: string | null;
+  growthYoY?: number | null;
+  engagementLevel?: number | null;
+  contractStatus?: string | null;
+  supportActivity?: string | null;
+  supportTickets?: number | null;
+  paymentBehavior?: string | null;
+  paymentStatus?: "pristine" | "standard" | "delayed" | null;
+  riskLevel?: string | null;
+  riskScore?: number | null;
+  riskReason?: string | null;
+  expansionPotential?: "High" | "Medium" | "Low" | null;
+  potentialArrNaira?: number | null;
+  opportunityNaira?: number | null;
+  opportunityReason?: string | null;
+  riskReasons?: string[];
+  aiInsight?: string | null;
+  recommendedAction?: string | null;
+}
+
+export interface UpdateContractInput {
+  customerId?: string;
+  title?: string;
+  contractValue?: number;
+  startDate?: string;
+  endDate?: string;
+  renewalDaysRemaining?: number;
+  status?: "active" | "expiring_soon" | "expired" | "renewed";
+  slaCompliance?: number;
+  volatilityIndexationClause?: boolean;
+}
+
+export interface UpdateTransactionInput {
+  customerId?: string;
+  type?: "revenue" | "cost" | "credit" | "reconciliation";
+  amount?: number;
+  currency?: string;
+  status?: "cleared" | "pending" | "failed" | "disputed";
+  reference?: string;
+  category?: string;
+  date?: string;
+}
+
+export interface UpdateSignalInput {
+  category?: "revenue" | "customer" | "operation" | "capacity" | "compliance";
+  severity?: "critical" | "high" | "medium" | "low";
+  title?: string;
+  description?: string;
+  evidence?: string;
+  estimatedFinancialImpact?: number;
+  status?: "active" | "investigating" | "resolved";
+}
+
+export interface UpdateValueOpportunityInput {
+  title?: string;
+  category?: "Customer expansion" | "Dormant customers" | "Contract optimization" | "Revenue recovery" | "Process optimization" | "Capacity utilization";
+  potentialValue?: number;
+  confidence?: number;
+  evidence?: string;
+  sourceEntityId?: string;
+  sourceEntityType?: "Contract" | "Customer" | "Signal" | "Transaction" | "Operation";
+  recommendedAction?: string;
+  expectedOutcome?: string;
+  realizationSpeed?: "Fastest" | "Medium" | "Long-Term";
+  strategicImportance?: "High" | "Medium" | "Low";
+  risk?: "Low" | "Medium" | "High";
+  status?: "Identified" | "Validated" | "Approved" | "Executing" | "Captured";
+}
+
+export interface UpdateValueCapturedInput {
+  opportunityId?: string;
+  opportunityTitle?: string;
+  category?: "Revenue recovered" | "Revenue generated" | "Cost avoided" | "Capacity recovered" | "Time saved";
+  capturedValue?: number;
+  evidenceType?: string;
+  evidenceDescription?: string;
+  realizationDate?: string;
+  certifiedBy?: string;
+  auditTrail?: string[];
+}
+
+export interface UpdateOrganizationalMemoryInput {
+  type?: "fact" | "history" | "decision" | "insight" | "policy";
+  title?: string;
+  content?: string;
+  source?: string;
+  sourceReference?: string;
+  confidence?: number;
+  effectiveAt?: string;
+  verified?: boolean;
+}
+
+export interface UpdateActionInput {
+  recommendation?: string;
+  owner?: string;
+  deadline?: string;
+  expectedValue?: number;
+  status?: "Ready" | "Approved" | "In Progress" | "Completed" | "Measured";
+  confidence?: number;
+  automationType?: "Manual" | "AI-assisted" | "Automated" | "Awaiting approval";
+  requiresHumanApproval?: boolean;
+  insightSource?: string;
+  decisionDetail?: string;
+  resultMetric?: string;
+  approvedBy?: string;
+  logs?: string[];
+}
+
+export interface UpdateDocumentInput {
+  customerId?: string;
+  name?: string;
+  fileType?: DocumentFileType;
+  category?: "Contract" | "Invoice" | "SLA Agreement" | "Audit Report" | "Board Paper" | "Compliance Document" | "Other";
+  size?: string;
+  uploadedBy?: string;
+  storageKey?: string;
+  status?: DocumentProcessingStatus;
+  metadata?: DocumentMetadata;
+  aiSummary?: string;
+  extractedFields?: DocumentExtractionField[];
+  tags?: string[];
+}
+
+export interface UpdateKnowledgeItemInput {
+  title?: string;
+  category?: KnowledgeCategory;
+  content?: string;
+  summary?: string;
+  author?: string;
+  sourceDocId?: string;
+  embeddingRef?: string;
+  tags?: string[];
+  isPublicPlatformKnowledge?: boolean;
+  version?: number;
+}
+
+export interface UpdateWorkflowInput {
+  name?: string;
+  description?: string;
+  subsidiary?: string;
+  status?: WorkflowStatus;
+  version?: number;
+  nodes?: WorkflowNode[];
+  connections?: WorkflowConnection[];
+  runsCount?: number;
+  successRate?: number;
+}
+
+export interface UpdateWorkflowRunInput {
+  workflowId?: string;
+  workflowVersion?: number;
+  triggeredBy?: string;
+  triggerType?: "manual" | "event" | "schedule" | "signal";
+  status?: WorkflowRunStatus;
+  steps?: WorkflowRunStepRecord[];
+  contextData?: Record<string, unknown>;
+  completedAt?: string;
+}
+

@@ -10,6 +10,10 @@ import { runCustomerDataTruthfulnessTestSuite } from "../lib/backend/tests/custo
 import { runFinancialIntegrityTestSuite } from "../lib/backend/tests/financialIntegrity.test";
 import { runRelationshipIntegrityTestSuite } from "../lib/backend/tests/relationshipIntegrity.test";
 import { runEntityLifecycleIntegrityTestSuite } from "../lib/backend/tests/entityLifecycleIntegrity.test";
+import { runUnitOfWorkTestSuite } from "../lib/backend/tests/unitOfWork.test";
+import { runImmutableUpdateContractsTestSuite } from "../lib/backend/tests/immutableUpdateContracts.test";
+import { runQueryLimitsAndSortSafetyTestSuite } from "../lib/backend/tests/queryLimitsAndSortSafety.test";
+import { runFinalRepositoryAuditTestSuite } from "../lib/backend/tests/finalRepositoryAudit.test";
 
 async function main() {
   console.log("================================================================================");
@@ -24,6 +28,10 @@ async function main() {
     financialSummary,
     relationshipSummary,
     lifecycleSummary,
+    uowSummary,
+    immutableSummary,
+    queryLimitsSummary,
+    finalAuditSummary,
   ] = await Promise.all([
     runTenantIsolationTestSuite(),
     runFrontendAuthCompatibilityTestSuite(),
@@ -31,6 +39,10 @@ async function main() {
     runFinancialIntegrityTestSuite(),
     runRelationshipIntegrityTestSuite(),
     runEntityLifecycleIntegrityTestSuite(),
+    runUnitOfWorkTestSuite(),
+    runImmutableUpdateContractsTestSuite(),
+    runQueryLimitsAndSortSafetyTestSuite(),
+    runFinalRepositoryAuditTestSuite(),
   ]);
   const duration = Math.round(performance.now() - start);
 
@@ -41,6 +53,10 @@ async function main() {
     ...financialSummary.results,
     ...relationshipSummary.results,
     ...lifecycleSummary.results,
+    ...uowSummary.results,
+    ...immutableSummary.results,
+    ...queryLimitsSummary.results,
+    ...finalAuditSummary.results,
   ];
   const total =
     backendSummary.total +
@@ -48,21 +64,33 @@ async function main() {
     customerSummary.total +
     financialSummary.total +
     relationshipSummary.total +
-    lifecycleSummary.total;
+    lifecycleSummary.total +
+    uowSummary.total +
+    immutableSummary.total +
+    queryLimitsSummary.total +
+    finalAuditSummary.total;
   const passedCount =
     backendSummary.passedCount +
     frontendSummary.passedCount +
     customerSummary.passedCount +
     financialSummary.passedCount +
     relationshipSummary.passedCount +
-    lifecycleSummary.passedCount;
+    lifecycleSummary.passedCount +
+    uowSummary.passedCount +
+    immutableSummary.passedCount +
+    queryLimitsSummary.passedCount +
+    finalAuditSummary.passedCount;
   const failedCount =
     backendSummary.failedCount +
     frontendSummary.failedCount +
     customerSummary.failedCount +
     financialSummary.failedCount +
     relationshipSummary.failedCount +
-    lifecycleSummary.failedCount;
+    lifecycleSummary.failedCount +
+    uowSummary.failedCount +
+    immutableSummary.failedCount +
+    queryLimitsSummary.failedCount +
+    finalAuditSummary.failedCount;
   const passed = failedCount === 0;
 
   // Group results by suite

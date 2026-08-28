@@ -64,9 +64,10 @@ export function createAuthorizedAiTools(database: DatabaseStore = db): Record<st
       description: "Retrieve customers and ARR within the authenticated organization",
       parameters: { type: "object", properties: { status: { type: "string" } } },
       handler: async (args, ctx) => {
-        const customers = await database.customersRepo.findMany(ctx, (c) => {
-          if (args.status && c.status !== args.status) return false;
-          return true;
+        const customers = await database.customersRepo.findMany(ctx, {
+          filter: {
+            status: args.status ? (args.status as any) : undefined,
+          },
         });
         return customers.map((c) => ({
           id: c.id,
@@ -97,10 +98,11 @@ export function createAuthorizedAiTools(database: DatabaseStore = db): Record<st
       description: "Search institutional memory facts, policies, and historical audit findings with provenance",
       parameters: { type: "object", properties: { query: { type: "string" } } },
       handler: async (args, ctx) => {
-        const q = typeof args.query === "string" ? args.query.toLowerCase() : "";
-        const memories = await database.memoryRepo.findMany(ctx, (m) => {
-          if (!q) return true;
-          return m.title.toLowerCase().includes(q) || m.content.toLowerCase().includes(q);
+        const q = typeof args.query === "string" ? args.query : undefined;
+        const memories = await database.memoryRepo.findMany(ctx, {
+          filter: {
+            search: q,
+          },
         });
         return memories.map((m) => ({
           title: m.title,
@@ -115,9 +117,10 @@ export function createAuthorizedAiTools(database: DatabaseStore = db): Record<st
       description: "Retrieve indexed document summaries and extraction records for the organization",
       parameters: { type: "object", properties: { category: { type: "string" } } },
       handler: async (args, ctx) => {
-        const docs = await database.documentsRepo.findMany(ctx, (d) => {
-          if (args.category && d.category !== args.category) return false;
-          return true;
+        const docs = await database.documentsRepo.findMany(ctx, {
+          filter: {
+            category: args.category ? (args.category as any) : undefined,
+          },
         });
         return docs.map((d) => ({
           id: d.id,

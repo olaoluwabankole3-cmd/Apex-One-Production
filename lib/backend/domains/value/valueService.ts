@@ -280,14 +280,11 @@ export class ValueService {
   ): Promise<ValueOpportunityRecord[]> {
     requirePermission(ctx, "value:read");
 
-    return this.database.opportunitiesRepo.findMany(ctx, (o) => {
-      if (filters?.category && filters.category !== "all" && o.category !== filters.category) {
-        return false;
-      }
-      if (filters?.status && filters.status !== "all" && o.status !== filters.status) {
-        return false;
-      }
-      return true;
+    return this.database.opportunitiesRepo.findMany(ctx, {
+      filter: {
+        category: filters?.category && filters.category !== "all" ? (filters.category as any) : undefined,
+        status: filters?.status && filters.status !== "all" ? (filters.status as any) : undefined,
+      },
     });
   }
 

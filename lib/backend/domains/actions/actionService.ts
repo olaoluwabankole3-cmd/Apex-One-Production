@@ -30,11 +30,10 @@ export class ActionService {
    */
   public async getActions(ctx: TenantContext, status?: string): Promise<ActionRecord[]> {
     requirePermission(ctx, "value:read");
-    return this.database.actionsRepo.findMany(ctx, (a) => {
-      if (status && status !== "all" && a.status !== status) {
-        return false;
-      }
-      return true;
+    return this.database.actionsRepo.findMany(ctx, {
+      filter: {
+        status: (status && status !== "all" ? status : undefined) as any,
+      },
     });
   }
 
@@ -83,22 +82,24 @@ export class ActionService {
       updatedAt: now,
     };
 
-    const action = await this.database.actionsRepo.create(recordData, ctx);
+    return this.database.runInTransaction(ctx, async (uow) => {
+      const action = await uow.actions.create(recordData, uow.context);
 
-    this.database.recordAuditLog({
-      organizationId: ctx.organizationId,
-      actorId: ctx.userId,
-      actorEmail: ctx.userEmail,
-      action: "action:create",
-      resource: "Action",
-      resourceId: id,
-      requestId: ctx.requestId,
-      status: "success",
-      metadata: { recommendation: action.recommendation },
-      timestamp: now,
+      await uow.recordAuditLog({
+        organizationId: uow.context.organizationId,
+        actorId: uow.context.userId,
+        actorEmail: uow.context.userEmail,
+        action: "action:create",
+        resource: "Action",
+        resourceId: id,
+        requestId: uow.context.requestId,
+        status: "success",
+        metadata: { recommendation: action.recommendation },
+        timestamp: now,
+      });
+
+      return action;
     });
-
-    return action;
   }
 
   /**
@@ -106,78 +107,81 @@ export class ActionService {
    */
   public async advanceAction(id: string, ctx: TenantContext): Promise<ActionRecord> {
     Validator.requireId(id, "actionId");
-    const action = await this.database.actionsRepo.findById(id, ctx, "Action");
 
-    const pipelineOrder: ActionRecord["status"][] = ["Ready", "Approved", "In Progress", "Completed", "Measured"];
-    const currentIndex = pipelineOrder.indexOf(action.status);
-    if (currentIndex >= pipelineOrder.length - 1) {
-      return action; // Already at final stage
-    }
+    return this.database.runInTransaction(ctx, async (uow) => {
+      const action = await uow.actions.findById(id, uow.context, "Action");
 
-    const nextStatus = pipelineOrder[currentIndex + 1];
+      const pipelineOrder: ActionRecord["status"][] = ["Ready", "Approved", "In Progress", "Completed", "Measured"];
+      const currentIndex = pipelineOrder.indexOf(action.status);
+      if (currentIndex >= pipelineOrder.length - 1) {
+        return action; // Already at final stage
+      }
 
-    // State machine check
-    Validator.validateStateTransition(
-      action.status,
-      nextStatus,
-      {
-        Ready: ["Approved"],
-        Approved: ["In Progress"],
-        "In Progress": ["Completed"],
-        Completed: ["Measured"],
-        Measured: [],
-      },
-      "Action"
-    );
+      const nextStatus = pipelineOrder[currentIndex + 1];
 
-    // Granular RBAC checks per state transition
-    if (nextStatus === "Approved") {
-      requirePermission(ctx, "action:approve");
-    } else if (nextStatus === "In Progress" || nextStatus === "Completed") {
-      requirePermission(ctx, "action:execute");
-    } else if (nextStatus === "Measured") {
-      requirePermission(ctx, "value:approve");
-    }
+      // State machine check
+      Validator.validateStateTransition(
+        action.status,
+        nextStatus,
+        {
+          Ready: ["Approved"],
+          Approved: ["In Progress"],
+          "In Progress": ["Completed"],
+          Completed: ["Measured"],
+          Measured: [],
+        },
+        "Action"
+      );
 
-    const updatedLogs = [...action.logs];
-    let approvedBy = action.approvedBy;
+      // Granular RBAC checks per state transition
+      if (nextStatus === "Approved") {
+        requirePermission(uow.context, "action:approve");
+      } else if (nextStatus === "In Progress" || nextStatus === "Completed") {
+        requirePermission(uow.context, "action:execute");
+      } else if (nextStatus === "Measured") {
+        requirePermission(uow.context, "value:approve");
+      }
 
-    if (nextStatus === "Approved") {
-      updatedLogs.push(`Approved by ${ctx.userEmail} (${ctx.userRole})`);
-      approvedBy = ctx.userEmail;
-    } else if (nextStatus === "In Progress") {
-      updatedLogs.push(`Execution engine initiated automated workflows`);
-    } else if (nextStatus === "Completed") {
-      updatedLogs.push(`Execution tasks verified and completed successfully`);
-    } else if (nextStatus === "Measured") {
-      updatedLogs.push(`Certified yield logged in organizational ledger`);
-    }
+      const updatedLogs = [...action.logs];
+      let approvedBy = action.approvedBy;
 
-    const updated = await this.database.actionsRepo.update(
-      id,
-      {
-        status: nextStatus,
-        logs: updatedLogs,
-        approvedBy,
-      },
-      ctx,
-      "Action"
-    );
+      if (nextStatus === "Approved") {
+        updatedLogs.push(`Approved by ${uow.context.userEmail} (${uow.context.userRole})`);
+        approvedBy = uow.context.userEmail;
+      } else if (nextStatus === "In Progress") {
+        updatedLogs.push(`Execution engine initiated automated workflows`);
+      } else if (nextStatus === "Completed") {
+        updatedLogs.push(`Execution tasks verified and completed successfully`);
+      } else if (nextStatus === "Measured") {
+        updatedLogs.push(`Certified yield logged in organizational ledger`);
+      }
 
-    this.database.recordAuditLog({
-      organizationId: ctx.organizationId,
-      actorId: ctx.userId,
-      actorEmail: ctx.userEmail,
-      action: `action:advance_${nextStatus.toLowerCase().replace(" ", "_")}`,
-      resource: "Action",
-      resourceId: id,
-      requestId: ctx.requestId,
-      status: "success",
-      metadata: { newStatus: nextStatus, recommendation: action.recommendation },
-      timestamp: new Date().toISOString(),
+      const updated = await uow.actions.update(
+        id,
+        {
+          status: nextStatus,
+          logs: updatedLogs,
+          approvedBy,
+        },
+        uow.context,
+        "Action"
+      );
+
+      await uow.recordAuditLog({
+        organizationId: uow.context.organizationId,
+        actorId: uow.context.userId,
+        actorEmail: uow.context.userEmail,
+        action: `action:advance_${nextStatus.toLowerCase().replace(" ", "_")}`,
+        resource: "Action",
+        resourceId: id,
+        requestId: uow.context.requestId,
+        status: "success",
+        metadata: { newStatus: nextStatus, recommendation: action.recommendation },
+        timestamp: new Date().toISOString(),
+      });
+
+      return updated;
     });
-
-    return updated;
   }
 }
 

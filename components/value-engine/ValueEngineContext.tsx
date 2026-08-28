@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { valueRepository } from "@/lib/data/repositories";
+import { useAuth } from "@/components/auth/AuthContext";
 
 export type PipelineStatus = "discovered" | "validated" | "in_execution" | "pending" | "captured";
 
@@ -116,6 +117,7 @@ interface ValueEngineContextValue {
 const ValueEngineContext = createContext<ValueEngineContextValue | undefined>(undefined);
 
 export function ValueEngineProvider({ children }: { children: ReactNode }) {
+  const { user, organization, isLoading: authLoading } = useAuth();
   const [isScanning, setIsScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -128,6 +130,13 @@ export function ValueEngineProvider({ children }: { children: ReactNode }) {
   const [capturedLedger, setCapturedLedger] = useState<CapturedLedgerEntry[]>([]);
 
   useEffect(() => {
+    if (authLoading || !user) {
+      if (!authLoading && !user) {
+        setLoading(false);
+      }
+      return;
+    }
+
     async function loadData() {
       try {
         setLoading(true);
@@ -152,7 +161,7 @@ export function ValueEngineProvider({ children }: { children: ReactNode }) {
       }
     }
     loadData();
-  }, []);
+  }, [user, organization?.id, authLoading]);
 
   const [simulatorParams, setSimulatorParams] = useState({
     pricingSensitivity: 35,

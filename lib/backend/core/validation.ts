@@ -6,6 +6,14 @@
  */
 
 import { ValidationError, InvalidStateTransitionError } from "./errors";
+import {
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+  normalizeQueryLimit,
+  normalizeQueryOffset,
+  validateSortOptions,
+  SortOptions,
+} from "../database/query";
 
 export type SupportedCurrency = "NGN" | "USD" | "GBP" | "EUR" | "GHS" | "ZAR" | "KES";
 export const SUPPORTED_CURRENCIES: readonly SupportedCurrency[] = [
@@ -232,5 +240,37 @@ export class Validator {
     if (!allowed.includes(next)) {
       throw new InvalidStateTransitionError(entityName, current, next, allowed);
     }
+  }
+
+  /**
+   * Validate and normalize a query limit using centralized bounds [1, MAX_PAGE_SIZE].
+   */
+  public static normalizeQueryLimit(limit: unknown, options?: { strict?: boolean; defaultSize?: number; maxSize?: number; fieldName?: string }): number {
+    return normalizeQueryLimit(limit, options);
+  }
+
+  /**
+   * Strict validation of a query limit. Rejects values > MAX_PAGE_SIZE.
+   */
+  public static requireQueryLimit(limit: unknown, fieldName: string = "limit"): number {
+    return normalizeQueryLimit(limit, { strict: true, fieldName });
+  }
+
+  /**
+   * Validate and normalize a query offset / skip value.
+   */
+  public static normalizeQueryOffset(offset: unknown, fieldName: string = "offset"): number {
+    return normalizeQueryOffset(offset, { fieldName });
+  }
+
+  /**
+   * Validates sort configuration against a domain whitelist of allowed fields.
+   */
+  public static validateSort<T extends string>(
+    sort: unknown,
+    allowedFields: readonly T[],
+    options?: { strict?: boolean; fieldName?: string }
+  ): SortOptions<T> | undefined {
+    return validateSortOptions(sort, allowedFields, options);
   }
 }

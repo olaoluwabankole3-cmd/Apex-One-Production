@@ -22,6 +22,18 @@ import {
   WorkflowRecord,
   WorkflowRunRecord,
   AuditLogRecord,
+  UpdateCustomerInput,
+  UpdateContractInput,
+  UpdateTransactionInput,
+  UpdateSignalInput,
+  UpdateValueOpportunityInput,
+  UpdateValueCapturedInput,
+  UpdateOrganizationalMemoryInput,
+  UpdateActionInput,
+  UpdateDocumentInput,
+  UpdateKnowledgeItemInput,
+  UpdateWorkflowInput,
+  UpdateWorkflowRunInput,
 } from "../../schema";
 import {
   ICustomerRepository,
@@ -39,6 +51,51 @@ import {
   IWorkflowRepository,
   IWorkflowRunRepository,
   IAuditLogRepository,
+  CollectionQuery,
+  CUSTOMER_SORT_FIELDS,
+  CustomerSortField,
+  CustomerQueryFilter,
+  CONTRACT_SORT_FIELDS,
+  ContractSortField,
+  ContractQueryFilter,
+  TRANSACTION_SORT_FIELDS,
+  TransactionSortField,
+  TransactionQueryFilter,
+  SIGNAL_SORT_FIELDS,
+  SignalSortField,
+  SignalQueryFilter,
+  VALUE_OPPORTUNITY_SORT_FIELDS,
+  ValueOpportunitySortField,
+  ValueOpportunityQueryFilter,
+  VALUE_CAPTURED_SORT_FIELDS,
+  ValueCapturedSortField,
+  ValueCapturedQueryFilter,
+  ORGANIZATIONAL_MEMORY_SORT_FIELDS,
+  OrganizationalMemorySortField,
+  OrganizationalMemoryQueryFilter,
+  ACTION_SORT_FIELDS,
+  ActionSortField,
+  ActionQueryFilter,
+  DOCUMENT_SORT_FIELDS,
+  DocumentSortField,
+  DocumentQueryFilter,
+  KNOWLEDGE_SORT_FIELDS,
+  KnowledgeSortField,
+  KnowledgeQueryFilter,
+  WORKFLOW_SORT_FIELDS,
+  WorkflowSortField,
+  WorkflowQueryFilter,
+  WORKFLOW_RUN_SORT_FIELDS,
+  WorkflowRunSortField,
+  WorkflowRunQueryFilter,
+  AUDIT_LOG_SORT_FIELDS,
+  AuditLogSortField,
+  AuditLogQueryFilter,
+  normalizeQueryLimit,
+  normalizeQueryOffset,
+  validateSortOptions,
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
 } from "../../repository";
 import { TenantContext } from "../../../core/errors";
 import { Validator } from "../../../core/validation";
@@ -48,9 +105,11 @@ import {
 } from "../../relationshipValidator";
 
 export class InMemoryCustomerRepository
-  extends InMemoryTenantRepository<CustomerRecord>
+  extends InMemoryTenantRepository<CustomerRecord, UpdateCustomerInput, CustomerQueryFilter, CustomerSortField>
   implements ICustomerRepository
 {
+  protected override readonly allowedSortFields = CUSTOMER_SORT_FIELDS;
+
   constructor(
     collectionName: string,
     store: Map<string, CustomerRecord>,
@@ -60,13 +119,47 @@ export class InMemoryCustomerRepository
     super(collectionName, store, onAuditViolation);
   }
 
+  protected override applyStructuredFilter(
+    items: CustomerRecord[],
+    filter?: CustomerQueryFilter
+  ): CustomerRecord[] {
+    if (!filter) return items;
+
+    return items.filter((c) => {
+      if (filter.tier && filter.tier !== "all" && c.tier !== filter.tier) return false;
+      if (filter.status && filter.status !== "all" && c.status !== filter.status) return false;
+      if (filter.contactEmail && c.contactEmail.toLowerCase() !== filter.contactEmail.toLowerCase()) return false;
+      if (filter.industry && c.industry !== filter.industry) return false;
+      if (filter.owner && c.owner !== filter.owner) return false;
+      if (filter.subsidiary && c.subsidiary !== filter.subsidiary) return false;
+      if (filter.minHealthScore !== undefined && c.healthScore < filter.minHealthScore) return false;
+      if (filter.maxHealthScore !== undefined && c.healthScore > filter.maxHealthScore) return false;
+      if (filter.minArr !== undefined && c.arr < filter.minArr) return false;
+      if (filter.maxArr !== undefined && c.arr > filter.maxArr) return false;
+      if (filter.tags && filter.tags.length > 0) {
+        const hasTag = filter.tags.some((t) => c.tags?.includes(t));
+        if (!hasTag) return false;
+      }
+      if (filter.search) {
+        const q = filter.search.toLowerCase().trim();
+        const match =
+          (c.name && c.name.toLowerCase().includes(q)) ||
+          (c.owner && c.owner.toLowerCase().includes(q)) ||
+          (c.contactName && c.contactName.toLowerCase().includes(q)) ||
+          (c.contactEmail && c.contactEmail.toLowerCase().includes(q));
+        if (!match) return false;
+      }
+      return true;
+    });
+  }
+
   public async findByEmail(email: string, ctx: TenantContext): Promise<CustomerRecord | undefined> {
-    const list = await this.findMany(ctx, (c) => c.contactEmail.toLowerCase() === email.toLowerCase());
+    const list = await this.findMany(ctx, { filter: { contactEmail: email }, limit: 1 });
     return list[0];
   }
 
   public async findAtRisk(ctx: TenantContext): Promise<CustomerRecord[]> {
-    return this.findMany(ctx, (c) => c.status === "at-risk" || c.healthScore < 70);
+    return this.findMany(ctx, { filter: { status: "at-risk" } });
   }
 
   public override async delete(
@@ -95,9 +188,11 @@ export class InMemoryCustomerRepository
 }
 
 export class InMemoryContractRepository
-  extends InMemoryTenantRepository<ContractRecord>
+  extends InMemoryTenantRepository<ContractRecord, UpdateContractInput, ContractQueryFilter, ContractSortField>
   implements IContractRepository
 {
+  protected override readonly allowedSortFields = CONTRACT_SORT_FIELDS;
+
   constructor(
     collectionName: string,
     store: Map<string, ContractRecord>,
@@ -105,6 +200,32 @@ export class InMemoryContractRepository
     protected readonly entityLookupStore?: IEntityLookupStore
   ) {
     super(collectionName, store, onAuditViolation);
+  }
+
+  protected override applyStructuredFilter(
+    items: ContractRecord[],
+    filter?: ContractQueryFilter
+  ): ContractRecord[] {
+    if (!filter) return items;
+
+    return items.filter((c) => {
+      if (filter.customerId && c.customerId !== filter.customerId) return false;
+      if (filter.status && filter.status !== "all" && c.status !== filter.status) return false;
+      if (filter.maxRenewalDays !== undefined && c.renewalDaysRemaining > filter.maxRenewalDays) return false;
+      if (filter.minContractValue !== undefined && c.contractValue < filter.minContractValue) return false;
+      if (filter.maxContractValue !== undefined && c.contractValue > filter.maxContractValue) return false;
+      if (
+        filter.volatilityIndexationClause !== undefined &&
+        c.volatilityIndexationClause !== filter.volatilityIndexationClause
+      ) {
+        return false;
+      }
+      if (filter.search) {
+        const q = filter.search.toLowerCase().trim();
+        if (!c.title.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
   }
 
   public override async create(
@@ -120,7 +241,7 @@ export class InMemoryContractRepository
 
   public override async update(
     id: string,
-    updates: Partial<ContractRecord>,
+    updates: UpdateContractInput,
     ctx: TenantContext,
     resourceName: string = this.collectionName
   ): Promise<ContractRecord> {
@@ -158,18 +279,20 @@ export class InMemoryContractRepository
   }
 
   public async findByCustomer(customerId: string, ctx: TenantContext): Promise<ContractRecord[]> {
-    return this.findMany(ctx, (c) => c.customerId === customerId);
+    return this.findMany(ctx, { filter: { customerId } });
   }
 
   public async findExpiringSoon(daysThreshold: number, ctx: TenantContext): Promise<ContractRecord[]> {
-    return this.findMany(ctx, (c) => c.renewalDaysRemaining <= daysThreshold && c.status === "active");
+    return this.findMany(ctx, { filter: { maxRenewalDays: daysThreshold, status: "active" } });
   }
 }
 
 export class InMemoryTransactionRepository
-  extends InMemoryTenantRepository<TransactionRecord>
+  extends InMemoryTenantRepository<TransactionRecord, UpdateTransactionInput, TransactionQueryFilter, TransactionSortField>
   implements ITransactionRepository
 {
+  protected override readonly allowedSortFields = TRANSACTION_SORT_FIELDS;
+
   constructor(
     collectionName: string,
     store: Map<string, TransactionRecord>,
@@ -177,6 +300,29 @@ export class InMemoryTransactionRepository
     protected readonly entityLookupStore?: IEntityLookupStore
   ) {
     super(collectionName, store, onAuditViolation);
+  }
+
+  protected override applyStructuredFilter(
+    items: TransactionRecord[],
+    filter?: TransactionQueryFilter
+  ): TransactionRecord[] {
+    if (!filter) return items;
+
+    return items.filter((t) => {
+      if (filter.customerId && t.customerId !== filter.customerId) return false;
+      if (filter.type && filter.type !== "all" && t.type !== filter.type) return false;
+      if (filter.status && filter.status !== "all" && t.status !== filter.status) return false;
+      if (filter.currency && t.currency.toUpperCase() !== filter.currency.toUpperCase()) return false;
+      if (filter.category && t.category !== filter.category) return false;
+      if (filter.minAmount !== undefined && t.amount < filter.minAmount) return false;
+      if (filter.maxAmount !== undefined && t.amount > filter.maxAmount) return false;
+      if (filter.search) {
+        const q = filter.search.toLowerCase().trim();
+        const match = t.reference.toLowerCase().includes(q) || t.category.toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
   }
 
   public override async create(
@@ -192,7 +338,7 @@ export class InMemoryTransactionRepository
 
   public override async update(
     id: string,
-    updates: Partial<TransactionRecord>,
+    updates: UpdateTransactionInput,
     ctx: TenantContext,
     resourceName: string = this.collectionName
   ): Promise<TransactionRecord> {
@@ -230,11 +376,11 @@ export class InMemoryTransactionRepository
   }
 
   public async findByCustomer(customerId: string, ctx: TenantContext): Promise<TransactionRecord[]> {
-    return this.findMany(ctx, (t) => t.customerId === customerId);
+    return this.findMany(ctx, { filter: { customerId } });
   }
 
   public async calculateFinancialTotals(ctx: TenantContext): Promise<FinancialTotalsResult> {
-    const records = await this.findMany(ctx);
+    const records = await this.findMany(ctx, { limit: MAX_PAGE_SIZE });
     const byCurrency: Record<string, FinancialTotalsByCurrency> = {};
 
     for (const rec of records) {
@@ -301,9 +447,11 @@ export class InMemoryTransactionRepository
 }
 
 export class InMemorySignalRepository
-  extends InMemoryTenantRepository<SignalRecord>
+  extends InMemoryTenantRepository<SignalRecord, UpdateSignalInput, SignalQueryFilter, SignalSortField>
   implements ISignalRepository
 {
+  protected override readonly allowedSortFields = SIGNAL_SORT_FIELDS;
+
   constructor(
     collectionName: string,
     store: Map<string, SignalRecord>,
@@ -311,6 +459,26 @@ export class InMemorySignalRepository
     protected readonly entityLookupStore?: IEntityLookupStore
   ) {
     super(collectionName, store, onAuditViolation);
+  }
+
+  protected override applyStructuredFilter(
+    items: SignalRecord[],
+    filter?: SignalQueryFilter
+  ): SignalRecord[] {
+    if (!filter) return items;
+
+    return items.filter((s) => {
+      if (filter.category && filter.category !== "all" && s.category !== filter.category) return false;
+      if (filter.severity && filter.severity !== "all" && s.severity !== filter.severity) return false;
+      if (filter.status && filter.status !== "all" && s.status !== filter.status) return false;
+      if (filter.minImpact !== undefined && s.estimatedFinancialImpact < filter.minImpact) return false;
+      if (filter.search) {
+        const q = filter.search.toLowerCase().trim();
+        const match = s.title.toLowerCase().includes(q) || s.description.toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
   }
 
   public override async delete(
@@ -338,14 +506,23 @@ export class InMemorySignalRepository
   }
 
   public async findActiveByCategory(category: string, ctx: TenantContext): Promise<SignalRecord[]> {
-    return this.findMany(ctx, (s) => s.status === "active" && (category === "all" || s.category === category));
+    return this.findMany(ctx, {
+      filter: { status: "active", category: category as SignalQueryFilter["category"] },
+    });
   }
 }
 
 export class InMemoryValueOpportunityRepository
-  extends InMemoryTenantRepository<ValueOpportunityRecord>
+  extends InMemoryTenantRepository<
+    ValueOpportunityRecord,
+    UpdateValueOpportunityInput,
+    ValueOpportunityQueryFilter,
+    ValueOpportunitySortField
+  >
   implements IValueOpportunityRepository
 {
+  protected override readonly allowedSortFields = VALUE_OPPORTUNITY_SORT_FIELDS;
+
   constructor(
     collectionName: string,
     store: Map<string, ValueOpportunityRecord>,
@@ -353,6 +530,32 @@ export class InMemoryValueOpportunityRepository
     protected readonly entityLookupStore?: IEntityLookupStore
   ) {
     super(collectionName, store, onAuditViolation);
+  }
+
+  protected override applyStructuredFilter(
+    items: ValueOpportunityRecord[],
+    filter?: ValueOpportunityQueryFilter
+  ): ValueOpportunityRecord[] {
+    if (!filter) return items;
+
+    return items.filter((o) => {
+      if (filter.category && filter.category !== "all" && o.category !== filter.category) return false;
+      if (filter.status && filter.status !== "all" && o.status !== filter.status) return false;
+      if (filter.sourceEntityType && o.sourceEntityType !== filter.sourceEntityType) return false;
+      if (filter.sourceEntityId && o.sourceEntityId !== filter.sourceEntityId) return false;
+      if (filter.realizationSpeed && o.realizationSpeed !== filter.realizationSpeed) return false;
+      if (filter.strategicImportance && o.strategicImportance !== filter.strategicImportance) return false;
+      if (filter.minPotentialValue !== undefined && o.potentialValue < filter.minPotentialValue) return false;
+      if (filter.search) {
+        const q = filter.search.toLowerCase().trim();
+        const match =
+          o.title.toLowerCase().includes(q) ||
+          o.recommendedAction.toLowerCase().includes(q) ||
+          o.evidence.toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
   }
 
   public override async create(
@@ -370,7 +573,7 @@ export class InMemoryValueOpportunityRepository
 
   public override async update(
     id: string,
-    updates: Partial<ValueOpportunityRecord>,
+    updates: UpdateValueOpportunityInput,
     ctx: TenantContext,
     resourceName: string = this.collectionName
   ): Promise<ValueOpportunityRecord> {
@@ -415,18 +618,25 @@ export class InMemoryValueOpportunityRepository
   }
 
   public async findByCategory(category: string, ctx: TenantContext): Promise<ValueOpportunityRecord[]> {
-    return this.findMany(ctx, (o) => category === "all" || o.category === category);
+    return this.findMany(ctx, { filter: { category: category as ValueOpportunityQueryFilter["category"] } });
   }
 
   public async findByStatus(status: string, ctx: TenantContext): Promise<ValueOpportunityRecord[]> {
-    return this.findMany(ctx, (o) => status === "all" || o.status === status);
+    return this.findMany(ctx, { filter: { status: status as ValueOpportunityQueryFilter["status"] } });
   }
 }
 
 export class InMemoryValueCapturedRepository
-  extends InMemoryTenantRepository<ValueCapturedRecord>
+  extends InMemoryTenantRepository<
+    ValueCapturedRecord,
+    UpdateValueCapturedInput,
+    ValueCapturedQueryFilter,
+    ValueCapturedSortField
+  >
   implements IValueCapturedRepository
 {
+  protected override readonly allowedSortFields = VALUE_CAPTURED_SORT_FIELDS;
+
   constructor(
     collectionName: string,
     store: Map<string, ValueCapturedRecord>,
@@ -434,6 +644,28 @@ export class InMemoryValueCapturedRepository
     protected readonly entityLookupStore?: IEntityLookupStore
   ) {
     super(collectionName, store, onAuditViolation);
+  }
+
+  protected override applyStructuredFilter(
+    items: ValueCapturedRecord[],
+    filter?: ValueCapturedQueryFilter
+  ): ValueCapturedRecord[] {
+    if (!filter) return items;
+
+    return items.filter((c) => {
+      if (filter.opportunityId && c.opportunityId !== filter.opportunityId) return false;
+      if (filter.category && filter.category !== "all" && c.category !== filter.category) return false;
+      if (filter.evidenceType && c.evidenceType !== filter.evidenceType) return false;
+      if (filter.certifiedBy && c.certifiedBy !== filter.certifiedBy) return false;
+      if (filter.search) {
+        const q = filter.search.toLowerCase().trim();
+        const match =
+          c.opportunityTitle.toLowerCase().includes(q) ||
+          c.evidenceDescription.toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
   }
 
   public override async create(
@@ -449,7 +681,7 @@ export class InMemoryValueCapturedRepository
 
   public override async update(
     id: string,
-    updates: Partial<ValueCapturedRecord>,
+    updates: UpdateValueCapturedInput,
     ctx: TenantContext,
     resourceName: string = this.collectionName
   ): Promise<ValueCapturedRecord> {
@@ -463,15 +695,22 @@ export class InMemoryValueCapturedRepository
   }
 
   public async calculateTotalCaptured(ctx: TenantContext): Promise<number> {
-    const list = await this.findMany(ctx);
+    const list = await this.findMany(ctx, { limit: MAX_PAGE_SIZE });
     return list.reduce((sum, item) => sum + item.capturedValue, 0);
   }
 }
 
 export class InMemoryOrganizationalMemoryRepository
-  extends InMemoryTenantRepository<OrganizationalMemoryRecord>
+  extends InMemoryTenantRepository<
+    OrganizationalMemoryRecord,
+    UpdateOrganizationalMemoryInput,
+    OrganizationalMemoryQueryFilter,
+    OrganizationalMemorySortField
+  >
   implements IOrganizationalMemoryRepository
 {
+  protected override readonly allowedSortFields = ORGANIZATIONAL_MEMORY_SORT_FIELDS;
+
   constructor(
     collectionName: string,
     store: Map<string, OrganizationalMemoryRecord>,
@@ -481,19 +720,41 @@ export class InMemoryOrganizationalMemoryRepository
     super(collectionName, store, onAuditViolation);
   }
 
-  public async searchKeywords(keywords: string[], ctx: TenantContext): Promise<OrganizationalMemoryRecord[]> {
-    const lowerKeys = keywords.map((k) => k.toLowerCase());
-    return this.findMany(ctx, (m) => {
-      const target = `${m.title} ${m.content} ${m.source}`.toLowerCase();
-      return lowerKeys.some((k) => target.includes(k));
+  protected override applyStructuredFilter(
+    items: OrganizationalMemoryRecord[],
+    filter?: OrganizationalMemoryQueryFilter
+  ): OrganizationalMemoryRecord[] {
+    if (!filter) return items;
+
+    return items.filter((m) => {
+      if (filter.type && filter.type !== "all" && m.type !== filter.type) return false;
+      if (filter.source && m.source !== filter.source) return false;
+      if (filter.verified !== undefined && m.verified !== filter.verified) return false;
+      if (filter.keywords && filter.keywords.length > 0) {
+        const target = `${m.title} ${m.content} ${m.source}`.toLowerCase();
+        const matchesAny = filter.keywords.some((k) => target.includes(k.toLowerCase()));
+        if (!matchesAny) return false;
+      }
+      if (filter.search) {
+        const q = filter.search.toLowerCase().trim();
+        const target = `${m.title} ${m.content} ${m.source}`.toLowerCase();
+        if (!target.includes(q)) return false;
+      }
+      return true;
     });
+  }
+
+  public async searchKeywords(keywords: string[], ctx: TenantContext): Promise<OrganizationalMemoryRecord[]> {
+    return this.findMany(ctx, { filter: { keywords } });
   }
 }
 
 export class InMemoryActionRepository
-  extends InMemoryTenantRepository<ActionRecord>
+  extends InMemoryTenantRepository<ActionRecord, UpdateActionInput, ActionQueryFilter, ActionSortField>
   implements IActionRepository
 {
+  protected override readonly allowedSortFields = ACTION_SORT_FIELDS;
+
   constructor(
     collectionName: string,
     store: Map<string, ActionRecord>,
@@ -503,15 +764,40 @@ export class InMemoryActionRepository
     super(collectionName, store, onAuditViolation);
   }
 
+  protected override applyStructuredFilter(
+    items: ActionRecord[],
+    filter?: ActionQueryFilter
+  ): ActionRecord[] {
+    if (!filter) return items;
+
+    return items.filter((a) => {
+      if (filter.status && filter.status !== "all" && a.status !== filter.status) return false;
+      if (filter.automationType && filter.automationType !== "all" && a.automationType !== filter.automationType) return false;
+      if (filter.owner && a.owner !== filter.owner) return false;
+      if (filter.requiresHumanApproval !== undefined && a.requiresHumanApproval !== filter.requiresHumanApproval) return false;
+      if (filter.search) {
+        const q = filter.search.toLowerCase().trim();
+        const match =
+          a.recommendation.toLowerCase().includes(q) ||
+          a.owner.toLowerCase().includes(q) ||
+          a.decisionDetail.toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
+  }
+
   public async findByStatus(status: string, ctx: TenantContext): Promise<ActionRecord[]> {
-    return this.findMany(ctx, (a) => status === "all" || a.status === status);
+    return this.findMany(ctx, { filter: { status: status as ActionQueryFilter["status"] } });
   }
 }
 
 export class InMemoryDocumentRepository
-  extends InMemoryTenantRepository<DocumentRecord>
+  extends InMemoryTenantRepository<DocumentRecord, UpdateDocumentInput, DocumentQueryFilter, DocumentSortField>
   implements IDocumentRepository
 {
+  protected override readonly allowedSortFields = DOCUMENT_SORT_FIELDS;
+
   constructor(
     collectionName: string,
     store: Map<string, DocumentRecord>,
@@ -519,6 +805,31 @@ export class InMemoryDocumentRepository
     protected readonly entityLookupStore?: IEntityLookupStore
   ) {
     super(collectionName, store, onAuditViolation);
+  }
+
+  protected override applyStructuredFilter(
+    items: DocumentRecord[],
+    filter?: DocumentQueryFilter
+  ): DocumentRecord[] {
+    if (!filter) return items;
+
+    return items.filter((d) => {
+      if (filter.customerId && d.customerId !== filter.customerId) return false;
+      if (filter.category && filter.category !== "all" && d.category !== filter.category) return false;
+      if (filter.status && filter.status !== "all" && d.status !== filter.status) return false;
+      if (filter.fileType && filter.fileType !== "all" && d.fileType !== filter.fileType) return false;
+      if (filter.uploadedBy && d.uploadedBy !== filter.uploadedBy) return false;
+      if (filter.tags && filter.tags.length > 0) {
+        const hasTag = filter.tags.some((t) => d.tags?.includes(t));
+        if (!hasTag) return false;
+      }
+      if (filter.search) {
+        const q = filter.search.toLowerCase().trim();
+        const match = d.name.toLowerCase().includes(q) || (d.aiSummary && d.aiSummary.toLowerCase().includes(q));
+        if (!match) return false;
+      }
+      return true;
+    });
   }
 
   public override async create(
@@ -540,7 +851,7 @@ export class InMemoryDocumentRepository
 
   public override async update(
     id: string,
-    updates: Partial<DocumentRecord>,
+    updates: UpdateDocumentInput,
     ctx: TenantContext,
     resourceName: string = this.collectionName
   ): Promise<DocumentRecord> {
@@ -560,15 +871,15 @@ export class InMemoryDocumentRepository
   }
 
   public async findByCategory(category: string, ctx: TenantContext): Promise<DocumentRecord[]> {
-    return this.findMany(ctx, (d) => category === "all" || d.category === category);
+    return this.findMany(ctx, { filter: { category: category as DocumentQueryFilter["category"] } });
   }
 
   public async findByCustomer(customerId: string, ctx: TenantContext): Promise<DocumentRecord[]> {
-    return this.findMany(ctx, (d) => d.customerId === customerId);
+    return this.findMany(ctx, { filter: { customerId } });
   }
 
   public async findByStatus(status: string, ctx: TenantContext): Promise<DocumentRecord[]> {
-    return this.findMany(ctx, (d) => status === "all" || d.status === status);
+    return this.findMany(ctx, { filter: { status: status as DocumentQueryFilter["status"] } });
   }
 
   public override async delete(
@@ -597,9 +908,11 @@ export class InMemoryDocumentRepository
 }
 
 export class InMemoryKnowledgeRepository
-  extends InMemoryTenantRepository<KnowledgeItemRecord>
+  extends InMemoryTenantRepository<KnowledgeItemRecord, UpdateKnowledgeItemInput, KnowledgeQueryFilter, KnowledgeSortField>
   implements IKnowledgeRepository
 {
+  protected override readonly allowedSortFields = KNOWLEDGE_SORT_FIELDS;
+
   constructor(
     collectionName: string,
     store: Map<string, KnowledgeItemRecord>,
@@ -607,6 +920,35 @@ export class InMemoryKnowledgeRepository
     protected readonly entityLookupStore?: IEntityLookupStore
   ) {
     super(collectionName, store, onAuditViolation);
+  }
+
+  protected override applyStructuredFilter(
+    items: KnowledgeItemRecord[],
+    filter?: KnowledgeQueryFilter
+  ): KnowledgeItemRecord[] {
+    if (!filter) return items;
+
+    return items.filter((k) => {
+      if (filter.category && filter.category !== "all" && k.category !== filter.category) return false;
+      if (filter.sourceDocId && k.sourceDocId !== filter.sourceDocId) return false;
+      if (filter.author && k.author !== filter.author) return false;
+      if (filter.isPublicPlatformKnowledge !== undefined && k.isPublicPlatformKnowledge !== filter.isPublicPlatformKnowledge) {
+        return false;
+      }
+      if (filter.tags && filter.tags.length > 0) {
+        const hasTag = filter.tags.some((t) => k.tags?.includes(t));
+        if (!hasTag) return false;
+      }
+      if (filter.search) {
+        const q = filter.search.toLowerCase().trim();
+        const match =
+          k.title.toLowerCase().includes(q) ||
+          k.content.toLowerCase().includes(q) ||
+          (k.summary && k.summary.toLowerCase().includes(q));
+        if (!match) return false;
+      }
+      return true;
+    });
   }
 
   public override async create(
@@ -622,7 +964,7 @@ export class InMemoryKnowledgeRepository
 
   public override async update(
     id: string,
-    updates: Partial<KnowledgeItemRecord>,
+    updates: UpdateKnowledgeItemInput,
     ctx: TenantContext,
     resourceName: string = this.collectionName
   ): Promise<KnowledgeItemRecord> {
@@ -636,30 +978,24 @@ export class InMemoryKnowledgeRepository
   }
 
   public async findByCategory(category: string, ctx: TenantContext): Promise<KnowledgeItemRecord[]> {
-    return this.findMany(ctx, (k) => category === "all" || k.category === category);
+    return this.findMany(ctx, { filter: { category: category as KnowledgeQueryFilter["category"] } });
   }
 
   public async findByTags(tags: string[], ctx: TenantContext): Promise<KnowledgeItemRecord[]> {
-    return this.findMany(ctx, (k) => tags.some((t) => k.tags.includes(t)));
+    return this.findMany(ctx, { filter: { tags } });
   }
 
   public async searchContent(query: string, ctx: TenantContext): Promise<KnowledgeItemRecord[]> {
-    const q = query.toLowerCase().trim();
-    return this.findMany(ctx, (k) => {
-      return (
-        k.title.toLowerCase().includes(q) ||
-        k.content.toLowerCase().includes(q) ||
-        (k.summary && k.summary.toLowerCase().includes(q)) ||
-        k.tags.some((t) => t.toLowerCase().includes(q))
-      );
-    });
+    return this.findMany(ctx, { filter: { search: query } });
   }
 }
 
 export class InMemoryWorkflowRepository
-  extends InMemoryTenantRepository<WorkflowRecord>
+  extends InMemoryTenantRepository<WorkflowRecord, UpdateWorkflowInput, WorkflowQueryFilter, WorkflowSortField>
   implements IWorkflowRepository
 {
+  protected override readonly allowedSortFields = WORKFLOW_SORT_FIELDS;
+
   constructor(
     collectionName: string,
     store: Map<string, WorkflowRecord>,
@@ -667,6 +1003,24 @@ export class InMemoryWorkflowRepository
     protected readonly entityLookupStore?: IEntityLookupStore
   ) {
     super(collectionName, store, onAuditViolation);
+  }
+
+  protected override applyStructuredFilter(
+    items: WorkflowRecord[],
+    filter?: WorkflowQueryFilter
+  ): WorkflowRecord[] {
+    if (!filter) return items;
+
+    return items.filter((w) => {
+      if (filter.status && filter.status !== "all" && w.status !== filter.status) return false;
+      if (filter.subsidiary && w.subsidiary !== filter.subsidiary) return false;
+      if (filter.search) {
+        const q = filter.search.toLowerCase().trim();
+        const match = w.name.toLowerCase().includes(q) || w.description.toLowerCase().includes(q);
+        if (!match) return false;
+      }
+      return true;
+    });
   }
 
   public override async delete(
@@ -694,14 +1048,21 @@ export class InMemoryWorkflowRepository
   }
 
   public async findActive(ctx: TenantContext): Promise<WorkflowRecord[]> {
-    return this.findMany(ctx, (w) => w.status === "active");
+    return this.findMany(ctx, { filter: { status: "active" } });
   }
 }
 
 export class InMemoryWorkflowRunRepository
-  extends InMemoryTenantRepository<WorkflowRunRecord>
+  extends InMemoryTenantRepository<
+    WorkflowRunRecord,
+    UpdateWorkflowRunInput,
+    WorkflowRunQueryFilter,
+    WorkflowRunSortField
+  >
   implements IWorkflowRunRepository
 {
+  protected override readonly allowedSortFields = WORKFLOW_RUN_SORT_FIELDS;
+
   constructor(
     collectionName: string,
     store: Map<string, WorkflowRunRecord>,
@@ -709,6 +1070,22 @@ export class InMemoryWorkflowRunRepository
     protected readonly entityLookupStore?: IEntityLookupStore
   ) {
     super(collectionName, store, onAuditViolation);
+  }
+
+  protected override applyStructuredFilter(
+    items: WorkflowRunRecord[],
+    filter?: WorkflowRunQueryFilter
+  ): WorkflowRunRecord[] {
+    if (!filter) return items;
+
+    return items.filter((r) => {
+      if (filter.workflowId && r.workflowId !== filter.workflowId) return false;
+      if (filter.status && filter.status !== "all" && r.status !== filter.status) return false;
+      if (filter.triggeredBy && r.triggeredBy !== filter.triggeredBy) return false;
+      if (filter.triggerType && filter.triggerType !== "all" && r.triggerType !== filter.triggerType) return false;
+      if (filter.activeOnly && r.status !== "running" && r.status !== "waiting_approval") return false;
+      return true;
+    });
   }
 
   public override async create(
@@ -730,7 +1107,7 @@ export class InMemoryWorkflowRunRepository
 
   public override async update(
     id: string,
-    updates: Partial<WorkflowRunRecord>,
+    updates: UpdateWorkflowRunInput,
     ctx: TenantContext,
     resourceName: string = this.collectionName
   ): Promise<WorkflowRunRecord> {
@@ -750,16 +1127,17 @@ export class InMemoryWorkflowRunRepository
   }
 
   public async findByWorkflow(workflowId: string, ctx: TenantContext): Promise<WorkflowRunRecord[]> {
-    return this.findMany(ctx, (r) => r.workflowId === workflowId);
+    return this.findMany(ctx, { filter: { workflowId } });
   }
 
   public async findActiveRuns(ctx: TenantContext): Promise<WorkflowRunRecord[]> {
-    return this.findMany(ctx, (r) => r.status === "running" || r.status === "waiting_approval");
+    return this.findMany(ctx, { filter: { activeOnly: true } });
   }
 }
 
 export class InMemoryAuditLogRepository implements IAuditLogRepository {
   private logs: AuditLogRecord[] = [];
+  private readonly allowedSortFields = AUDIT_LOG_SORT_FIELDS;
 
   public async record(
     log: Omit<AuditLogRecord, "id"> | (Omit<AuditLogRecord, "id" | "timestamp"> & { timestamp?: string })
@@ -773,14 +1151,63 @@ export class InMemoryAuditLogRepository implements IAuditLogRepository {
     return fullLog;
   }
 
-  public async findMany(ctx: TenantContext, limit: number = 50): Promise<AuditLogRecord[]> {
-    return this.logs
-      .filter((log) => log.organizationId === ctx.organizationId)
-      .slice(0, limit);
+  public async findMany(
+    ctx: TenantContext,
+    queryOrLimit?: CollectionQuery<AuditLogQueryFilter, AuditLogSortField> | number
+  ): Promise<AuditLogRecord[]> {
+    // 1. TENANT SAFETY: Strictly isolate by authenticated organizationId
+    let filtered = this.logs.filter((log) => log.organizationId === ctx.organizationId);
+
+    if (typeof queryOrLimit === "number") {
+      const limit = normalizeQueryLimit(queryOrLimit);
+      return filtered.slice(0, limit);
+    }
+
+    const query = queryOrLimit;
+    const limit = normalizeQueryLimit(query?.limit);
+    const offset = normalizeQueryOffset(query?.offset);
+
+    // Apply structured filter
+    if (query?.filter) {
+      const f = query.filter;
+      filtered = filtered.filter((log) => {
+        if (f.actorId && log.actorId !== f.actorId) return false;
+        if (f.actorEmail && log.actorEmail.toLowerCase() !== f.actorEmail.toLowerCase()) return false;
+        if (f.action && log.action !== f.action) return false;
+        if (f.resource && log.resource !== f.resource) return false;
+        if (f.resourceId && log.resourceId !== f.resourceId) return false;
+        if (f.requestId && log.requestId !== f.requestId) return false;
+        if (f.status && f.status !== "all" && log.status !== f.status) return false;
+        return true;
+      });
+    }
+
+    // Apply sort
+    if (query?.sort) {
+      const validatedSort = validateSortOptions(query.sort, this.allowedSortFields);
+      if (validatedSort) {
+        const { field, direction = "asc" } = validatedSort;
+        const modifier = direction === "desc" ? -1 : 1;
+        filtered = [...filtered].sort((a, b) => {
+          const valA = a[field] ?? "";
+          const valB = b[field] ?? "";
+          return String(valA).localeCompare(String(valB)) * modifier;
+        });
+      }
+    }
+
+    return filtered.slice(offset, offset + limit);
   }
 
   public clear(): void {
     this.logs = [];
   }
-}
 
+  public getSnapshot(): AuditLogRecord[] {
+    return [...this.logs];
+  }
+
+  public restoreSnapshot(snapshot: AuditLogRecord[]): void {
+    this.logs = [...snapshot];
+  }
+}

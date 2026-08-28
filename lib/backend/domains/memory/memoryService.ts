@@ -30,17 +30,11 @@ export class MemoryService {
   ): Promise<OrganizationalMemoryRecord[]> {
     requirePermission(ctx, "org:read");
 
-    return this.database.memoryRepo.findMany(ctx, (m) => {
-      if (filters?.type && filters.type !== "all" && m.type !== filters.type) {
-        return false;
-      }
-      if (filters?.search) {
-        const q = filters.search.toLowerCase();
-        if (!m.title.toLowerCase().includes(q) && !m.content.toLowerCase().includes(q)) {
-          return false;
-        }
-      }
-      return true;
+    return this.database.memoryRepo.findMany(ctx, {
+      filter: {
+        type: filters?.type && filters.type !== "all" ? (filters.type as any) : undefined,
+        search: filters?.search,
+      },
     });
   }
 
@@ -70,6 +64,7 @@ export class MemoryService {
     const validatedConfidence = Validator.optionalNumber(dto.confidence, "confidence", { min: 0, max: 100 }) ?? 95;
 
     const id = `mem-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const now = new Date().toISOString();
     const recordData: Omit<OrganizationalMemoryRecord, "organizationId"> = {
       id,
       type: validatedType,
@@ -78,27 +73,29 @@ export class MemoryService {
       source: validatedSource,
       sourceReference: dto.sourceReference || "manual_entry",
       confidence: validatedConfidence,
-      effectiveAt: dto.effectiveAt || new Date().toISOString(),
+      effectiveAt: dto.effectiveAt || now,
       verified: dto.verified ?? true,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
     };
 
-    const record = await this.database.memoryRepo.create(recordData, ctx);
+    return this.database.runInTransaction(ctx, async (uow) => {
+      const record = await uow.memory.create(recordData, uow.context);
 
-    this.database.recordAuditLog({
-      organizationId: ctx.organizationId,
-      actorId: ctx.userId,
-      actorEmail: ctx.userEmail,
-      action: "memory:record",
-      resource: "OrganizationalMemory",
-      resourceId: id,
-      requestId: ctx.requestId,
-      status: "success",
-      metadata: { title: record.title, source: record.source },
-      timestamp: new Date().toISOString(),
+      await uow.recordAuditLog({
+        organizationId: uow.context.organizationId,
+        actorId: uow.context.userId,
+        actorEmail: uow.context.userEmail,
+        action: "memory:record",
+        resource: "OrganizationalMemory",
+        resourceId: id,
+        requestId: uow.context.requestId,
+        status: "success",
+        metadata: { title: record.title, source: record.source },
+        timestamp: now,
+      });
+
+      return record;
     });
-
-    return record;
   }
 }
 

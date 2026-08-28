@@ -31,24 +31,13 @@ export class DocumentService {
       docIdsFromSearch = await this.searchIndex.search(ctx.organizationId, filters.query.trim());
     }
 
-    return this.database.documentsRepo.findMany(ctx, (doc) => {
-      if (filters?.category && filters.category !== "all" && doc.category !== filters.category) {
-        return false;
-      }
-      if (filters?.status && filters.status !== "all" && doc.status !== filters.status) {
-        return false;
-      }
-      if (filters?.customerId && doc.customerId !== filters.customerId) {
-        return false;
-      }
-      if (docIdsFromSearch !== undefined) {
-        return (
-          docIdsFromSearch.includes(doc.id) ||
-          doc.name.toLowerCase().includes(filters!.query!.toLowerCase()) ||
-          doc.tags.some((t) => t.toLowerCase().includes(filters!.query!.toLowerCase()))
-        );
-      }
-      return true;
+    return this.database.documentsRepo.findMany(ctx, {
+      filter: {
+        category: filters?.category && filters.category !== "all" ? (filters.category as any) : undefined,
+        status: filters?.status && filters.status !== "all" ? (filters.status as any) : undefined,
+        customerId: filters?.customerId,
+        search: filters?.query,
+      },
     });
   }
 
@@ -104,18 +93,22 @@ export class DocumentService {
       updatedAt: new Date().toISOString(),
     };
 
-    const savedDoc = await this.database.documentsRepo.create(newDoc, ctx);
+    const savedDoc = await this.database.runInTransaction(ctx, async (uow) => {
+      const doc = await uow.documents.create(newDoc, uow.context);
 
-    this.database.recordAuditLog({
-      organizationId: ctx.organizationId,
-      actorId: ctx.userId,
-      actorEmail: ctx.userEmail,
-      action: "document:upload",
-      resource: "Document",
-      resourceId: savedDoc.id,
-      requestId: ctx.requestId,
-      status: "success",
-      metadata: { name: savedDoc.name, category: savedDoc.category, size: savedDoc.size },
+      await uow.recordAuditLog({
+        organizationId: uow.context.organizationId,
+        actorId: uow.context.userId,
+        actorEmail: uow.context.userEmail,
+        action: "document:upload",
+        resource: "Document",
+        resourceId: doc.id,
+        requestId: uow.context.requestId,
+        status: "success",
+        metadata: { name: doc.name, category: doc.category, size: doc.size },
+      });
+
+      return doc;
     });
 
     // 3. Process & Extract
@@ -137,23 +130,25 @@ export class DocumentService {
       .join(" ")}`;
     const indexRef = await this.searchIndex.indexDocument(ctx.organizationId, doc.id, fullText);
 
-    const updated = await this.database.documentsRepo.update(
-      id,
-      {
-        status: "indexed",
-        aiSummary: extraction.summary,
-        extractedFields: extraction.fields,
-        metadata: {
-          ...doc.metadata,
-          indexRef,
-          extractedAt: new Date().toISOString(),
+    return this.database.runInTransaction(ctx, async (uow) => {
+      const updated = await uow.documents.update(
+        id,
+        {
+          status: "indexed",
+          aiSummary: extraction.summary,
+          extractedFields: extraction.fields,
+          metadata: {
+            ...doc.metadata,
+            indexRef,
+            extractedAt: new Date().toISOString(),
+          },
         },
-      },
-      ctx,
-      "Document"
-    );
+        uow.context,
+        "Document"
+      );
 
-    return updated;
+      return updated;
+    });
   }
 
   /**
@@ -165,20 +160,23 @@ export class DocumentService {
     const doc = await this.database.documentsRepo.findById(id, ctx, "Document");
     await this.storage.deleteObject(doc.storageKey);
     await this.searchIndex.removeDocument(ctx.organizationId, doc.id);
-    const result = await this.database.documentsRepo.delete(id, ctx, "Document");
 
-    this.database.recordAuditLog({
-      organizationId: ctx.organizationId,
-      actorId: ctx.userId,
-      actorEmail: ctx.userEmail,
-      action: "document:delete",
-      resource: "Document",
-      resourceId: id,
-      requestId: ctx.requestId,
-      status: "success",
+    return this.database.runInTransaction(ctx, async (uow) => {
+      const result = await uow.documents.delete(id, uow.context, "Document");
+
+      await uow.recordAuditLog({
+        organizationId: uow.context.organizationId,
+        actorId: uow.context.userId,
+        actorEmail: uow.context.userEmail,
+        action: "document:delete",
+        resource: "Document",
+        resourceId: id,
+        requestId: uow.context.requestId,
+        status: "success",
+      });
+
+      return result;
     });
-
-    return result;
   }
 
   /**
