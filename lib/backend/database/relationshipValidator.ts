@@ -27,6 +27,7 @@ import {
   NotFoundError,
   CrossTenantViolationError,
   ValidationError,
+  ConflictError,
 } from "../core/errors";
 
 export interface IEntityLookupStore {
@@ -601,6 +602,269 @@ export class RelationshipValidator {
           throw new ValidationError(
             `Unsupported sourceEntityType '${String(entityType)}'`
           );
+      }
+    }
+  }
+
+  /**
+   * Validate that a Customer has no dependent records before deletion.
+   */
+  public static validateCustomerCanBeDeleted(
+    customerId: string,
+    ctx: TenantContext,
+    store?: IEntityLookupStore
+  ): void {
+    if (!store) return;
+
+    // 1. Contracts
+    if (store.contracts) {
+      const activeContracts = Array.from(store.contracts.values()).filter(
+        (c) => c.organizationId === ctx.organizationId && c.customerId === customerId
+      );
+      if (activeContracts.length > 0) {
+        throw new ConflictError(
+          `Cannot delete Customer because dependent Contract records exist (${activeContracts.length} found)`,
+          {
+            resource: "Customer",
+            resourceId: customerId,
+            dependency: "Contract",
+            count: activeContracts.length,
+          }
+        );
+      }
+    }
+
+    // 2. Transactions
+    if (store.transactions) {
+      const activeTxns = Array.from(store.transactions.values()).filter(
+        (t) => t.organizationId === ctx.organizationId && t.customerId === customerId
+      );
+      if (activeTxns.length > 0) {
+        throw new ConflictError(
+          `Cannot delete Customer because dependent Transaction records exist (${activeTxns.length} found)`,
+          {
+            resource: "Customer",
+            resourceId: customerId,
+            dependency: "Transaction",
+            count: activeTxns.length,
+          }
+        );
+      }
+    }
+
+    // 3. Documents
+    if (store.documents) {
+      const activeDocs = Array.from(store.documents.values()).filter(
+        (d) => d.organizationId === ctx.organizationId && d.customerId === customerId
+      );
+      if (activeDocs.length > 0) {
+        throw new ConflictError(
+          `Cannot delete Customer because dependent Document records exist (${activeDocs.length} found)`,
+          {
+            resource: "Customer",
+            resourceId: customerId,
+            dependency: "Document",
+            count: activeDocs.length,
+          }
+        );
+      }
+    }
+
+    // 4. ValueOpportunity polymorphic references
+    if (store.opportunities) {
+      const activeOpps = Array.from(store.opportunities.values()).filter(
+        (o) =>
+          o.organizationId === ctx.organizationId &&
+          o.sourceEntityType === "Customer" &&
+          o.sourceEntityId === customerId
+      );
+      if (activeOpps.length > 0) {
+        throw new ConflictError(
+          `Cannot delete Customer because dependent ValueOpportunity records exist (${activeOpps.length} found)`,
+          {
+            resource: "Customer",
+            resourceId: customerId,
+            dependency: "ValueOpportunity",
+            count: activeOpps.length,
+          }
+        );
+      }
+    }
+  }
+
+  /**
+   * Validate that a Contract has no dependent records before deletion.
+   */
+  public static validateContractCanBeDeleted(
+    contractId: string,
+    ctx: TenantContext,
+    store?: IEntityLookupStore
+  ): void {
+    if (!store) return;
+
+    if (store.opportunities) {
+      const activeOpps = Array.from(store.opportunities.values()).filter(
+        (o) =>
+          o.organizationId === ctx.organizationId &&
+          o.sourceEntityType === "Contract" &&
+          o.sourceEntityId === contractId
+      );
+      if (activeOpps.length > 0) {
+        throw new ConflictError(
+          `Cannot delete Contract because dependent ValueOpportunity records exist (${activeOpps.length} found)`,
+          {
+            resource: "Contract",
+            resourceId: contractId,
+            dependency: "ValueOpportunity",
+            count: activeOpps.length,
+          }
+        );
+      }
+    }
+  }
+
+  /**
+   * Validate that a Transaction has no dependent records before deletion.
+   */
+  public static validateTransactionCanBeDeleted(
+    transactionId: string,
+    ctx: TenantContext,
+    store?: IEntityLookupStore
+  ): void {
+    if (!store) return;
+
+    if (store.opportunities) {
+      const activeOpps = Array.from(store.opportunities.values()).filter(
+        (o) =>
+          o.organizationId === ctx.organizationId &&
+          o.sourceEntityType === "Transaction" &&
+          o.sourceEntityId === transactionId
+      );
+      if (activeOpps.length > 0) {
+        throw new ConflictError(
+          `Cannot delete Transaction because dependent ValueOpportunity records exist (${activeOpps.length} found)`,
+          {
+            resource: "Transaction",
+            resourceId: transactionId,
+            dependency: "ValueOpportunity",
+            count: activeOpps.length,
+          }
+        );
+      }
+    }
+  }
+
+  /**
+   * Validate that a Signal has no dependent records before deletion.
+   */
+  public static validateSignalCanBeDeleted(
+    signalId: string,
+    ctx: TenantContext,
+    store?: IEntityLookupStore
+  ): void {
+    if (!store) return;
+
+    if (store.opportunities) {
+      const activeOpps = Array.from(store.opportunities.values()).filter(
+        (o) =>
+          o.organizationId === ctx.organizationId &&
+          o.sourceEntityType === "Signal" &&
+          o.sourceEntityId === signalId
+      );
+      if (activeOpps.length > 0) {
+        throw new ConflictError(
+          `Cannot delete Signal because dependent ValueOpportunity records exist (${activeOpps.length} found)`,
+          {
+            resource: "Signal",
+            resourceId: signalId,
+            dependency: "ValueOpportunity",
+            count: activeOpps.length,
+          }
+        );
+      }
+    }
+  }
+
+  /**
+   * Validate that a Document has no dependent records before deletion.
+   */
+  public static validateDocumentCanBeDeleted(
+    docId: string,
+    ctx: TenantContext,
+    store?: IEntityLookupStore
+  ): void {
+    if (!store) return;
+
+    if (store.knowledge) {
+      const activeKnowledge = Array.from(store.knowledge.values()).filter(
+        (k) => k.organizationId === ctx.organizationId && k.sourceDocId === docId
+      );
+      if (activeKnowledge.length > 0) {
+        throw new ConflictError(
+          `Cannot delete Document because dependent Knowledge records exist (${activeKnowledge.length} found)`,
+          {
+            resource: "Document",
+            resourceId: docId,
+            dependency: "Knowledge",
+            count: activeKnowledge.length,
+          }
+        );
+      }
+    }
+  }
+
+  /**
+   * Validate that a Workflow has no dependent records before deletion.
+   */
+  public static validateWorkflowCanBeDeleted(
+    workflowId: string,
+    ctx: TenantContext,
+    store?: IEntityLookupStore
+  ): void {
+    if (!store) return;
+
+    if (store.workflowRuns) {
+      const activeRuns = Array.from(store.workflowRuns.values()).filter(
+        (r) => r.organizationId === ctx.organizationId && r.workflowId === workflowId
+      );
+      if (activeRuns.length > 0) {
+        throw new ConflictError(
+          `Cannot delete Workflow because dependent WorkflowRun records exist (${activeRuns.length} found)`,
+          {
+            resource: "Workflow",
+            resourceId: workflowId,
+            dependency: "WorkflowRun",
+            count: activeRuns.length,
+          }
+        );
+      }
+    }
+  }
+
+  /**
+   * Validate that a ValueOpportunity has no dependent records before deletion.
+   */
+  public static validateOpportunityCanBeDeleted(
+    opportunityId: string,
+    ctx: TenantContext,
+    store?: IEntityLookupStore
+  ): void {
+    if (!store) return;
+
+    if (store.valueCaptured) {
+      const activeCaptured = Array.from(store.valueCaptured.values()).filter(
+        (vc) => vc.organizationId === ctx.organizationId && vc.opportunityId === opportunityId
+      );
+      if (activeCaptured.length > 0) {
+        throw new ConflictError(
+          `Cannot delete ValueOpportunity because dependent ValueCaptured records exist (${activeCaptured.length} found)`,
+          {
+            resource: "ValueOpportunity",
+            resourceId: opportunityId,
+            dependency: "ValueCaptured",
+            count: activeCaptured.length,
+          }
+        );
       }
     }
   }

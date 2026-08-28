@@ -68,6 +68,30 @@ export class InMemoryCustomerRepository
   public async findAtRisk(ctx: TenantContext): Promise<CustomerRecord[]> {
     return this.findMany(ctx, (c) => c.status === "at-risk" || c.healthScore < 70);
   }
+
+  public override async delete(
+    id: string,
+    ctx: TenantContext,
+    resourceName: string = this.collectionName
+  ): Promise<boolean> {
+    await this.findById(id, ctx, resourceName);
+    RelationshipValidator.validateCustomerCanBeDeleted(id, ctx, this.entityLookupStore);
+    const deleted = this.store.delete(id);
+    if (deleted && this.entityLookupStore?.recordAuditLog) {
+      this.entityLookupStore.recordAuditLog({
+        organizationId: ctx.organizationId,
+        actorId: ctx.userId,
+        actorEmail: ctx.userEmail,
+        action: "customer:delete",
+        resource: "Customer",
+        resourceId: id,
+        requestId: ctx.requestId,
+        status: "success",
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return deleted;
+  }
 }
 
 export class InMemoryContractRepository
@@ -107,6 +131,30 @@ export class InMemoryContractRepository
       });
     }
     return super.update(id, updates, ctx, resourceName);
+  }
+
+  public override async delete(
+    id: string,
+    ctx: TenantContext,
+    resourceName: string = this.collectionName
+  ): Promise<boolean> {
+    await this.findById(id, ctx, resourceName);
+    RelationshipValidator.validateContractCanBeDeleted(id, ctx, this.entityLookupStore);
+    const deleted = this.store.delete(id);
+    if (deleted && this.entityLookupStore?.recordAuditLog) {
+      this.entityLookupStore.recordAuditLog({
+        organizationId: ctx.organizationId,
+        actorId: ctx.userId,
+        actorEmail: ctx.userEmail,
+        action: "contract:delete",
+        resource: "Contract",
+        resourceId: id,
+        requestId: ctx.requestId,
+        status: "success",
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return deleted;
   }
 
   public async findByCustomer(customerId: string, ctx: TenantContext): Promise<ContractRecord[]> {
@@ -155,6 +203,30 @@ export class InMemoryTransactionRepository
       });
     }
     return super.update(id, updates, ctx, resourceName);
+  }
+
+  public override async delete(
+    id: string,
+    ctx: TenantContext,
+    resourceName: string = this.collectionName
+  ): Promise<boolean> {
+    await this.findById(id, ctx, resourceName);
+    RelationshipValidator.validateTransactionCanBeDeleted(id, ctx, this.entityLookupStore);
+    const deleted = this.store.delete(id);
+    if (deleted && this.entityLookupStore?.recordAuditLog) {
+      this.entityLookupStore.recordAuditLog({
+        organizationId: ctx.organizationId,
+        actorId: ctx.userId,
+        actorEmail: ctx.userEmail,
+        action: "transaction:delete",
+        resource: "Transaction",
+        resourceId: id,
+        requestId: ctx.requestId,
+        status: "success",
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return deleted;
   }
 
   public async findByCustomer(customerId: string, ctx: TenantContext): Promise<TransactionRecord[]> {
@@ -241,6 +313,30 @@ export class InMemorySignalRepository
     super(collectionName, store, onAuditViolation);
   }
 
+  public override async delete(
+    id: string,
+    ctx: TenantContext,
+    resourceName: string = this.collectionName
+  ): Promise<boolean> {
+    await this.findById(id, ctx, resourceName);
+    RelationshipValidator.validateSignalCanBeDeleted(id, ctx, this.entityLookupStore);
+    const deleted = this.store.delete(id);
+    if (deleted && this.entityLookupStore?.recordAuditLog) {
+      this.entityLookupStore.recordAuditLog({
+        organizationId: ctx.organizationId,
+        actorId: ctx.userId,
+        actorEmail: ctx.userEmail,
+        action: "signal:delete",
+        resource: "Signal",
+        resourceId: id,
+        requestId: ctx.requestId,
+        status: "success",
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return deleted;
+  }
+
   public async findActiveByCategory(category: string, ctx: TenantContext): Promise<SignalRecord[]> {
     return this.findMany(ctx, (s) => s.status === "active" && (category === "all" || s.category === category));
   }
@@ -292,6 +388,30 @@ export class InMemoryValueOpportunityRepository
       );
     }
     return super.update(id, updates, ctx, resourceName);
+  }
+
+  public override async delete(
+    id: string,
+    ctx: TenantContext,
+    resourceName: string = this.collectionName
+  ): Promise<boolean> {
+    await this.findById(id, ctx, resourceName);
+    RelationshipValidator.validateOpportunityCanBeDeleted(id, ctx, this.entityLookupStore);
+    const deleted = this.store.delete(id);
+    if (deleted && this.entityLookupStore?.recordAuditLog) {
+      this.entityLookupStore.recordAuditLog({
+        organizationId: ctx.organizationId,
+        actorId: ctx.userId,
+        actorEmail: ctx.userEmail,
+        action: "valueopportunity:delete",
+        resource: "ValueOpportunity",
+        resourceId: id,
+        requestId: ctx.requestId,
+        status: "success",
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return deleted;
   }
 
   public async findByCategory(category: string, ctx: TenantContext): Promise<ValueOpportunityRecord[]> {
@@ -450,6 +570,30 @@ export class InMemoryDocumentRepository
   public async findByStatus(status: string, ctx: TenantContext): Promise<DocumentRecord[]> {
     return this.findMany(ctx, (d) => status === "all" || d.status === status);
   }
+
+  public override async delete(
+    id: string,
+    ctx: TenantContext,
+    resourceName: string = this.collectionName
+  ): Promise<boolean> {
+    await this.findById(id, ctx, resourceName);
+    RelationshipValidator.validateDocumentCanBeDeleted(id, ctx, this.entityLookupStore);
+    const deleted = this.store.delete(id);
+    if (deleted && this.entityLookupStore?.recordAuditLog) {
+      this.entityLookupStore.recordAuditLog({
+        organizationId: ctx.organizationId,
+        actorId: ctx.userId,
+        actorEmail: ctx.userEmail,
+        action: "document:delete",
+        resource: "Document",
+        resourceId: id,
+        requestId: ctx.requestId,
+        status: "success",
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return deleted;
+  }
 }
 
 export class InMemoryKnowledgeRepository
@@ -523,6 +667,30 @@ export class InMemoryWorkflowRepository
     protected readonly entityLookupStore?: IEntityLookupStore
   ) {
     super(collectionName, store, onAuditViolation);
+  }
+
+  public override async delete(
+    id: string,
+    ctx: TenantContext,
+    resourceName: string = this.collectionName
+  ): Promise<boolean> {
+    await this.findById(id, ctx, resourceName);
+    RelationshipValidator.validateWorkflowCanBeDeleted(id, ctx, this.entityLookupStore);
+    const deleted = this.store.delete(id);
+    if (deleted && this.entityLookupStore?.recordAuditLog) {
+      this.entityLookupStore.recordAuditLog({
+        organizationId: ctx.organizationId,
+        actorId: ctx.userId,
+        actorEmail: ctx.userEmail,
+        action: "workflow:delete",
+        resource: "Workflow",
+        resourceId: id,
+        requestId: ctx.requestId,
+        status: "success",
+        timestamp: new Date().toISOString(),
+      });
+    }
+    return deleted;
   }
 
   public async findActive(ctx: TenantContext): Promise<WorkflowRecord[]> {

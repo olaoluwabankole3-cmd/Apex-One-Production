@@ -7,6 +7,7 @@ import { runFrontendAuthCompatibilityTestSuite } from "../lib/backend/tests/fron
 import { runCustomerDataTruthfulnessTestSuite } from "../lib/backend/tests/customerDataTruthfulness.test";
 import { runFinancialIntegrityTestSuite } from "../lib/backend/tests/financialIntegrity.test";
 import { runRelationshipIntegrityTestSuite } from "../lib/backend/tests/relationshipIntegrity.test";
+import { runEntityLifecycleIntegrityTestSuite } from "../lib/backend/tests/entityLifecycleIntegrity.test";
 
 async function main() {
   console.log("================================================================================");
@@ -14,12 +15,20 @@ async function main() {
   console.log("================================================================================\n");
 
   const start = performance.now();
-  const [backendSummary, frontendSummary, customerSummary, financialSummary, relationshipSummary] = await Promise.all([
+  const [
+    backendSummary,
+    frontendSummary,
+    customerSummary,
+    financialSummary,
+    relationshipSummary,
+    lifecycleSummary,
+  ] = await Promise.all([
     runTenantIsolationTestSuite(),
     runFrontendAuthCompatibilityTestSuite(),
     runCustomerDataTruthfulnessTestSuite(),
     runFinancialIntegrityTestSuite(),
     runRelationshipIntegrityTestSuite(),
+    runEntityLifecycleIntegrityTestSuite(),
   ]);
   const duration = Math.round(performance.now() - start);
 
@@ -29,25 +38,29 @@ async function main() {
     ...customerSummary.results,
     ...financialSummary.results,
     ...relationshipSummary.results,
+    ...lifecycleSummary.results,
   ];
   const total =
     backendSummary.total +
     frontendSummary.total +
     customerSummary.total +
     financialSummary.total +
-    relationshipSummary.total;
+    relationshipSummary.total +
+    lifecycleSummary.total;
   const passedCount =
     backendSummary.passedCount +
     frontendSummary.passedCount +
     customerSummary.passedCount +
     financialSummary.passedCount +
-    relationshipSummary.passedCount;
+    relationshipSummary.passedCount +
+    lifecycleSummary.passedCount;
   const failedCount =
     backendSummary.failedCount +
     frontendSummary.failedCount +
     customerSummary.failedCount +
     financialSummary.failedCount +
-    relationshipSummary.failedCount;
+    relationshipSummary.failedCount +
+    lifecycleSummary.failedCount;
   const passed = failedCount === 0;
 
   // Group results by suite
