@@ -1,5 +1,21 @@
 /**
- * APEX ONE — Security, Authentication Tokens, and Context Resolver
+ * APEX ONE — Security, Authentication Tokens, and Tenant Context Resolver
+ *
+ * Security invariants:
+ *
+ * 1. Authentication establishes the trusted tenant context.
+ * 2. Client-supplied organization identifiers are never trusted by this module.
+ * 3. Unknown roles fail closed and receive no permissions.
+ * 4. Authorization checks are capability-based.
+ * 5. Production authentication never falls back to demo identity.
+ * 6. This module does not statically import the authentication provider.
+ *    This prevents a runtime circular dependency:
+ *
+ *      security.ts → authProvider.ts → security.ts
+ *
+ * 7. Session tokens are treated as opaque credentials.
+ * 8. Malformed authentication input fails with 401 rather than leaking
+ *    implementation errors.
  */
 
 import {
@@ -12,9 +28,10 @@ import {
   CrossTenantViolationError,
 } from "./errors";
 import { generateSecureRequestId } from "./crypto";
-import { defaultSessionStore, ISessionStore } from "../domains/auth/authProvider";
+import type { ISessionStore } from "../domains/auth/authProvider";
 
 export type { TenantContext, PermissionCapability };
+
 export {
   UnauthorizedError,
   ForbiddenError,
@@ -23,8 +40,14 @@ export {
   CrossTenantViolationError,
 };
 
-// Role-to-Permission capabilities matrix
-export const ROLE_PERMISSIONS: Record<string, PermissionCapability[]> = {
+/**
+ * Canonical application roles currently supported by the backend.
+ *
+ * IMPORTANT:
+ * Do not add a fallback role here.
+ * An unrecognized role must fail closed.
+ */
+export const ROLE_PERMISSIONS = {
   CEO: [
     "org:read",
     "org:write",
@@ -131,9 +154,14 @@ export const ROLE_PERMISSIONS: Record<string, PermissionCapability[]> = {
     "action:cancel",
     "audit:read",
   ],
-};
+} as const satisfies Record<string, readonly PermissionCapability[]>;
+
+export type ApplicationRole = keyof typeof ROLE_PERMISSIONS;
 
 export const AUTH_COOKIE_NAME = "apex_session";
+
+const DEFAULT_SESSION_TTL_SECONDS = 86_400; // 24 hours
+const MAX_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
 
 export interface SessionCookieOptions {
   name: string;
@@ -146,21 +174,78 @@ export interface SessionCookieOptions {
   expires?: Date;
 }
 
-export function getSessionCookieOptions(ttlSeconds: number = 86400): Omit<SessionCookieOptions, "value"> {
-  const isProduction = process.env.NODE_ENV === "production" || process.env.APP_ENV === "production";
+/**
+ * Returns whether the current process is explicitly operating in production.
+ */
+function isProductionEnvironment(): boolean {
+  return (
+    process.env.NODE_ENV === "production" ||
+    process.env.APP_ENV === "production"
+  );
+}
+
+/**
+ * Returns whether explicit development-only demo authentication is enabled.
+ *
+ * Demo authentication is deliberately impossible when the process is marked
+ * as production.
+ */
+function isDevelopmentDemoAuthenticationEnabled(): boolean {
+  if (isProductionEnvironment()) {
+    return false;
+  }
+
+  const isDevelopment =
+    process.env.NODE_ENV === "development" ||
+    process.env.APP_ENV === "development";
+
+  return isDevelopment && process.env.DEMO_MODE === "true";
+}
+
+/**
+ * Validate and normalize a session TTL.
+ *
+ * Missing TTL uses the secure default.
+ * Invalid, zero, negative, fractional, or excessive values are rejected
+ * instead of silently producing an invalid cookie.
+ */
+function normalizeSessionTtl(ttlSeconds: number): number {
+  if (!Number.isInteger(ttlSeconds) || ttlSeconds <= 0) {
+    throw new ValidationError(
+      "Session TTL must be a positive integer number of seconds"
+    );
+  }
+
+  if (ttlSeconds > MAX_SESSION_TTL_SECONDS) {
+    throw new ValidationError(
+      `Session TTL cannot exceed ${MAX_SESSION_TTL_SECONDS} seconds`
+    );
+  }
+
+  return ttlSeconds;
+}
+
+export function getSessionCookieOptions(
+  ttlSeconds: number = DEFAULT_SESSION_TTL_SECONDS
+): Omit<SessionCookieOptions, "value"> {
+  const normalizedTtl = normalizeSessionTtl(ttlSeconds);
+
+  const isProduction = isProductionEnvironment();
+
   return {
     name: AUTH_COOKIE_NAME,
     httpOnly: true,
     secure: isProduction,
     sameSite: "lax",
     path: "/",
-    maxAge: ttlSeconds,
-    expires: new Date(Date.now() + ttlSeconds * 1000),
+    maxAge: normalizedTtl,
+    expires: new Date(Date.now() + normalizedTtl * 1000),
   };
 }
 
 export function getClearSessionCookieOptions(): SessionCookieOptions {
-  const isProduction = process.env.NODE_ENV === "production" || process.env.APP_ENV === "production";
+  const isProduction = isProductionEnvironment();
+
   return {
     name: AUTH_COOKIE_NAME,
     value: "",
@@ -194,125 +279,348 @@ export interface AuthSession {
   userAgent?: string;
 }
 
+/**
+ * Returns true only for a currently supported application role.
+ */
+export function isApplicationRole(role: unknown): role is ApplicationRole {
+  return typeof role === "string" && role in ROLE_PERMISSIONS;
+}
+
+/**
+ * Resolve permissions for a role.
+ *
+ * SECURITY REQUIREMENT:
+ * Unknown roles MUST fail closed.
+ *
+ * We intentionally do NOT return Operations or any other default role.
+ */
+export function getPermissionsForRole(
+  role: unknown
+): readonly PermissionCapability[] {
+  if (!isApplicationRole(role)) {
+    throw new ValidationError(
+      `Unsupported application role '${String(role)}'`
+    );
+  }
+
+  return ROLE_PERMISSIONS[role];
+}
+
+/**
+ * Create an authenticated session through the default session store.
+ *
+ * The authentication provider is dynamically imported so this core security
+ * module does not participate in a runtime circular dependency.
+ */
 export async function createSessionToken(
   user: { id: string; email: string; name: string },
   org: { id: string; name: string },
   role: string
 ): Promise<AuthSession> {
-  const permissions = ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS["Operations"];
+  const permissions = getPermissionsForRole(role);
+
+  const { defaultSessionStore } = await import(
+    "../domains/auth/authProvider"
+  );
+
   return defaultSessionStore.createSession({
     user,
     org,
     role,
-    permissions,
+    permissions: [...permissions],
   });
 }
 
-export async function getSession(token: string): Promise<AuthSession | undefined> {
-  return defaultSessionStore.getSession(token);
-}
+/**
+ * Retrieve a session through the default session store.
+ */
+export async function getSession(
+  token: string
+): Promise<AuthSession | undefined> {
+  const normalizedToken = normalizeSessionToken(token);
 
-export async function revokeSession(token: string): Promise<boolean> {
-  return defaultSessionStore.revokeSession(token);
+  if (!normalizedToken) {
+    return undefined;
+  }
+
+  const { defaultSessionStore } = await import(
+    "../domains/auth/authProvider"
+  );
+
+  return defaultSessionStore.getSession(normalizedToken);
 }
 
 /**
- * Helper to parse cookie string from headers
+ * Revoke a session through the default session store.
  */
-function parseCookieHeader(cookieHeader?: string): Record<string, string> {
-  if (!cookieHeader || typeof cookieHeader !== "string") return {};
-  const cookies: Record<string, string> = {};
-  const pairs = cookieHeader.split(";");
-  for (const pair of pairs) {
-    const idx = pair.indexOf("=");
-    if (idx > 0) {
-      const key = pair.substring(0, idx).trim();
-      const val = pair.substring(idx + 1).trim();
-      cookies[key] = decodeURIComponent(val);
-    }
+export async function revokeSession(token: string): Promise<boolean> {
+  const normalizedToken = normalizeSessionToken(token);
+
+  if (!normalizedToken) {
+    return false;
   }
+
+  const { defaultSessionStore } = await import(
+    "../domains/auth/authProvider"
+  );
+
+  return defaultSessionStore.revokeSession(normalizedToken);
+}
+
+/**
+ * Validate an opaque session token.
+ *
+ * We deliberately do not impose a token format here because the session
+ * provider owns token generation. This function only rejects empty input.
+ */
+function normalizeSessionToken(token: unknown): string | undefined {
+  if (typeof token !== "string") {
+    return undefined;
+  }
+
+  const normalized = token.trim();
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+/**
+ * Safely parse an HTTP Cookie header.
+ *
+ * Malformed percent-encoding is ignored rather than allowed to escape as a
+ * URIError and become a 500 response.
+ */
+function parseCookieHeader(
+  cookieHeader?: string
+): Record<string, string> {
+  if (!cookieHeader || typeof cookieHeader !== "string") {
+    return {};
+  }
+
+  const cookies: Record<string, string> = {};
+
+  for (const pair of cookieHeader.split(";")) {
+    const trimmedPair = pair.trim();
+
+    if (!trimmedPair) {
+      continue;
+    }
+
+    const separatorIndex = trimmedPair.indexOf("=");
+
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const key = trimmedPair.slice(0, separatorIndex).trim();
+    const rawValue = trimmedPair.slice(separatorIndex + 1).trim();
+
+    if (!key) {
+      continue;
+    }
+
+    let value: string;
+
+    try {
+      value = decodeURIComponent(rawValue);
+    } catch {
+      // Malformed cookie values are treated as unusable credentials.
+      continue;
+    }
+
+    cookies[key] = value;
+  }
+
   return cookies;
 }
 
 /**
- * Resolve the authenticated Tenant Context from request headers or HttpOnly cookies.
- * 
- * Rules:
- * 1. Checks Authorization: Bearer <token> first, then fallback to apex_session cookie.
- * 2. Missing, invalid, or expired session token strictly throws UnauthorizedError (401).
- * 3. In production mode, demo fallback is unconditionally disabled (even if DEMO_MODE=true).
- * 4. Client headers or body cannot override the trusted organizationId established by authenticated session.
+ * Extract a single request header from either a Fetch Headers object or the
+ * plain object shape used by some Node/server adapters.
+ */
+function getHeaderValue(
+  headers: Headers | Record<string, string | string[] | undefined>,
+  name: string
+): string | undefined {
+  if (headers instanceof Headers) {
+    const value = headers.get(name);
+    return value ?? undefined;
+  }
+
+  const directValue = headers[name];
+  const alternateValue =
+    headers[name.toLowerCase()] ?? headers[name[0].toUpperCase() + name.slice(1)];
+
+  const value = directValue ?? alternateValue;
+
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+
+  return value;
+}
+
+/**
+ * Extract a bearer token from an Authorization header.
+ *
+ * The authentication scheme is case-insensitive.
+ */
+function extractBearerToken(
+  authorizationHeader?: string
+): string | undefined {
+  if (!authorizationHeader) {
+    return undefined;
+  }
+
+  const trimmed = authorizationHeader.trim();
+
+  if (!trimmed) {
+    throw new UnauthorizedError("Authentication required: Empty Authorization header");
+  }
+
+  const separatorIndex = trimmed.indexOf(" ");
+
+  if (separatorIndex <= 0) {
+    throw new UnauthorizedError("Authentication failed: Invalid Authorization header");
+  }
+
+  const scheme = trimmed.slice(0, separatorIndex);
+  const credentials = trimmed.slice(separatorIndex + 1).trim();
+
+  if (scheme.toLowerCase() !== "bearer") {
+    throw new UnauthorizedError("Authentication failed: Unsupported authorization scheme");
+  }
+
+  if (!credentials) {
+    throw new UnauthorizedError("Authentication required: Empty Bearer token");
+  }
+
+  return normalizeSessionToken(credentials);
+}
+
+/**
+ * Resolve the authenticated Tenant Context from request headers or an
+ * HttpOnly session cookie.
+ *
+ * TRUST BOUNDARY:
+ *
+ * organizationId comes exclusively from the authenticated session.
+ * This function never reads organizationId from request body, query string,
+ * or arbitrary client headers.
+ *
+ * Authentication precedence:
+ *
+ * 1. Authorization: Bearer <token>
+ * 2. apex_session cookie
+ *
+ * If an Authorization header is present but malformed, authentication fails
+ * rather than silently falling back to a cookie.
  */
 export async function resolveTenantContext(
   headers: Headers | Record<string, string | string[] | undefined>,
-  sessionStore: ISessionStore = defaultSessionStore
+  sessionStore?: ISessionStore
 ): Promise<TenantContext> {
   const requestId = generateRequestId();
   const timestamp = new Date().toISOString();
 
-  // 1. Extract authorization header or cookie
-  let authHeader: string | undefined;
-  let cookieHeader: string | undefined;
-
-  if (headers instanceof Headers) {
-    authHeader = headers.get("authorization") || undefined;
-    cookieHeader = headers.get("cookie") || undefined;
-  } else {
-    const rawAuth = headers["authorization"] || headers["Authorization"];
-    authHeader = Array.isArray(rawAuth) ? rawAuth[0] : rawAuth;
-    const rawCookie = headers["cookie"] || headers["Cookie"];
-    cookieHeader = Array.isArray(rawCookie) ? rawCookie[0] : rawCookie;
-  }
+  const authorizationHeader = getHeaderValue(headers, "authorization");
+  const cookieHeader = getHeaderValue(headers, "cookie");
 
   let token: string | undefined;
 
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    token = authHeader.replace("Bearer ", "").trim();
-    if (!token) {
-      throw new UnauthorizedError("Authentication required: Empty Bearer token");
-    }
-  } else if (cookieHeader) {
-    const parsedCookies = parseCookieHeader(cookieHeader);
-    if (parsedCookies["apex_session"]) {
-      token = parsedCookies["apex_session"].trim();
-    }
+  if (authorizationHeader !== undefined) {
+    token = extractBearerToken(authorizationHeader);
+  } else if (cookieHeader !== undefined) {
+    const cookies = parseCookieHeader(cookieHeader);
+    token = normalizeSessionToken(cookies[AUTH_COOKIE_NAME]);
   }
 
-  // If no token could be extracted
+  /**
+   * Explicit development demo mode is the only unauthenticated path.
+   *
+   * This is intentionally impossible in production.
+   */
   if (!token) {
-    // Production safeguard: Demo mode is NEVER allowed in production environment
-    const isProduction = process.env.NODE_ENV === "production" || process.env.APP_ENV === "production";
-    const isExplicitDevDemo =
-      !isProduction &&
-      (process.env.APP_ENV === "development" || process.env.NODE_ENV === "development") &&
-      process.env.DEMO_MODE === "true";
-
-    if (isExplicitDevDemo) {
+    if (isDevelopmentDemoAuthenticationEnabled()) {
       return {
         organizationId: "apex-demo",
         userId: "usr-marcus-thorne",
         userEmail: "m.thorne@apexsync.ai",
         userRole: "CEO",
-        permissions: ROLE_PERMISSIONS["CEO"],
+        permissions: [...ROLE_PERMISSIONS.CEO],
         requestId,
         timestamp,
       };
     }
 
-    throw new UnauthorizedError("Authentication required: Missing Authorization Bearer token or session cookie");
+    throw new UnauthorizedError(
+      "Authentication required: Missing Authorization Bearer token or session cookie"
+    );
   }
 
-  const session = await sessionStore.getSession(token);
+  const store = sessionStore ?? (
+    await import("../domains/auth/authProvider")
+  ).defaultSessionStore;
+
+  const session = await store.getSession(token);
+
   if (!session) {
-    throw new UnauthorizedError("Authentication failed: Invalid or expired session token");
+    throw new UnauthorizedError(
+      "Authentication failed: Invalid or expired session token"
+    );
   }
+
+  /**
+   * A session is trusted only after it has been returned by the authoritative
+   * session store. We still validate its security-critical fields before
+   * creating the tenant context.
+   */
+  if (
+    typeof session.userId !== "string" ||
+    session.userId.trim().length === 0 ||
+    typeof session.organizationId !== "string" ||
+    session.organizationId.trim().length === 0 ||
+    typeof session.userEmail !== "string" ||
+    session.userEmail.trim().length === 0 ||
+    typeof session.role !== "string" ||
+    session.role.trim().length === 0
+  ) {
+    throw new UnauthorizedError(
+      "Authentication failed: Invalid session identity"
+    );
+  }
+
+  /**
+   * Never accept an unknown role as a legitimate authorization role.
+   */
+  if (!isApplicationRole(session.role)) {
+    throw new UnauthorizedError(
+      "Authentication failed: Session contains an unsupported role"
+    );
+  }
+
+  /**
+   * Session permissions are intentionally preserved here because the session
+   * store is authoritative for the issued session.
+   *
+   * However, the role must always be known. An unknown role can never create
+   * a tenant context.
+   */
+  const permissions = Array.isArray(session.permissions)
+    ? session.permissions.filter(
+        (permission): permission is PermissionCapability =>
+          typeof permission === "string" &&
+          (Object.values(ROLE_PERMISSIONS).flat() as readonly string[]).includes(
+            permission
+          )
+      )
+    : [];
 
   return {
     organizationId: session.organizationId,
     userId: session.userId,
     userEmail: session.userEmail,
     userRole: session.role,
-    permissions: session.permissions,
+    permissions,
     requestId,
     timestamp,
   };
@@ -320,9 +628,23 @@ export async function resolveTenantContext(
 
 /**
  * Verify that the TenantContext possesses a required permission capability.
+ *
+ * This function fails closed:
+ * - missing context → ForbiddenError
+ * - missing permissions → ForbiddenError
+ * - unknown runtime capability → ForbiddenError
  */
-export function requirePermission(ctx: TenantContext, permission: PermissionCapability) {
-  if (!ctx.permissions || !ctx.permissions.includes(permission)) {
-    throw new ForbiddenError(`Missing required capability '${permission}' for role '${ctx.userRole}'`);
+export function requirePermission(
+  ctx: TenantContext,
+  permission: PermissionCapability
+): void {
+  if (!ctx || !Array.isArray(ctx.permissions)) {
+    throw new ForbiddenError("Authorization context is invalid");
+  }
+
+  if (!ctx.permissions.includes(permission)) {
+    throw new ForbiddenError(
+      `Missing required capability '${permission}' for role '${ctx.userRole}'`
+    );
   }
 }
