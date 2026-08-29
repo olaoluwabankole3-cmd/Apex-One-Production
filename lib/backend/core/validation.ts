@@ -1,4 +1,3 @@
-```ts
 /**
  * APEX ONE — Request & Data Runtime Validation Engine
  *
