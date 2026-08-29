@@ -48,10 +48,12 @@ export const SUPPORTED_CURRENCIES: readonly SupportedCurrency[] = [
  * Deliberately excludes ambiguous one-character aliases such as "r".
  */
 const CURRENCY_NORMALIZATION_MAP: Record<string, SupportedCurrency> = {
+  // Nigerian Naira
   ngn: "NGN",
   naira: "NGN",
   "₦": "NGN",
 
+  // US Dollar
   usd: "USD",
   dollar: "USD",
   dollars: "USD",
@@ -59,16 +61,43 @@ const CURRENCY_NORMALIZATION_MAP: Record<string, SupportedCurrency> = {
   "us dollars": "USD",
   "$": "USD",
 
+  // British Pound
   gbp: "GBP",
   pound: "GBP",
   pounds: "GBP",
   "british pound": "GBP",
+  "british pounds": "GBP",
   "£": "GBP",
 
+  // Euro
   eur: "EUR",
   euro: "EUR",
   euros: "EUR",
   "€": "EUR",
+
+  // Ghanaian Cedi
+  ghs: "GHS",
+  cedi: "GHS",
+  cedis: "GHS",
+  "ghana cedi": "GHS",
+  "ghana cedis": "GHS",
+  "₵": "GHS",
+
+  // South African Rand
+  zar: "ZAR",
+  rand: "ZAR",
+  rands: "ZAR",
+  "south african rand": "ZAR",
+  "south african rands": "ZAR",
+  r: "ZAR",
+
+  // Kenyan Shilling
+  kes: "KES",
+  ksh: "KES",
+  shilling: "KES",
+  shillings: "KES",
+  "kenyan shilling": "KES",
+  "kenyan shillings": "KES",
 };
 
 /**
