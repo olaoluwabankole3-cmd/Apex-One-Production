@@ -47,6 +47,7 @@ export const SUPPORTED_CURRENCIES: readonly SupportedCurrency[] = [
  *
  * Deliberately excludes ambiguous one-character aliases such as "r".
  */
+
 const CURRENCY_NORMALIZATION_MAP: Record<string, SupportedCurrency> = {
   // Nigerian Naira
   ngn: "NGN",
@@ -89,7 +90,6 @@ const CURRENCY_NORMALIZATION_MAP: Record<string, SupportedCurrency> = {
   rands: "ZAR",
   "south african rand": "ZAR",
   "south african rands": "ZAR",
-  r: "ZAR",
 
   // Kenyan Shilling
   kes: "KES",
