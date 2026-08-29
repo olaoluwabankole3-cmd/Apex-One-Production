@@ -50,37 +50,25 @@ export const SUPPORTED_CURRENCIES: readonly SupportedCurrency[] = [
 const CURRENCY_NORMALIZATION_MAP: Record<string, SupportedCurrency> = {
   ngn: "NGN",
   naira: "NGN",
+  "₦": "NGN",
 
   usd: "USD",
   dollar: "USD",
   dollars: "USD",
   "us dollar": "USD",
   "us dollars": "USD",
+  "$": "USD",
 
   gbp: "GBP",
   pound: "GBP",
   pounds: "GBP",
   "british pound": "GBP",
+  "£": "GBP",
 
   eur: "EUR",
   euro: "EUR",
   euros: "EUR",
-
-  ghs: "GHS",
-  cedi: "GHS",
-  cedis: "GHS",
-  "ghana cedi": "GHS",
-  "ghana cedis": "GHS",
-
-  zar: "ZAR",
-  rand: "ZAR",
-  rands: "ZAR",
-  "south african rand": "ZAR",
-
-  kes: "KES",
-  ksh: "KES",
-  "kenyan shilling": "KES",
-  "kenyan shillings": "KES",
+  "€": "EUR",
 };
 
 /**
