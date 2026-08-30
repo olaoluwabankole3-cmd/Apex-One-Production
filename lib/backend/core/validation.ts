@@ -54,7 +54,7 @@ const CURRENCY_NORMALIZATION_MAP: Record<string, SupportedCurrency> = {
   naira: "NGN",
   "₦": "NGN",
 
-  // US Dollar
+  // United States Dollar
   usd: "USD",
   dollar: "USD",
   dollars: "USD",
@@ -99,7 +99,6 @@ const CURRENCY_NORMALIZATION_MAP: Record<string, SupportedCurrency> = {
   "kenyan shilling": "KES",
   "kenyan shillings": "KES",
 };
-
 /**
  * Conservative maximum for generic string arrays.
  *
