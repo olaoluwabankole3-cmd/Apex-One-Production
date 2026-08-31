@@ -7,8 +7,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const ctx = await resolveTenantContext(req.headers);
     const { id } = await params;
-    const runs = await workflowService.getWorkflowRuns(id, ctx);
-    return NextResponse.json({ success: true, count: runs.length, data: runs });
+    const searchParams = req.nextUrl.searchParams;
+    const limit = searchParams.get("limit") ? Number(searchParams.get("limit")) : undefined;
+    const cursor = searchParams.get("cursor");
+
+    const runs = await workflowService.getWorkflowRuns(id, ctx, { limit, cursor });
+    return NextResponse.json({
+      success: true,
+      data: runs.items,
+      nextCursor: runs.nextCursor,
+      cursor: runs.nextCursor,
+      hasMore: runs.hasMore,
+      count: runs.count,
+      totalCount: runs.totalCount,
+    });
   } catch (err: any) {
     if (err instanceof BackendError) {
       return NextResponse.json({ error: err.message, code: err.code }, { status: err.statusCode });

@@ -9,9 +9,18 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const type = searchParams.get("type") || undefined;
     const search = searchParams.get("search") || undefined;
+    const limitParam = searchParams.get("limit");
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+    const cursor = searchParams.get("cursor") || undefined;
 
-    const memories = await memoryService.getMemoryItems(ctx, { type, search });
-    return NextResponse.json({ success: true, count: memories.length, data: memories });
+    const result = await memoryService.getMemoryItems(ctx, { type, search, limit, cursor });
+    return NextResponse.json({
+      success: true,
+      data: result.items,
+      cursor: result.nextCursor,
+      hasMore: result.hasMore,
+      count: result.count,
+    });
   } catch (err: any) {
     if (err instanceof BackendError) {
       return NextResponse.json({ error: err.message, code: err.code }, { status: err.statusCode });

@@ -9,10 +9,17 @@ export async function GET(req: NextRequest) {
     const ctx = await resolveTenantContext(req.headers);
     const { searchParams } = new URL(req.url);
     const rawLimit = searchParams.get("limit");
-    const limit = rawLimit ? Validator.optionalNumber(Number(rawLimit), "limit", { min: 1, max: 500 }) ?? 50 : 50;
+    const limit = rawLimit ? parseInt(rawLimit, 10) : undefined;
+    const cursor = searchParams.get("cursor") || undefined;
 
-    const logs = await auditService.getAuditLogs(ctx, limit);
-    return NextResponse.json({ success: true, count: logs.length, data: logs });
+    const result = await auditService.getAuditLogs(ctx, { limit, cursor });
+    return NextResponse.json({
+      success: true,
+      data: result.items,
+      cursor: result.nextCursor,
+      hasMore: result.hasMore,
+      count: result.count,
+    });
   } catch (err: any) {
     if (err instanceof BackendError) {
       return NextResponse.json({ error: err.message, code: err.code }, { status: err.statusCode });

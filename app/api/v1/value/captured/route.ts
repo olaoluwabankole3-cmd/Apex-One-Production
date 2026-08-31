@@ -6,8 +6,19 @@ import { BackendError } from "@/lib/backend/core/errors";
 export async function GET(req: NextRequest) {
   try {
     const ctx = await resolveTenantContext(req.headers);
-    const ledger = await valueService.getCapturedLedger(ctx);
-    return NextResponse.json({ success: true, count: ledger.length, data: ledger });
+    const { searchParams } = new URL(req.url);
+    const limitParam = searchParams.get("limit");
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+    const cursor = searchParams.get("cursor") || undefined;
+
+    const result = await valueService.getCapturedLedger(ctx, { limit, cursor });
+    return NextResponse.json({
+      success: true,
+      data: result.items,
+      cursor: result.nextCursor,
+      hasMore: result.hasMore,
+      count: result.count,
+    });
   } catch (err: any) {
     if (err instanceof BackendError) {
       return NextResponse.json({ error: err.message, code: err.code }, { status: err.statusCode });

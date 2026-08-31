@@ -8,9 +8,18 @@ export async function GET(req: NextRequest) {
     const ctx = await resolveTenantContext(req.headers);
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status") || undefined;
+    const limitParam = searchParams.get("limit");
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+    const cursor = searchParams.get("cursor") || undefined;
 
-    const actions = await actionService.getActions(ctx, status);
-    return NextResponse.json({ success: true, count: actions.length, data: actions });
+    const result = await actionService.getActions(ctx, { status, limit, cursor });
+    return NextResponse.json({
+      success: true,
+      data: result.items,
+      cursor: result.nextCursor,
+      hasMore: result.hasMore,
+      count: result.count,
+    });
   } catch (err: any) {
     if (err instanceof BackendError) {
       return NextResponse.json({ error: err.message, code: err.code }, { status: err.statusCode });

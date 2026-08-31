@@ -910,8 +910,8 @@ export async function runEntityLifecycleIntegrityTestSuite(): Promise<SuiteSumma
 
       await db.customersRepo.delete(cust.id, ctxA);
 
-      const logs = await db.auditLogsRepo.findMany(ctxA, 10);
-      const deleteLog = logs.find(
+      const logs = await db.auditLogsRepo.findMany(ctxA, { limit: 10 });
+      const deleteLog = logs.items.find(
         (l) => l.action === "customer:delete" && l.resourceId === cust.id
       );
 

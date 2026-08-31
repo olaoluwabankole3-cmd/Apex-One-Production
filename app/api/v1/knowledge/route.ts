@@ -11,13 +11,18 @@ export async function GET(req: NextRequest) {
     const query = searchParams.get("query") || undefined;
     const tag = searchParams.get("tag");
     const tags = tag ? [tag] : undefined;
+    const limitParam = searchParams.get("limit");
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+    const cursor = searchParams.get("cursor") || undefined;
 
-    const items = await knowledgeService.getKnowledgeItems(ctx, { category, query, tags });
+    const result = await knowledgeService.getKnowledgeItems(ctx, { category, query, tags, limit, cursor });
     return NextResponse.json({
       success: true,
-      count: items.length,
+      data: result.items,
+      cursor: result.nextCursor,
+      hasMore: result.hasMore,
+      count: result.count,
       organizationId: ctx.organizationId,
-      data: items,
     });
   } catch (err: any) {
     if (err instanceof BackendError) {

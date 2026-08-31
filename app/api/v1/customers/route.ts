@@ -10,13 +10,18 @@ export async function GET(req: NextRequest) {
     const tier = searchParams.get("tier") || undefined;
     const status = searchParams.get("status") || undefined;
     const search = searchParams.get("search") || undefined;
+    const limitParam = searchParams.get("limit");
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+    const cursor = searchParams.get("cursor") || undefined;
 
-    const customers = await customerService.getCustomers(ctx, { tier, status, search });
+    const result = await customerService.getCustomers(ctx, { tier, status, search, limit, cursor });
     return NextResponse.json({
       success: true,
-      count: customers.length,
+      data: result.items,
+      cursor: result.nextCursor,
+      hasMore: result.hasMore,
+      count: result.count,
       organizationId: ctx.organizationId,
-      data: customers,
     });
   } catch (err: any) {
     if (err instanceof BackendError) {

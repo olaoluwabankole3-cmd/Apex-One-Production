@@ -35,8 +35,8 @@ export async function POST(req: NextRequest) {
     // Dynamic ground context strictly from authenticated tenant data
     const customers = await db.customersRepo.findMany(ctx);
     const opps = await db.opportunitiesRepo.findMany(ctx);
-    const totalArr = customers.reduce((sum, c) => sum + (c.arr || 0), 0);
-    const totalOpps = opps.reduce((sum, o) => sum + (o.potentialValue || 0), 0);
+    const totalArr = customers.items.reduce((sum: number, c) => sum + (c.arr || 0), 0);
+    const totalOpps = opps.items.reduce((sum: number, o) => sum + (o.potentialValue || 0), 0);
 
     db.recordAuditLog({
       organizationId: ctx.organizationId,
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
       resourceId: "generate",
       requestId: ctx.requestId,
       status: "success",
-      metadata: { promptLength: validatedPrompt.length, monitoredAccounts: customers.length },
+      metadata: { promptLength: validatedPrompt.length, monitoredAccounts: customers.items.length },
       timestamp: new Date().toISOString(),
     });
 
@@ -60,8 +60,8 @@ export async function POST(req: NextRequest) {
         systemInstruction: `You are APEX ONE Executive Intelligence Analyst for ${orgName}.
 Monitored Organization Context:
 - Currency: ${currency}
-- Monitored Accounts: ${customers.length} (Total ARR: ${currency}${totalArr.toLocaleString()})
-- Identified Value Opportunities: ${opps.length} (Total: ${currency}${totalOpps.toLocaleString()})
+- Monitored Accounts: ${customers.items.length} (Total ARR: ${currency}${totalArr.toLocaleString()})
+- Identified Value Opportunities: ${opps.items.length} (Total: ${currency}${totalOpps.toLocaleString()})
 
 When replying to queries about executive intelligence, financial analysis, audits, or operational strategy:
 1. Provide structured, authoritative, and scannable insights.

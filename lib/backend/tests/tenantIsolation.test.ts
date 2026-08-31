@@ -1040,12 +1040,12 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
 
   await testCase("Customer Domain", "Customer list and search queries are strictly tenant-scoped", async () => {
     const list = await customerService.getCustomers(tenantAContext);
-    const leaked = list.some((c) => c.organizationId !== "apex-demo");
+    const leaked = list.items.some((c) => c.organizationId !== "apex-demo");
     if (leaked) throw new Error("Cross-tenant customer record leaked in getCustomers");
-    if (list.length === 0) throw new Error("Expected Tenant A customer records");
+    if (list.items.length === 0) throw new Error("Expected Tenant A customer records");
 
     const searchResults = await customerService.getCustomers(tenantAContext, { search: "Dangote" });
-    if (searchResults.some((c) => c.organizationId !== "apex-demo")) {
+    if (searchResults.items.some((c) => c.organizationId !== "apex-demo")) {
       throw new Error("Cross-tenant record leaked in search");
     }
   });
@@ -1056,7 +1056,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
       throw new Error("Tenant B failed to read own customer");
     }
     const listB = await customerService.getCustomers(tenantBContext);
-    if (listB.some((c) => c.organizationId !== "org-titan-corp")) {
+    if (listB.items.some((c) => c.organizationId !== "org-titan-corp")) {
       throw new Error("Tenant B customer list leaked Tenant A records");
     }
   });
@@ -1104,11 +1104,11 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
 
   await testCase("Contract Domain", "Contract queries (findByCustomer, findExpiringSoon) strictly tenant-scoped", async () => {
     const expiring = await db.contractsRepo.findExpiringSoon(365, tenantAContext);
-    if (expiring.some((c) => c.organizationId !== "apex-demo")) {
+    if (expiring.items.some((c) => c.organizationId !== "apex-demo")) {
       throw new Error("Cross-tenant contract leaked in findExpiringSoon");
     }
     const customerContracts = await db.contractsRepo.findByCustomer("cust-dangote", tenantAContext);
-    if (customerContracts.some((c) => c.organizationId !== "apex-demo")) {
+    if (customerContracts.items.some((c) => c.organizationId !== "apex-demo")) {
       throw new Error("Cross-tenant contract leaked in findByCustomer");
     }
   });
@@ -1242,7 +1242,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
 
   await testCase("Knowledge Domain", "Knowledge search content queries strictly scoped to caller tenant", async () => {
     const searchA = await knowledgeService.getKnowledgeItems(tenantAContext, { query: "interconnects" });
-    if (searchA.some((k) => k.id === "know-titan-secret-playbook")) {
+    if (searchA.items.some((k) => k.id === "know-titan-secret-playbook")) {
       throw new Error("Knowledge search leaked Tenant B playbook to Tenant A");
     }
   });
@@ -1270,7 +1270,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
 
   await testCase("Memory Domain", "Memory list and keyword filtering strictly tenant-scoped", async () => {
     const memories = await memoryService.getMemoryItems(tenantAContext);
-    if (memories.some((m) => m.organizationId !== "apex-demo")) {
+    if (memories.items.some((m) => m.organizationId !== "apex-demo")) {
       throw new Error("Memory list leaked cross-tenant items");
     }
   });
@@ -1427,7 +1427,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
 
   await testCase("Signals Domain", "Signal category queries strictly isolate Tenant A from Tenant B", async () => {
     const signalsA = await db.signalsRepo.findActiveByCategory("all", tenantAContext);
-    if (signalsA.some((s) => s.organizationId !== "apex-demo")) {
+    if (signalsA.items.some((s) => s.organizationId !== "apex-demo")) {
       throw new Error("Cross-tenant signal leaked in findActiveByCategory");
     }
   });
@@ -1568,8 +1568,8 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
       // Expected to fail
     }
 
-    const logsAfter = await db.auditLogsRepo.findMany(tenantAContext, 100);
-    const violationLog = logsAfter.find(
+    const logsAfter = await db.auditLogsRepo.findMany(tenantAContext, { limit: 100 });
+    const violationLog = logsAfter.items.find(
       (l) => l.action === "security:cross_tenant_access_attempt" && l.resourceId === "cust-titan-energy"
     );
 
@@ -1583,11 +1583,11 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
 
   await testCase("Audit Logging & Protection", "Audit log retrieval is strictly isolated between tenants", async () => {
     const logsA = await auditService.getAuditLogs(tenantAContext);
-    const leakedToA = logsA.some((l) => l.organizationId !== "apex-demo");
+    const leakedToA = logsA.items.some((l) => l.organizationId !== "apex-demo");
     if (leakedToA) throw new Error("Cross-tenant audit log leaked to Tenant A");
 
     const logsB = await auditService.getAuditLogs(tenantBContext);
-    const leakedToB = logsB.some((l) => l.organizationId !== "org-titan-corp");
+    const leakedToB = logsB.items.some((l) => l.organizationId !== "org-titan-corp");
     if (leakedToB) throw new Error("Cross-tenant audit log leaked to Tenant B");
   });
 
@@ -1609,12 +1609,12 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
 
     const [custA, custB, summaryA, summaryB, docsA, docsB, knowA, knowB] = await Promise.all(operations);
 
-    if (custA.some((c) => c.organizationId !== "apex-demo")) throw new Error("Concurrent custA contaminated");
-    if (custB.some((c) => c.organizationId !== "org-titan-corp")) throw new Error("Concurrent custB contaminated");
-    if (docsA.some((d) => d.organizationId !== "apex-demo")) throw new Error("Concurrent docsA contaminated");
-    if (docsB.some((d) => d.organizationId !== "org-titan-corp")) throw new Error("Concurrent docsB contaminated");
-    if (knowA.some((k) => k.organizationId !== "apex-demo")) throw new Error("Concurrent knowA contaminated");
-    if (knowB.some((k) => k.organizationId !== "org-titan-corp")) throw new Error("Concurrent knowB contaminated");
+    if (custA.items.some((c) => c.organizationId !== "apex-demo")) throw new Error("Concurrent custA contaminated");
+    if (custB.items.some((c) => c.organizationId !== "org-titan-corp")) throw new Error("Concurrent custB contaminated");
+    if (docsA.items.some((d) => d.organizationId !== "apex-demo")) throw new Error("Concurrent docsA contaminated");
+    if (docsB.items.some((d) => d.organizationId !== "org-titan-corp")) throw new Error("Concurrent docsB contaminated");
+    if (knowA.items.some((k) => k.organizationId !== "apex-demo")) throw new Error("Concurrent knowA contaminated");
+    if (knowB.items.some((k) => k.organizationId !== "org-titan-corp")) throw new Error("Concurrent knowB contaminated");
   });
 
   // =========================================================================
@@ -1754,8 +1754,8 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
       throw new Error("Document creation failed");
     }
 
-    const auditLogs = await db.auditLogsRepo.findMany(tenantAContext, 20);
-    const hasLog = auditLogs.some((l) => l.resourceId === testDoc.id);
+    const auditLogs = await db.auditLogsRepo.findMany(tenantAContext, { limit: 20 });
+    const hasLog = auditLogs.items.some((l) => l.resourceId === testDoc.id);
     if (!hasLog) {
       throw new Error("Audit log was not recorded for document upload");
     }
