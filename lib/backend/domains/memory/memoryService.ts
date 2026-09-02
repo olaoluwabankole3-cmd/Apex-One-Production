@@ -17,6 +17,10 @@ export interface CreateMemoryDto {
   sourceReference?: string;
   confidence?: number;
   effectiveAt?: string;
+  /**
+   * @deprecated Legacy compatibility input only. It is intentionally ignored.
+   * Canonical verification is represented exclusively by EvidenceService verification history.
+   */
   verified?: boolean;
 }
 
@@ -82,7 +86,9 @@ export class MemoryService {
       sourceReference: dto.sourceReference || "manual_entry",
       confidence: validatedConfidence,
       effectiveAt: dto.effectiveAt || now,
-      verified: dto.verified ?? true,
+      // Legacy boolean remains false for compatibility. It is not an authority.
+      // Canonical verification/certification is derived from append-only evidence histories.
+      verified: false,
       createdAt: now,
     };
 
@@ -97,7 +103,11 @@ export class MemoryService {
         resourceId: id,
         requestId: uow.context.requestId,
         status: "success",
-        metadata: { title: record.title, source: record.source },
+        metadata: {
+          title: record.title,
+          source: record.source,
+          canonicalVerificationRequired: true,
+        },
         timestamp: now,
       });
       return record;
