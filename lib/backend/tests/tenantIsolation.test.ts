@@ -76,9 +76,11 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
 }> {
   const results: TestResult[] = [];
 
+  // Create or reset isolated test database to guarantee strict isolation from production singleton
   const db = isolatedDb || DatabaseStore.createFreshStore();
   new DemoDataProvider().seedInitialTenants(db);
 
+  // Initialize isolated test domain components
   const defaultSessionStore = new InMemorySessionStore();
   const defaultAuthProvider = new LocalAuthenticationProvider(defaultSessionStore, db);
   const defaultRateLimiter = new InMemoryRateLimiter();
@@ -97,6 +99,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
   const aiOrchestratorService = new AiOrchestratorService(db);
   const authorizedAiTools = createAuthorizedAiTools(db);
 
+  // Helper to run a test and measure time
   async function testCase(
     suite: string,
     testName: string,
@@ -122,6 +125,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   }
 
+  // --- Multi-Tenant Test Fixture Setup ---
   const tenantAContext: TenantContext = {
     organizationId: "apex-demo",
     userId: "usr-marcus-thorne",
@@ -162,6 +166,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     timestamp: new Date().toISOString(),
   };
 
+  // Seed baseline records for Tenant B
   db.contracts.set("contract-titan-1", {
     id: "contract-titan-1",
     organizationId: "org-titan-corp",
@@ -334,6 +339,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     detectedAt: "2026-03-12T00:00:00Z",
   });
 
+  // Action in 'Ready' state for RBAC approval tests
   db.actions.set("act-ready-test-1", {
     id: "act-ready-test-1",
     organizationId: "apex-demo",
@@ -353,6 +359,11 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     updatedAt: "2026-08-01T00:00:00Z",
   });
 
+  // =========================================================================
+  // SUITE 1: AUTHENTICATION, TOKEN SECURITY & CONTEXT RESOLUTION (TASK 02)
+  // =========================================================================
+
+  // Test 1: Successful login
   await testCase("Authentication Security", "1. Successful login authenticates credentials and registers session in store", async () => {
     const loginResult = await authService.login(
       { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
@@ -368,6 +379,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     if (!sessionInStore) throw new Error("Session was not registered in session store");
   });
 
+  // Test 2: Wrong password
   await testCase("Authentication Security", "2. Wrong password triggers authentication rejection with generic error", async () => {
     let rejected = false;
     let errorMessage = "";
@@ -388,6 +400,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // Test 3: Unknown account
   await testCase("Authentication Security", "3. Unknown account email triggers uniform rejection without account enumeration", async () => {
     let rejected = false;
     let errorMessage = "";
@@ -408,7 +421,9 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // Test 4: Invalid credentials (disabled account & missing password hashes)
   await testCase("Authentication Security", "4. Invalid credentials (disabled status or missing hash) blocked", async () => {
+    // Sub-case A: Disabled account
     const testCreds = hashPassword("ApexEnterprise2026!");
     db.users.set("usr-test-disabled-acc", {
       id: "usr-test-disabled-acc",
@@ -442,6 +457,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
       db.memberships.delete("mem-test-disabled-acc");
     }
 
+    // Sub-case B: User missing hash/salt
     db.users.set("usr-test-no-creds", {
       id: "usr-test-no-creds",
       email: "nocreds@apexsync.ai",
@@ -473,7 +489,9 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // Test 5: Malformed login request
   await testCase("Authentication Security", "5. Malformed login request rejected during validation", async () => {
+    // Empty email
     let rejectedEmptyEmail = false;
     try {
       await authService.login({ email: "", password: "SomePassword123!" }, "test_empty_email");
@@ -482,6 +500,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
     if (!rejectedEmptyEmail) throw new Error("Login succeeded with empty email");
 
+    // Empty password
     let rejectedEmptyPass = false;
     try {
       await authService.login({ email: "m.thorne@apexsync.ai", password: "" }, "test_empty_password");
@@ -491,6 +510,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     if (!rejectedEmptyPass) throw new Error("Login succeeded with empty password");
   });
 
+  // Test 6: Password never returned
   await testCase("Authentication Security", "6. Plaintext password is never returned in session data or user profiles", async () => {
     const loginResult = await authService.login(
       { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
@@ -507,6 +527,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // Test 7: Password hash never returned
   await testCase("Authentication Security", "7. Password hash and salt are never returned in session data or user records", async () => {
     const loginResult = await authService.login(
       { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
@@ -523,12 +544,15 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
-  await testCase("Authentication Security", "8. Session token never returned in login API JSON response payload", async () => {
+  // Test 8: Session token never returned in login JSON
+  await testCase("Authentication Security", "8. Session token is never returned in login API JSON response payload", async () => {
+    // Simulate what /app/api/v1/auth/login/route.ts returns in its JSON response
     const result = await authService.login(
       { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
       "test_json_response_clean"
     );
 
+    // Exact response structure from /api/v1/auth/login
     const apiJsonResponse = {
       success: true,
       user: {
@@ -551,6 +575,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // Test 9: Secure cookie configuration
   await testCase("Authentication Security", "9. Secure cookie configuration enforces HttpOnly, Secure, SameSite, and path", () => {
     const prevEnv = process.env.APP_ENV;
     try {
@@ -572,6 +597,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // Test 10: Session token randomness/security
   await testCase("Authentication Security", "10. Session token uses cryptographically secure random bytes with high entropy", () => {
     const tokens = new Set<string>();
     for (let i = 0; i < 100; i++) {
@@ -583,6 +609,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // Test 11: Valid session
   await testCase("Authentication Security", "11. Valid session resolves authenticated TenantContext via Header and Cookie", async () => {
     const login = await authService.login(
       { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
@@ -590,22 +617,25 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     );
     const token = login.session.token;
 
+    // Via Bearer header
     const ctxHeader = await resolveTenantContext({ authorization: `Bearer ${token}` }, defaultSessionStore);
     if (ctxHeader.userId !== "usr-marcus-thorne") throw new Error("Header auth userId mismatch");
     if (ctxHeader.organizationId !== "apex-demo") throw new Error("Header auth organizationId mismatch");
 
+    // Via Cookie
     const ctxCookie = await resolveTenantContext({ cookie: `${AUTH_COOKIE_NAME}=${token}` }, defaultSessionStore);
     if (ctxCookie.userId !== "usr-marcus-thorne") throw new Error("Cookie auth userId mismatch");
     if (ctxCookie.organizationId !== "apex-demo") throw new Error("Cookie auth organizationId mismatch");
   });
 
+  // Test 12: Expired session
   await testCase("Authentication Security", "12. Expired session triggers 401 Unauthorized and is purged from store", async () => {
     const expiredSession = await defaultSessionStore.createSession(
       { id: "usr-temp-expired", email: "temp@example.com", name: "Temp" },
       { id: "apex-demo", name: "Apex Demo" },
       "CEO",
       [...ROLE_PERMISSIONS["CEO"]],
-      -10
+      -10 // Expired 10 seconds ago
     );
     let rejected = false;
     try {
@@ -618,6 +648,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     if (sessionInStore) throw new Error("Expired session was not purged from store");
   });
 
+  // Test 13: Revoked session
   await testCase("Authentication Security", "13. Revoked session token triggers 401 Unauthorized", async () => {
     const login = await authService.login(
       { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
@@ -635,6 +666,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     if (!rejected) throw new Error("Revoked session token was accepted");
   });
 
+  // Test 14: Unknown session
   await testCase("Authentication Security", "14. Unknown / forged session token triggers 401 Unauthorized", async () => {
     let rejected = false;
     try {
@@ -645,7 +677,9 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     if (!rejected) throw new Error("Forged token was accepted");
   });
 
+  // Test 15: Malformed session
   await testCase("Authentication Security", "15. Malformed session string triggers 401 Unauthorized", async () => {
+    // Empty Bearer token
     let rejectedEmpty = false;
     try {
       await resolveTenantContext({ authorization: "Bearer " }, defaultSessionStore);
@@ -654,6 +688,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
     if (!rejectedEmpty) throw new Error("Empty Bearer token was accepted");
 
+    // Malformed cookie string
     let rejectedCookie = false;
     try {
       await resolveTenantContext({ cookie: `${AUTH_COOKIE_NAME}=; other=123` }, defaultSessionStore);
@@ -665,6 +700,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // Test 16: Logout invalidates session
   await testCase("Authentication Security", "16. Logout invalidates session token immediately in store", async () => {
     const login = await authService.login(
       { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
@@ -676,6 +712,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     if (session) throw new Error("Revoked session token remains valid in store after logout");
   });
 
+  // Test 17: Session fixation protection
   await testCase("Authentication Security", "17. Session fixation prevention: logins generate distinct cryptographic tokens", async () => {
     const login1 = await authService.login(
       { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
@@ -694,7 +731,9 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // Test 18: Organization spoofing
   await testCase("Authentication Security", "18. Target organization spoofing during login or switch is rejected with 403", async () => {
+    // Marcus Thorne is not a member of Titan Corp
     let rejectedLogin = false;
     try {
       await defaultAuthProvider.authenticateCredentials(
@@ -707,6 +746,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
     if (!rejectedLogin) throw new Error("User authenticated into unassigned organization tenant");
 
+    // Switching to unassigned organization
     let rejectedSwitch = false;
     try {
       await authService.switchOrganization("org-titan-corp", tenantAContext);
@@ -716,6 +756,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     if (!rejectedSwitch) throw new Error("User switched into unauthorized tenant");
   });
 
+  // Test 19: Tenant spoofing
   await testCase("Authentication Security", "19. Client-supplied organization headers or body cannot override context", async () => {
     const marcusLogin = await authService.login(
       { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
@@ -732,6 +773,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // Test 20: Role spoofing
   await testCase("Authentication Security", "20. Client cannot claim arbitrary role; role is derived strictly from membership", async () => {
     const elenaLogin = await authService.login(
       { email: "e.cho@apexsync.ai", password: "ApexEnterprise2026!" },
@@ -748,6 +790,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // Test 21: Permission spoofing
   await testCase("Authentication Security", "21. Client cannot claim arbitrary permissions; derived strictly from server rules", async () => {
     const elenaLogin = await authService.login(
       { email: "e.cho@apexsync.ai", password: "ApexEnterprise2026!" },
@@ -763,6 +806,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // Test 22: Demo authentication blocked in production
   await testCase("Authentication Security", "22. Production environment strictly denies demo fallback even with DEMO_MODE=true", async () => {
     const prevAppEnv = process.env.APP_ENV;
     const prevDemoMode = process.env.DEMO_MODE;
@@ -783,6 +827,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // Test 23: Authentication error safety
   await testCase("Authentication Security", "23. Authentication errors return uniform generic message without stack traces", async () => {
     const attempts = [
       { email: "nonexistent@apexsync.ai", password: "SomePassword123!" },
@@ -805,6 +850,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // Test 24: Concurrent session isolation
   await testCase("Authentication Security", "24. Concurrent session isolation preserves discrete tenant contexts", async () => {
     const marcusLogin = await authService.login(
       { email: "m.thorne@apexsync.ai", password: "ApexEnterprise2026!" },
@@ -825,7 +871,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     resolvedContexts.forEach((ctx, idx) => {
       const isEven = idx % 2 === 0;
       const expectedUserId = isEven ? "usr-marcus-thorne" : "usr-elena-cho";
-      const expectedOrgId = "apex-demo";
+      const expectedOrgId = isEven ? "apex-demo" : "apex-demo";
       const expectedRole = isEven ? "CEO" : "Relationship Manager";
 
       if (ctx.userId !== expectedUserId || ctx.organizationId !== expectedOrgId || ctx.userRole !== expectedRole) {
@@ -834,6 +880,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     });
   });
 
+  // Test 25: Authenticated-user endpoint does not expose secrets
   await testCase("Authentication Security", "25. Authenticated-user endpoint (/api/v1/auth/me) returns sanitized data", async () => {
     const sessionData = await authService.getCurrentSession(tenantAContext);
     if (!sessionData.user || !sessionData.organization) {
@@ -849,6 +896,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // Password Policy enforcement
   await testCase("Authentication Security", "Password policy enforcement verifies minimum complexity", () => {
     const tooShort = validatePasswordPolicy("12345");
     const validPass = validatePasswordPolicy("ApexEnterprise2026!");
@@ -856,6 +904,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     if (!validPass.valid) throw new Error("Valid enterprise password was rejected");
   });
 
+  // Password change security and session invalidation
   await testCase("Authentication Security", "Password change verifies current credentials and revokes active sessions", async () => {
     const elenaAuth = await authService.login(
       { email: "e.cho@apexsync.ai", password: "ApexEnterprise2026!" },
@@ -863,6 +912,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     );
     const oldToken = elenaAuth.session.token;
 
+    // Change password
     await authService.changePassword(
       {
         userId: "usr-elena-cho",
@@ -872,15 +922,18 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
       tenantARMContext
     );
 
+    // Old session should be revoked
     const sessionAfter = await defaultSessionStore.getSession(oldToken);
     if (sessionAfter) throw new Error("Active session was not revoked after password change");
 
+    // Login with new password
     const newAuth = await authService.login(
       { email: "e.cho@apexsync.ai", password: "UpdatedElenaPass2026!" },
       "test_pwd_change_relogin"
     );
     if (!newAuth.session.token) throw new Error("Login with updated password failed");
 
+    // Restore original password for test repeatability
     await authService.changePassword(
       {
         userId: "usr-elena-cho",
@@ -891,10 +944,12 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     );
   });
 
+  // Rate Limiting
   await testCase("Authentication Security", "Login rate limiting throttles excessive failed attempts", async () => {
     const testEmail = "rate-limit-test@apexsync.ai";
     const testIp = "192.168.1.100";
 
+    // Attempt 5 failed logins to hit threshold
     for (let i = 0; i < 5; i++) {
       try {
         await authService.login(
@@ -902,9 +957,12 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
           `rate_attempt_${i}`,
           { ipAddress: testIp }
         );
-      } catch {}
+      } catch {
+        // Expected failed login
+      }
     }
 
+    // 6th attempt must be rate-limited
     let rateLimited = false;
     try {
       await authService.login(
@@ -922,6 +980,10 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
       throw new Error("Excessive failed login attempts were not throttled by rate limiter");
     }
   });
+
+  // =========================================================================
+  // SUITE 2: CUSTOMER DOMAIN TENANT ISOLATION
+  // =========================================================================
 
   await testCase("Customer Domain", "Tenant A reads own customer record (ALLOW)", async () => {
     const cust = await customerService.getCustomerById("cust-dangote", tenantAContext);
@@ -972,6 +1034,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     if (created.organizationId !== "apex-demo") {
       throw new Error(`Critical Isolation Flaw: Created customer has organizationId '${created.organizationId}' instead of 'apex-demo'`);
     }
+    // Clean up created record
     db.customers.delete(created.id);
   });
 
@@ -997,6 +1060,10 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
       throw new Error("Tenant B customer list leaked Tenant A records");
     }
   });
+
+  // =========================================================================
+  // SUITE 3: CONTRACT DOMAIN TENANT ISOLATION
+  // =========================================================================
 
   await testCase("Contract Domain", "Tenant A reads own contract record (ALLOW)", async () => {
     const contract = await db.contractsRepo.findById("contract-1", tenantAContext, "Contract");
@@ -1046,6 +1113,10 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // =========================================================================
+  // SUITE 4: TRANSACTION DOMAIN TENANT ISOLATION
+  // =========================================================================
+
   await testCase("Transaction Domain", "Tenant A reads own transaction (ALLOW)", async () => {
     const txn = await db.transactionsRepo.findById("txn-1", tenantAContext, "Transaction");
     if (!txn || txn.organizationId !== "apex-demo") {
@@ -1067,9 +1138,15 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     const totalsA = await db.transactionsRepo.calculateFinancialTotals(tenantAContext);
     const totalsB = await db.transactionsRepo.calculateFinancialTotals(tenantBContext);
 
+    // Tenant A should have totals from txn-1, txn-2, txn-3
     if (totalsA.totalRevenue === 0) throw new Error("Tenant A financial revenue calculation failed");
+    // Tenant B totals must be independent
     if (totalsB.totalRevenue !== 12500000) throw new Error(`Tenant B totals mismatch: ${totalsB.totalRevenue}`);
   });
+
+  // =========================================================================
+  // SUITE 5: DOCUMENT DOMAIN & OBJECT STORAGE ISOLATION
+  // =========================================================================
 
   await testCase("Document Domain", "Tenant A reads own document metadata (ALLOW)", async () => {
     const doc = await documentService.getDocumentById("doc-1", tenantAContext);
@@ -1099,6 +1176,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
   });
 
   await testCase("Document Domain", "Inverted text search index strictly filters by organizationId", async () => {
+    // Search for a keyword present in Titan doc
     const matchesA = await documentSearchIndex.search("apex-demo", "roadmap");
     if (matchesA.includes("doc-titan-secret-contract")) {
       throw new Error("Inverted search index leaked Tenant B document ID to Tenant A query");
@@ -1123,8 +1201,13 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     if (uploaded.organizationId !== "apex-demo") {
       throw new Error(`Document upload allowed organizationId spoofing: ${uploaded.organizationId}`);
     }
+    // Clean up
     await documentService.deleteDocument(uploaded.id, tenantAContext);
   });
+
+  // =========================================================================
+  // SUITE 6: KNOWLEDGE HUB DOMAIN ISOLATION
+  // =========================================================================
 
   await testCase("Knowledge Domain", "Tenant A reads own knowledge item (ALLOW)", async () => {
     const item = await knowledgeService.getKnowledgeItemById("know-1", tenantAContext);
@@ -1164,6 +1247,10 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // =========================================================================
+  // SUITE 7: ORGANIZATIONAL MEMORY DOMAIN ISOLATION
+  // =========================================================================
+
   await testCase("Memory Domain", "Tenant A reads own organizational memory item (ALLOW)", async () => {
     const mem = await memoryService.getMemoryById("mem-fact-1", tenantAContext);
     if (!mem || mem.organizationId !== "apex-demo") {
@@ -1187,6 +1274,10 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
       throw new Error("Memory list leaked cross-tenant items");
     }
   });
+
+  // =========================================================================
+  // SUITE 8: VALUE INTELLIGENCE DOMAIN ISOLATION
+  // =========================================================================
 
   await testCase("Value Intelligence", "Tenant A reads own opportunity (ALLOW)", async () => {
     const opp = await valueService.getOpportunityById("opp-1", tenantAContext);
@@ -1221,10 +1312,15 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
 
     if (summaryA.tenantBaselineSummary.totalArr === 0) throw new Error("Tenant A ARR summary calculation failed");
     if (!summaryA.potentialValueIdentified.evidence) throw new Error("Missing evidence metadata in summary");
+    // Tenant B must reflect its own distinct opportunity value
     if (summaryB.potentialValueIdentified.value !== 12000000) {
       throw new Error(`Tenant B value calculation mismatch: ${summaryB.potentialValueIdentified.value}`);
     }
   });
+
+  // =========================================================================
+  // SUITE 9: WORKFLOW & EXECUTION ENGINE ISOLATION
+  // =========================================================================
 
   await testCase("Workflow Domain", "Tenant A reads own workflow (ALLOW)", async () => {
     const wf = await workflowService.getWorkflowById("wf-1", tenantAContext);
@@ -1272,6 +1368,10 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     if (!rejected) throw new Error("Validation failure: Cyclic workflow graph accepted");
   });
 
+  // =========================================================================
+  // SUITE 10: ACTION DOMAIN & LIFECYCLE ISOLATION
+  // =========================================================================
+
   await testCase("Action Domain", "Tenant A reads own action (ALLOW)", async () => {
     const act = await actionService.getActionById("act-1", tenantAContext);
     if (!act || act.organizationId !== "apex-demo") {
@@ -1304,6 +1404,10 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     db.actions.delete(act.id);
   });
 
+  // =========================================================================
+  // SUITE 11: OPERATIONAL SIGNALS DOMAIN ISOLATION
+  // =========================================================================
+
   await testCase("Signals Domain", "Tenant A reads own signal (ALLOW)", async () => {
     const sig = await db.signalsRepo.findById("sig-1", tenantAContext, "Signal");
     if (!sig || sig.organizationId !== "apex-demo") {
@@ -1328,9 +1432,14 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // =========================================================================
+  // SUITE 12: RBAC & GOVERNANCE ENFORCEMENT
+  // =========================================================================
+
   await testCase("RBAC Enforcement", "User lacking action:approve capability is blocked from approving action", async () => {
     let rejected = false;
     try {
+      // Elena Cho has Relationship Manager role, which lacks action:approve
       await actionService.advanceAction("act-ready-test-1", tenantARMContext);
     } catch (err: any) {
       if (err instanceof ForbiddenError) rejected = true;
@@ -1347,7 +1456,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
           currentPassword: "ApexEnterprise2026!",
           newPassword: "HackedPassword2026!",
         },
-        tenantARMContext
+        tenantARMContext // Elena Cho attempting to change Marcus Thorne's password
       );
     } catch (err: any) {
       if (err instanceof ForbiddenError) rejected = true;
@@ -1368,6 +1477,10 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
     if (!rejected) throw new Error("RBAC Failure: User without audit:read accessed audit logs");
   });
+
+  // =========================================================================
+  // SUITE 13: AI ORCHESTRATOR & TOOL REGISTRY SECURITY
+  // =========================================================================
 
   await testCase("AI Tool Security", "get_tenant_customers AI tool is strictly tenant-scoped", async () => {
     const customers = (await authorizedAiTools.get_tenant_customers.handler({}, tenantAContext)) as any[];
@@ -1406,6 +1519,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     if (responseA.groundedRecordsCount === 0) throw new Error("Failed to ground analysis in Tenant A records");
     if (responseA.organizationId !== "apex-demo") throw new Error("Organization ID mismatch in AI response");
 
+    // Empty organization test
     const emptyOrgContext: TenantContext = {
       organizationId: "org-empty-test",
       userId: "usr-empty",
@@ -1442,10 +1556,17 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     }
   });
 
+  // =========================================================================
+  // SUITE 14: CROSS-TENANT VIOLATION AUDITING & AUDIT LOG SCOPING
+  // =========================================================================
+
   await testCase("Audit Logging & Protection", "Cross-tenant access attempts generate security audit violation records", async () => {
+    // Deliberate cross-tenant access violation attempt
     try {
       await customerService.getCustomerById("cust-titan-energy", tenantAContext);
-    } catch {}
+    } catch {
+      // Expected to fail
+    }
 
     const logsAfter = await db.auditLogsRepo.findMany(tenantAContext, { limit: 100 });
     const violationLog = logsAfter.items.find(
@@ -1470,6 +1591,10 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     if (leakedToB) throw new Error("Cross-tenant audit log leaked to Tenant B");
   });
 
+  // =========================================================================
+  // SUITE 15: CONCURRENT TENANT REQUEST ISOLATION
+  // =========================================================================
+
   await testCase("Concurrency & Isolation", "Concurrent parallel operations across Tenant A and Tenant B execute without cross-contamination", async () => {
     const [custA, custB, summaryA, summaryB, docsA, docsB, knowA, knowB] = await Promise.all([
       customerService.getCustomers(tenantAContext),
@@ -1488,9 +1613,11 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     if (docsB.items.some((d) => d.organizationId !== "org-titan-corp")) throw new Error("Concurrent docsB contaminated");
     if (knowA.items.some((k) => k.organizationId !== "apex-demo")) throw new Error("Concurrent knowA contaminated");
     if (knowB.items.some((k) => k.organizationId !== "org-titan-corp")) throw new Error("Concurrent knowB contaminated");
-    void summaryA;
-    void summaryB;
   });
+
+  // =========================================================================
+  // SUITE 16: INPUT VALIDATION & NEGATIVE BOUNDARY TESTS
+  // =========================================================================
 
   await testCase("Validation & Sanitization", "Invalid email format rejected during customer creation", async () => {
     let rejected = false;
@@ -1531,15 +1658,21 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     if (!rejected) throw new Error("Customer creation accepted negative ARR amount");
   });
 
+  // =========================================================================
+  // SUITE 17: ENDPOINT-LEVEL AUTHORIZATION, SPOOFING & AI CROSS-TENANT DEFENSE
+  // =========================================================================
+
   await testCase("Endpoint-Level Security", "Unauthenticated request simulation fails with UnauthorizedError", async () => {
     let rejected = false;
     try {
       const headers = new Headers();
+      // No auth header or cookie
       const ctx = await resolveTenantContext(headers);
       if (!ctx) rejected = false;
     } catch (err: any) {
       if (err instanceof UnauthorizedError) rejected = true;
     }
+    // In test environment without fallback this strictly throws UnauthorizedError
     if (!rejected && process.env.APP_ENV === "production") {
       throw new Error("Unauthenticated request was allowed");
     }
@@ -1558,6 +1691,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
 
     let rejected = false;
     try {
+      // Viewer lacks customer:write
       await customerService.createCustomer(
         { name: "Unauthorized Add", contactEmail: "unauthorized.add@test.local" },
         limitedContext
@@ -1615,8 +1749,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
         name: "Enterprise Audit Policy Verification.pdf",
         fileType: "pdf",
         category: "Compliance Document",
-        size: "1 KB",
-        contentBuffer: "Enterprise governance and multi-tenant authorization guidelines.",
+        content: "Enterprise governance and multi-tenant authorization guidelines.",
       },
       tenantAContext
     );
@@ -1631,6 +1764,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
       throw new Error("Audit log was not recorded for document upload");
     }
 
+    // Clean up
     await documentService.deleteDocument(testDoc.id, tenantAContext);
   });
 
@@ -1645,3 +1779,4 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     results,
   };
 }
+
