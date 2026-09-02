@@ -48,6 +48,7 @@ const alphaCtx: TenantContext = {
     "knowledge:read", "knowledge:write",
   ],
   requestId: "req-uow-test",
+  timestamp: "2026-09-02T00:00:00.000Z",
 };
 
 const betaCtx: TenantContext = {
@@ -57,6 +58,7 @@ const betaCtx: TenantContext = {
   userRole: "admin",
   permissions: ["customer:read", "customer:write", "workflow:read", "workflow:write", "audit:read", "org:read"],
   requestId: "req-uow-test-beta",
+  timestamp: "2026-09-02T00:00:00.000Z",
 };
 
 function customer(id: string, name: string) {
@@ -334,7 +336,7 @@ export async function runUnitOfWorkTestSuite(): Promise<TestSuiteSummary> {
 
     const workflow = await workflowService.createWorkflow({
       name: "Service Test Workflow",
-      nodes: [{ id: "n1", type: "trigger", title: "Trigger Step" }],
+      nodes: [{ id: "n1", type: "trigger", title: "Trigger Step", configuration: {} }],
       connections: [],
     }, alphaCtx);
     const initialRuns = workflow.runsCount;
