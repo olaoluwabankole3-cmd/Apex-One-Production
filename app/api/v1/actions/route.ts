@@ -8,17 +8,12 @@ export async function GET(req: NextRequest) {
     const ctx = await resolveTenantContext(req.headers);
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status") || undefined;
-    const limitParam = searchParams.get("limit");
-    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
-    const cursor = searchParams.get("cursor") || undefined;
 
-    const result = await actionService.getActions(ctx, { status, limit, cursor });
+    const items = await actionService.getActions(ctx, status);
     return NextResponse.json({
       success: true,
-      data: result.items,
-      cursor: result.nextCursor,
-      hasMore: result.hasMore,
-      count: result.count,
+      data: items,
+      count: items.length,
     });
   } catch (err: any) {
     if (err instanceof BackendError) {

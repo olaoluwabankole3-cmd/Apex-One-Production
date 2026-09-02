@@ -9,17 +9,13 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const type = searchParams.get("type") || undefined;
     const search = searchParams.get("search") || undefined;
-    const limitParam = searchParams.get("limit");
-    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
-    const cursor = searchParams.get("cursor") || undefined;
 
-    const result = await memoryService.getMemoryItems(ctx, { type, search, limit, cursor });
+    const items = await memoryService.getMemoryItems(ctx, { type, search });
     return NextResponse.json({
       success: true,
-      data: result.items,
-      cursor: result.nextCursor,
-      hasMore: result.hasMore,
-      count: result.count,
+      data: items,
+      count: items.length,
+      organizationId: ctx.organizationId,
     });
   } catch (err: any) {
     if (err instanceof BackendError) {

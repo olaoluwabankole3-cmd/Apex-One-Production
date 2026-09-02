@@ -7,7 +7,6 @@
 import { db, DatabaseStore } from "../../database/store";
 import { AuditLogRecord } from "../../database/schema";
 import { TenantContext, requirePermission } from "../../core/security";
-import { PaginatedResult, PaginationOptions } from "../../database/querySpecification";
 
 export class AuditService {
   constructor(private readonly database: DatabaseStore = db) {}
@@ -17,10 +16,10 @@ export class AuditService {
    */
   public async getAuditLogs(
     ctx: TenantContext,
-    options?: PaginationOptions | number
-  ): Promise<PaginatedResult<AuditLogRecord>> {
+    limit?: number
+  ): Promise<AuditLogRecord[]> {
     requirePermission(ctx, "audit:read");
-    return this.database.auditLogsRepo.findMany(ctx, options);
+    return this.database.auditLogsRepo.findMany(ctx, limit);
   }
 }
 

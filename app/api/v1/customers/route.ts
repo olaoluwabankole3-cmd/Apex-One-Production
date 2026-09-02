@@ -12,15 +12,14 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get("search") || undefined;
     const limitParam = searchParams.get("limit");
     const limit = limitParam ? parseInt(limitParam, 10) : undefined;
-    const cursor = searchParams.get("cursor") || undefined;
+    const offsetParam = searchParams.get("offset");
+    const offset = offsetParam ? parseInt(offsetParam, 10) : undefined;
 
-    const result = await customerService.getCustomers(ctx, { tier, status, search, limit, cursor });
+    const items = await customerService.getCustomers(ctx, { tier, status, search, limit, offset });
     return NextResponse.json({
       success: true,
-      data: result.items,
-      cursor: result.nextCursor,
-      hasMore: result.hasMore,
-      count: result.count,
+      data: items,
+      count: items.length,
       organizationId: ctx.organizationId,
     });
   } catch (err: any) {

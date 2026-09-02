@@ -53,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             password: "ApexEnterprise2026!",
           });
           session = {
+            success: true,
             user: autoResult.user,
             organization: autoResult.organization,
             availableOrganizations: autoResult.availableOrganizations || [],

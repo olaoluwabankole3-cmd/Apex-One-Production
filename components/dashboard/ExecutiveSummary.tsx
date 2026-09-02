@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles } from "lucide-react";
 import { useRole } from "@/components/layout/RoleContext";
+import { useAuth } from "@/components/auth/AuthContext";
 import { intelligenceRepository } from "@/lib/data/repositories";
 
 export default function ExecutiveSummary() {
   const { role } = useRole();
+  const { user, organization, isLoading: authLoading } = useAuth();
   const [summary, setSummary] = useState("");
   const [displayed, setDisplayed] = useState("");
   const frame = useRef<number>();
@@ -21,12 +23,13 @@ export default function ExecutiveSummary() {
   }, []);
 
   useEffect(() => {
+    if (authLoading || !user) return;
     async function loadSummary() {
       const text = await intelligenceRepository.getExecutiveSummary(role);
       setSummary(text);
     }
     loadSummary();
-  }, [role]);
+  }, [role, user, organization?.id, authLoading]);
 
   useEffect(() => {
     setDisplayed("");

@@ -3,19 +3,22 @@
 import { useState, useEffect } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import GlassCard from "@/components/ui/GlassCard";
+import { useAuth } from "@/components/auth/AuthContext";
 import { revenueRepository } from "@/lib/data/repositories";
 import { PortfolioSlice } from "@/lib/types";
 
 export default function PortfolioBreakdown() {
+  const { user, organization, isLoading: authLoading } = useAuth();
   const [slices, setSlices] = useState<PortfolioSlice[]>([]);
 
   useEffect(() => {
+    if (authLoading || !user) return;
     async function loadPortfolio() {
       const data = await revenueRepository.getPortfolioBreakdown();
       setSlices(data);
     }
     loadPortfolio();
-  }, []);
+  }, [user, organization?.id, authLoading]);
 
   const total = slices.reduce((s, d) => s + d.value, 0);
 

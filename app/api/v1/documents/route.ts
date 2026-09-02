@@ -11,17 +11,12 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("status") || undefined;
     const customerId = searchParams.get("customerId") || undefined;
     const query = searchParams.get("query") || undefined;
-    const limitParam = searchParams.get("limit");
-    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
-    const cursor = searchParams.get("cursor") || undefined;
 
-    const result = await documentService.getDocuments(ctx, { category, status, customerId, query, limit, cursor });
+    const items = await documentService.getDocuments(ctx, { category, status, customerId, query });
     return NextResponse.json({
       success: true,
-      data: result.items,
-      cursor: result.nextCursor,
-      hasMore: result.hasMore,
-      count: result.count,
+      data: items,
+      count: items.length,
       organizationId: ctx.organizationId,
     });
   } catch (err: any) {

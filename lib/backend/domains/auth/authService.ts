@@ -235,7 +235,9 @@ export class AuthService {
       user: { id: user.id, email: user.email, name: user.name },
       org: { id: org.id, name: org.name },
       role: match.role,
-      permissions: ROLE_PERMISSIONS[match.role] || ROLE_PERMISSIONS["Operations"],
+      permissions:
+        (ROLE_PERMISSIONS[match.role as keyof typeof ROLE_PERMISSIONS] ||
+          ROLE_PERMISSIONS["Operations"]) as unknown as import("../../core/security").PermissionCapability[],
     });
 
     this.database.recordAuditLog({
