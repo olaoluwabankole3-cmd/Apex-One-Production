@@ -335,11 +335,13 @@ export default function RecordedValueRoiPage() {
         </>
       )}
 
-      <ValueDetailDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        data={selectedEvent}
-      />
+      {selectedEvent && (
+        <ValueDetailDrawer
+          isOpen={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          {...selectedEvent}
+        />
+      )}
     </div>
   );
 }
