@@ -1,11 +1,12 @@
 /**
  * APEX ONE — Execution Engine & Actions Domain Service
- * 
+ *
  * First-class action entities, human-approval gating, execution state transitions, and audit logs.
  */
 
 import { db, DatabaseStore } from "../../database/store";
 import { ActionRecord } from "../../database/schema";
+import { PaginatedResult } from "../../database/querySpecification";
 import { TenantContext, requirePermission } from "../../core/security";
 import { Validator } from "../../core/validation";
 
@@ -22,18 +23,32 @@ export interface CreateActionDto {
   resultMetric?: string;
 }
 
+export interface ActionListOptions {
+  status?: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
 export class ActionService {
   constructor(private readonly database: DatabaseStore = db) {}
 
   /**
-   * List execution actions for tenant.
+   * List execution actions for the tenant through the canonical cursor contract.
    */
-  public async getActions(ctx: TenantContext, status?: string): Promise<ActionRecord[]> {
+  public async getActions(
+    ctx: TenantContext,
+    options?: ActionListOptions
+  ): Promise<PaginatedResult<ActionRecord>> {
     requirePermission(ctx, "value:read");
     return this.database.actionsRepo.findMany(ctx, {
-      filter: {
-        status: (status && status !== "all" ? status : undefined) as any,
+      where: {
+        status:
+          options?.status && options.status !== "all"
+            ? (options.status as any)
+            : undefined,
       },
+      limit: options?.limit,
+      cursor: options?.cursor,
     });
   }
 
@@ -114,12 +129,11 @@ export class ActionService {
       const pipelineOrder: ActionRecord["status"][] = ["Ready", "Approved", "In Progress", "Completed", "Measured"];
       const currentIndex = pipelineOrder.indexOf(action.status);
       if (currentIndex >= pipelineOrder.length - 1) {
-        return action; // Already at final stage
+        return action;
       }
 
       const nextStatus = pipelineOrder[currentIndex + 1];
 
-      // State machine check
       Validator.validateStateTransition(
         action.status,
         nextStatus,
@@ -133,7 +147,6 @@ export class ActionService {
         "Action"
       );
 
-      // Granular RBAC checks per state transition
       if (nextStatus === "Approved") {
         requirePermission(uow.context, "action:approve");
       } else if (nextStatus === "In Progress" || nextStatus === "Completed") {
@@ -149,11 +162,11 @@ export class ActionService {
         updatedLogs.push(`Approved by ${uow.context.userEmail} (${uow.context.userRole})`);
         approvedBy = uow.context.userEmail;
       } else if (nextStatus === "In Progress") {
-        updatedLogs.push(`Execution engine initiated automated workflows`);
+        updatedLogs.push("Execution engine initiated automated workflows");
       } else if (nextStatus === "Completed") {
-        updatedLogs.push(`Execution tasks verified and completed successfully`);
+        updatedLogs.push("Execution tasks verified and completed successfully");
       } else if (nextStatus === "Measured") {
-        updatedLogs.push(`Certified yield logged in organizational ledger`);
+        updatedLogs.push("Certified yield logged in organizational ledger");
       }
 
       const updated = await uow.actions.update(
