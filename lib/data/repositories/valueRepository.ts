@@ -113,7 +113,7 @@ export class ApiValueRepository implements ValueRepository {
       category: c.category,
       amountCaptured: c.capturedValue,
       impactMetrics: c.evidenceDescription,
-      verifiedBy: c.certifiedBy,
+      recordedBy: c.recordedBy,
     }));
   }
 
