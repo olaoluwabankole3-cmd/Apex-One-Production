@@ -336,6 +336,8 @@ export async function runUnitOfWorkTestSuite(): Promise<TestSuiteSummary> {
 
     const workflow = await workflowService.createWorkflow({
       name: "Service Test Workflow",
+      description: "Exercises workflow service transaction and audit behavior.",
+      subsidiary: "General Operations",
       nodes: [{ id: "n1", type: "trigger", title: "Trigger Step", configuration: {} }],
       connections: [],
     }, alphaCtx);
