@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "db:migrate": "tsx scripts/runPostgresMigrations.ts",
     "test:postgres": "tsx scripts/runPostgresPersistenceTests.ts",
+    "test:redis": "tsx scripts/runRedisAuthStateTests.ts",
     "test:infrastructure": "tsx scripts/checkInfrastructureBoundary.ts",
     "test:security": "bun run test:infrastructure && tsx scripts/runSecurityTests.ts"
   },

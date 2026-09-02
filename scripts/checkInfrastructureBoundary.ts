@@ -38,7 +38,7 @@ function durableProductionEnv(): InfrastructureEnvironment {
     APEX_OBJECT_STORAGE_ADAPTER: "s3",
     APEX_SEARCH_INDEX_ADAPTER: "postgres",
     DATABASE_URL: "postgres://example.invalid/apex?sslmode=require",
-    REDIS_URL: "redis://example.invalid:6379",
+    REDIS_URL: "redis://example.invalid:6379/0",
     S3_BUCKET: "apex-production-documents",
     S3_REGION: "eu-west-1",
   };
@@ -142,24 +142,27 @@ check("7. Environment template declares every Stage 4 provider and durable endpo
   if (!envSource.includes("sslmode=require")) {
     throw new Error(".env.example does not document production PostgreSQL TLS requirement");
   }
+  if (!envSource.includes("rediss://")) {
+    throw new Error(".env.example does not document TLS-capable Redis configuration");
+  }
 });
 
-check("8. Stage 4B marks only database and audit as durably implemented", () => {
+check("8. Stage 4C marks database, audit, session, and rate-limit authorities as durable", () => {
   const expected = {
     database: true,
-    session: false,
-    rateLimit: false,
+    session: true,
+    rateLimit: true,
     audit: true,
     objectStorage: false,
     searchIndex: false,
   };
   for (const [authority, value] of Object.entries(expected)) {
     if (DURABLE_IMPLEMENTATION_STATUS[authority as keyof typeof DURABLE_IMPLEMENTATION_STATUS] !== value) {
-      throw new Error(`${authority} durable status does not match Stage 4B scope`);
+      throw new Error(`${authority} durable status does not match Stage 4C scope`);
     }
   }
   if (getInfrastructureReadiness(durableProductionEnv()).ready) {
-    throw new Error("Stage 4B incorrectly made the entire Stage 4 production stack ready");
+    throw new Error("Stage 4C incorrectly made the entire Stage 4 production stack ready");
   }
 });
 
@@ -179,6 +182,36 @@ check("10. PostgreSQL migration and integration gate are committed as release ar
   ]) {
     if (!fs.existsSync(path.join(process.cwd(), relative))) throw new Error(`${relative} is missing`);
   }
+});
+
+check("11. Redis session/rate-limit composition and integration gate are committed", () => {
+  for (const relative of [
+    "lib/backend/infrastructure/redis/RedisWireClient.ts",
+    "scripts/runRedisAuthStateTests.ts",
+  ]) {
+    if (!fs.existsSync(path.join(process.cwd(), relative))) throw new Error(`${relative} is missing`);
+  }
+
+  const sessionSource = fs.readFileSync(
+    path.join(process.cwd(), "lib/backend/domains/auth/authProvider.ts"),
+    "utf-8"
+  );
+  const limiterSource = fs.readFileSync(
+    path.join(process.cwd(), "lib/backend/domains/auth/rateLimiter.ts"),
+    "utf-8"
+  );
+  const workflowSource = fs.readFileSync(
+    path.join(process.cwd(), ".github/workflows/apex-one-ci.yml"),
+    "utf-8"
+  );
+
+  if (!sessionSource.includes("class RedisSessionStore")) throw new Error("RedisSessionStore is not implemented");
+  if (!sessionSource.includes("createSessionStoreFromEnvironment")) throw new Error("Session provider composition is not environment-aware");
+  if (!sessionSource.includes("createHash(\"sha256\")")) throw new Error("Redis sessions do not hash opaque token/index material");
+  if (!limiterSource.includes("class RedisRateLimiter")) throw new Error("RedisRateLimiter is not implemented");
+  if (!limiterSource.includes("createRateLimiterFromEnvironment")) throw new Error("Rate-limit provider composition is not environment-aware");
+  if (!workflowSource.includes("Redis Authentication State Integration")) throw new Error("CI does not run the real Redis integration gate");
+  if (!workflowSource.includes("bun run test:redis")) throw new Error("CI does not execute the Redis auth-state test command");
 });
 
 const failed = results.filter((result) => !result.passed);

@@ -62,14 +62,14 @@ const DURABLE_PROVIDER_REQUIREMENTS: Readonly<InfrastructureConfiguration> = Obj
 
 /**
  * Code-owned implementation truth. Configuration cannot override these flags.
- * Stage 4B implements the PostgreSQL database and audit authorities. The other
- * authorities deliberately remain false until their own slices are landed.
+ * Stage 4C adds durable Redis session and rate-limit authorities to the
+ * PostgreSQL database and audit authorities delivered in Stage 4B.
  */
 export const DURABLE_IMPLEMENTATION_STATUS: Readonly<Record<InfrastructureAuthority, boolean>> =
   Object.freeze({
     database: true,
-    session: false,
-    rateLimit: false,
+    session: true,
+    rateLimit: true,
     audit: true,
     objectStorage: false,
     searchIndex: false,

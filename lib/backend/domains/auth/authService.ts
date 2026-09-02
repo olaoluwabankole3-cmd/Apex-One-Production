@@ -2,6 +2,7 @@
  * APEX ONE — Auth & Identity Domain Service
  */
 
+import { createHash } from "node:crypto";
 import { db, DatabaseStore } from "../../database/store";
 import {
   defaultAuthProvider,
@@ -50,6 +51,10 @@ export interface LoginOptions {
 export interface AuthenticatedSessionResult {
   session: AuthSession;
   availableOrganizations: SafeAuthOrganization[];
+}
+
+function sessionAuditFingerprint(token: string): string {
+  return `session:${createHash("sha256").update(token, "utf8").digest("hex").slice(0, 24)}`;
 }
 
 export class AuthService {
@@ -108,7 +113,7 @@ export class AuthService {
         actorEmail: authResult.session.userEmail,
         action: "auth:login",
         resource: "Session",
-        resourceId: authResult.session.token.substring(0, 10) + "...",
+        resourceId: sessionAuditFingerprint(authResult.session.token),
         requestId,
         status: "success",
         metadata: { role: authResult.session.role, organization: authResult.session.organizationName, ip: options?.ipAddress },
@@ -259,7 +264,7 @@ export class AuthService {
         actorEmail: ctx.userEmail,
         action: "auth:logout",
         resource: "Session",
-        resourceId: token.substring(0, 10) + "...",
+        resourceId: sessionAuditFingerprint(token),
         requestId: ctx.requestId,
         status: "success",
       });
