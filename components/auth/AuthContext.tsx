@@ -39,29 +39,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Hydrate session from server HttpOnly cookie on initial mount
+  // Hydrate session from server HttpOnly cookie on initial mount.
+  // If /auth/me reports no valid session, remain explicitly unauthenticated.
   const refreshSession = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      let session = await authClient.getCurrentSession();
-      if (!session || !session.user) {
-        // Bootstrap initial session with default credentials if no active session cookie exists
-        try {
-          const autoResult = await authClient.login({
-            email: "m.thorne@apexsync.ai",
-            password: "ApexEnterprise2026!",
-          });
-          session = {
-            user: autoResult.user,
-            organization: autoResult.organization,
-            availableOrganizations: autoResult.availableOrganizations || [],
-            expiresAt: autoResult.expiresAt,
-          };
-        } catch {
-          // If auto-login fails, remain unauthenticated
-        }
-      }
+      const session = await authClient.getCurrentSession();
 
       if (session && session.user) {
         setUser(session.user);
@@ -72,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setOrganization(null);
         setAvailableOrganizations([]);
       }
-    } catch (err: any) {
+    } catch {
       setUser(null);
       setOrganization(null);
       setAvailableOrganizations([]);
