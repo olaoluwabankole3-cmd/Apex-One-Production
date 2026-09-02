@@ -1,6 +1,7 @@
 import { KnowledgeSynapse, GraphNode, HistoricalEvent } from "@/lib/data/demo";
 import { apiClient } from "@/lib/apiClient";
-import { KnowledgeItemRecord } from "@/lib/backend/database/schema";
+import { KnowledgeItemRecord, MemoryRecord } from "@/lib/backend/database/schema";
+import { collectAllCollectionData } from "./httpCollection";
 
 export interface KnowledgeRepository {
   getSynapses(organizationId?: string): Promise<KnowledgeSynapse[]>;
@@ -23,8 +24,8 @@ function mapRecordToSynapse(k: KnowledgeItemRecord): KnowledgeSynapse {
   const paragraphs = Array.isArray((k as any).sections)
     ? (k as any).sections.map((s: any) => `${s.heading}: ${s.content}`)
     : typeof k.content === "string"
-    ? k.content.split("\n\n")
-    : [k.summary || "Institutional knowledge record."];
+      ? k.content.split("\n\n")
+      : [k.summary || "Institutional knowledge record."];
 
   return {
     id: k.id,
@@ -41,16 +42,8 @@ function mapRecordToSynapse(k: KnowledgeItemRecord): KnowledgeSynapse {
 
 export class ApiKnowledgeRepository implements KnowledgeRepository {
   async getSynapses(_organizationId?: string): Promise<KnowledgeSynapse[]> {
-    try {
-      const res = await apiClient.get<{ success: boolean; data: KnowledgeItemRecord[] }>("/api/v1/knowledge");
-      if (res && Array.isArray(res.data)) {
-        return res.data.map(mapRecordToSynapse);
-      }
-      return [];
-    } catch (err) {
-      console.error("Failed to fetch knowledge items from API:", err);
-      return [];
-    }
+    const records = await collectAllCollectionData<KnowledgeItemRecord>("/api/v1/knowledge");
+    return records.map(mapRecordToSynapse);
   }
 
   async getGraphNodes(_organizationId?: string): Promise<GraphNode[]> {
@@ -60,35 +53,26 @@ export class ApiKnowledgeRepository implements KnowledgeRepository {
       label: s.title,
       type: "Policy" as const,
       details: s.excerpt || s.title,
-      connections: synapses.filter((_, i) => i !== index && i < 3).map(c => c.id),
+      connections: synapses.filter((_, i) => i !== index && i < 3).map((c) => c.id),
     }));
   }
 
   async getHistoricalEvents(_organizationId?: string): Promise<HistoricalEvent[]> {
-    try {
-      const res = await apiClient.get<{ success: boolean; data: any[] }>("/api/v1/memory");
-      if (res && Array.isArray(res.data)) {
-        return res.data.map(m => ({
-          year: new Date(m.createdAt || Date.now()).getFullYear().toString(),
-          title: m.title || "Organizational Memory Record",
-          category: (m.type === "decision" ? "Compliance" : "Strategy") as any,
-          description: m.content || "",
-          evidence: `Source: ${m.source || "System Telemetry"}`,
-          impactValue: "Verified",
-        }));
-      }
-      return [];
-    } catch (err) {
-      console.error("Failed to fetch historical events from API:", err);
-      return [];
-    }
+    const records = await collectAllCollectionData<MemoryRecord>("/api/v1/memory");
+    return records.map((m) => ({
+      year: new Date(m.createdAt || Date.now()).getFullYear().toString(),
+      title: m.title || "Organizational Memory Record",
+      category: (m.type === "decision" ? "Compliance" : "Strategy") as any,
+      description: m.content || "",
+      evidence: `Source: ${m.source || "System Telemetry"}`,
+      impactValue: "Verified",
+    }));
   }
 
   async createKnowledgeItem(data: Partial<KnowledgeItemRecord>): Promise<KnowledgeSynapse> {
-    const res = await apiClient.post<{ success: boolean; data: KnowledgeItemRecord }>("/api/v1/knowledge", data);
-    return mapRecordToSynapse(res.data);
+    const record = await apiClient.postData<KnowledgeItemRecord>("/api/v1/knowledge", data);
+    return mapRecordToSynapse(record);
   }
 }
 
 export const knowledgeRepository = new ApiKnowledgeRepository();
-
