@@ -65,6 +65,13 @@ export interface RecordCertificationDto {
 export class EvidenceService {
   constructor(private readonly database: DatabaseStore = createApplicationInfrastructure().database) {}
 
+  private nextDecisionTimestamp(latestCreatedAt?: string): string {
+    const wallClock = Date.now();
+    const previous = latestCreatedAt ? Date.parse(latestCreatedAt) : Number.NaN;
+    const timestamp = Number.isFinite(previous) ? Math.max(wallClock, previous + 1) : wallClock;
+    return new Date(timestamp).toISOString();
+  }
+
   private async assertPersistentSubjectExists(
     subjectType: EvidenceSubjectType,
     subjectId: string,
@@ -125,10 +132,10 @@ export class EvidenceService {
     assertEvidenceSubject(subjectType, subjectId);
     await this.assertPersistentSubjectExists(subjectType, subjectId, ctx);
 
-    const [verifications, certifications] = await Promise.all([
-      this.allVerificationRecords(subjectType, subjectId, ctx),
-      this.allCertificationRecords(subjectType, subjectId, ctx),
-    ]);
+    // Keep reads sequential: inside a PostgreSQL transaction both repositories share
+    // one wire connection and concurrent protocol messages would corrupt the stream.
+    const verifications = await this.allVerificationRecords(subjectType, subjectId, ctx);
+    const certifications = await this.allCertificationRecords(subjectType, subjectId, ctx);
     return deriveEvidenceStateSnapshot(subjectType, subjectId, verifications, certifications, now);
   }
 
@@ -217,7 +224,7 @@ export class EvidenceService {
         verifierLabel: uow.context.userEmail,
         criteria: dto.criteria,
         reason: dto.reason,
-        createdAt: new Date().toISOString(),
+        createdAt: this.nextDecisionTimestamp(status.latestVerification?.createdAt),
       };
       assertVerificationRecordInvariant(recordData, status.verificationState);
 
@@ -268,7 +275,7 @@ export class EvidenceService {
         reason: dto.reason,
         validFrom: dto.validFrom,
         validUntil: dto.validUntil,
-        createdAt: new Date().toISOString(),
+        createdAt: this.nextDecisionTimestamp(status.latestCertification?.createdAt),
       };
       assertCertificationRecordInvariant(
         recordData,
