@@ -1,7 +1,7 @@
 import { NotificationItem, ActivityItem } from "@/lib/types";
 import { IntelligenceSignal } from "@/lib/data/demo";
-import { apiClient } from "@/lib/apiClient";
 import { AuditLogRecord, OrganizationalMemoryRecord } from "@/lib/backend/database/schema";
+import { collectAllCollectionData } from "./httpCollection";
 
 export interface NotificationRepository {
   getNotifications(organizationId?: string): Promise<NotificationItem[]>;
@@ -12,55 +12,33 @@ export interface NotificationRepository {
 
 export class ApiNotificationRepository implements NotificationRepository {
   async getNotifications(_organizationId?: string): Promise<NotificationItem[]> {
-    try {
-      const res = await apiClient.get<{ success: boolean; data: OrganizationalMemoryRecord[] }>("/api/v1/memory");
-      const memory = res?.data || [];
-
-      if (memory.length > 0) {
-        return memory.slice(0, 6).map((m, i) => ({
-          id: m.id || `notif-${i}`,
-          title: m.title || "Strategic Telemetry Alert",
-          description: m.content || "Systemic intelligence event logged.",
-          time: new Date(m.createdAt || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          read: false,
-          type: "system" as const,
-          severity: m.type === "decision" ? ("success" as const) : m.type === "fact" ? ("info" as const) : ("warning" as const),
-          source: m.source || "Organizational Memory",
-        }));
-      }
-
-      return [];
-    } catch (err) {
-      console.error("Failed to load notifications from API:", err);
-      return [];
-    }
+    const memory = await collectAllCollectionData<OrganizationalMemoryRecord>("/api/v1/memory");
+    return memory.slice(0, 6).map((m, index) => ({
+      id: m.id || `notif-${index}`,
+      title: m.title || "Strategic Telemetry Alert",
+      description: m.content || "Systemic intelligence event logged.",
+      time: new Date(m.createdAt || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      read: false,
+      type: "system" as const,
+      severity: m.type === "decision" ? ("success" as const) : m.type === "fact" ? ("info" as const) : ("warning" as const),
+      source: m.source || "Organizational Memory",
+    }));
   }
 
   async getActivities(_organizationId?: string): Promise<ActivityItem[]> {
-    try {
-      const res = await apiClient.get<{ success: boolean; data: AuditLogRecord[] }>("/api/v1/audit");
-      const logs = res?.data || [];
-
-      if (logs.length > 0) {
-        return logs.slice(0, 10).map((l, idx) => ({
-          id: l.id || `act-${idx}`,
-          actor: l.actorEmail ? l.actorEmail.split("@")[0] : "System Automation",
-          action: l.action.toLowerCase().replace(/_/g, " "),
-          target: l.resource ? `${l.resource} (${(l.resourceId || "").slice(0, 6)})` : "Platform State",
-          time: new Date(l.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          type: l.status === "denied" || l.status === "error" ? "risk" : l.action.includes("CONTRACT") ? "deal" : "system",
-        }));
-      }
-
-      return [];
-    } catch (err) {
-      console.error("Failed to load activities from API:", err);
-      return [];
-    }
+    const logs = await collectAllCollectionData<AuditLogRecord>("/api/v1/audit");
+    return logs.slice(0, 10).map((log, index) => ({
+      id: log.id || `act-${index}`,
+      actor: log.actorEmail ? log.actorEmail.split("@")[0] : "System Automation",
+      action: log.action.toLowerCase().replace(/_/g, " "),
+      target: log.resource ? `${log.resource} (${(log.resourceId || "").slice(0, 6)})` : "Platform State",
+      time: new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      type: log.status === "denied" || log.status === "error" ? "risk" : log.action.includes("CONTRACT") ? "deal" : "system",
+    }));
   }
 
   async getIntelligenceSignals(_organizationId?: string): Promise<IntelligenceSignal[]> {
-    // BACKEND CAPABILITY REQUIRED: Real-time intelligence signals event stream
+    // BACKEND CAPABILITY REQUIRED: Real-time intelligence signals event stream.
     return [];
   }
 
@@ -70,4 +48,3 @@ export class ApiNotificationRepository implements NotificationRepository {
 }
 
 export const notificationRepository = new ApiNotificationRepository();
-
