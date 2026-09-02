@@ -135,8 +135,8 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     this.signalsRepo = new InMemorySignalRepository("Signal", this.signals, handleViolation, this);
     this.opportunitiesRepo = new InMemoryValueOpportunityRepository("ValueOpportunity", this.opportunities, handleViolation, this);
     this.valueCapturedRepo = new InMemoryValueCapturedRepository("ValueCaptured", this.valueCaptured, handleViolation, this);
-    this.memoryRepo = new InMemoryOrganizationalMemoryRepository("OrganizationalMemory", this.memory, handleViolation, this);
-    this.actionsRepo = new InMemoryActionRepository("Action", this.actions, handleViolation, this);
+    this.memoryRepo = new InMemoryOrganizationalMemoryRepository("OrganizationalMemory", this.memory, handleViolation);
+    this.actionsRepo = new InMemoryActionRepository("Action", this.actions, handleViolation);
     this.documentsRepo = new InMemoryDocumentRepository("Document", this.documents, handleViolation, this);
     this.knowledgeRepo = new InMemoryKnowledgeRepository("Knowledge", this.knowledge, handleViolation, this);
     this.workflowsRepo = new InMemoryWorkflowRepository("Workflow", this.workflows, handleViolation, this);
