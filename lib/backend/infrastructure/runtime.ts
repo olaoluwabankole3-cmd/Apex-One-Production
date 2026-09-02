@@ -32,6 +32,10 @@ export interface InfrastructureEnvironment {
   REDIS_URL?: string;
   S3_BUCKET?: string;
   S3_REGION?: string;
+  S3_ENDPOINT?: string;
+  S3_ACCESS_KEY_ID?: string;
+  S3_SECRET_ACCESS_KEY?: string;
+  DOCUMENT_STORAGE_ENCRYPTION_KEY?: string;
   [key: string]: string | undefined;
 }
 
@@ -62,8 +66,8 @@ const DURABLE_PROVIDER_REQUIREMENTS: Readonly<InfrastructureConfiguration> = Obj
 
 /**
  * Code-owned implementation truth. Configuration cannot override these flags.
- * Stage 4C adds durable Redis session and rate-limit authorities to the
- * PostgreSQL database and audit authorities delivered in Stage 4B.
+ * Stage 4D adds encrypted S3-compatible document object storage to the durable
+ * PostgreSQL and Redis authorities delivered in 4B/4C.
  */
 export const DURABLE_IMPLEMENTATION_STATUS: Readonly<Record<InfrastructureAuthority, boolean>> =
   Object.freeze({
@@ -71,7 +75,7 @@ export const DURABLE_IMPLEMENTATION_STATUS: Readonly<Record<InfrastructureAuthor
     session: true,
     rateLimit: true,
     audit: true,
-    objectStorage: false,
+    objectStorage: true,
     searchIndex: false,
   });
 
@@ -138,6 +142,31 @@ function requireProductionPostgresTls(databaseUrl: string | undefined, issues: s
   }
 }
 
+function requireProductionS3Tls(endpoint: string | undefined, issues: string[]): void {
+  if (!endpoint?.trim()) return;
+  try {
+    const url = new URL(endpoint);
+    if (url.protocol !== "https:") {
+      issues.push("S3_ENDPOINT must use https:// in production");
+    }
+  } catch {
+    issues.push("S3_ENDPOINT must be a valid HTTP(S) URL");
+  }
+}
+
+function requireDocumentEncryptionKey(value: string | undefined, issues: string[]): void {
+  if (!value?.trim()) return;
+  const normalized = value.trim();
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)) {
+    issues.push("DOCUMENT_STORAGE_ENCRYPTION_KEY must be base64 encoded");
+    return;
+  }
+  const decoded = Buffer.from(normalized, "base64");
+  if (decoded.length !== 32 || decoded.toString("base64") !== normalized) {
+    issues.push("DOCUMENT_STORAGE_ENCRYPTION_KEY must decode to exactly 32 bytes");
+  }
+}
+
 export function getInfrastructureReadiness(
   env: InfrastructureEnvironment = process.env
 ): InfrastructureReadiness {
@@ -176,6 +205,11 @@ export function getInfrastructureReadiness(
   if (configuration.objectStorage === "s3") {
     requireValue(env, "S3_BUCKET", issues);
     requireValue(env, "S3_REGION", issues);
+    requireValue(env, "S3_ACCESS_KEY_ID", issues);
+    requireValue(env, "S3_SECRET_ACCESS_KEY", issues);
+    requireValue(env, "DOCUMENT_STORAGE_ENCRYPTION_KEY", issues);
+    requireProductionS3Tls(env.S3_ENDPOINT, issues);
+    requireDocumentEncryptionKey(env.DOCUMENT_STORAGE_ENCRYPTION_KEY, issues);
   }
 
   return {

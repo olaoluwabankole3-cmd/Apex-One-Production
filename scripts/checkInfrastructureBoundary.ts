@@ -38,9 +38,13 @@ function durableProductionEnv(): InfrastructureEnvironment {
     APEX_OBJECT_STORAGE_ADAPTER: "s3",
     APEX_SEARCH_INDEX_ADAPTER: "postgres",
     DATABASE_URL: "postgres://example.invalid/apex?sslmode=require",
-    REDIS_URL: "redis://example.invalid:6379/0",
+    REDIS_URL: "rediss://example.invalid:6380/0",
     S3_BUCKET: "apex-production-documents",
     S3_REGION: "eu-west-1",
+    S3_ENDPOINT: "https://s3.example.invalid",
+    S3_ACCESS_KEY_ID: "example-access-key",
+    S3_SECRET_ACCESS_KEY: "example-secret-key",
+    DOCUMENT_STORAGE_ENCRYPTION_KEY: "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=",
   };
 }
 
@@ -80,14 +84,25 @@ check("3. Durable provider selection cannot bypass authorities that remain unimp
   }
 });
 
-check("4. Production durable providers require their connection metadata and PostgreSQL TLS", () => {
+check("4. Production durable providers require connection metadata, encryption, and TLS", () => {
   const env = durableProductionEnv();
   delete env.DATABASE_URL;
   delete env.REDIS_URL;
   delete env.S3_BUCKET;
   delete env.S3_REGION;
+  delete env.S3_ACCESS_KEY_ID;
+  delete env.S3_SECRET_ACCESS_KEY;
+  delete env.DOCUMENT_STORAGE_ENCRYPTION_KEY;
   const readiness = getInfrastructureReadiness(env);
-  for (const key of ["DATABASE_URL", "REDIS_URL", "S3_BUCKET", "S3_REGION"]) {
+  for (const key of [
+    "DATABASE_URL",
+    "REDIS_URL",
+    "S3_BUCKET",
+    "S3_REGION",
+    "S3_ACCESS_KEY_ID",
+    "S3_SECRET_ACCESS_KEY",
+    "DOCUMENT_STORAGE_ENCRYPTION_KEY",
+  ]) {
     if (!readiness.issues.some((issue) => issue.includes(key))) {
       throw new Error(`Missing required infrastructure variable check for ${key}`);
     }
@@ -95,9 +110,17 @@ check("4. Production durable providers require their connection metadata and Pos
 
   const insecure = durableProductionEnv();
   insecure.DATABASE_URL = "postgres://db.example/apex?sslmode=disable";
+  insecure.S3_ENDPOINT = "http://s3.example.invalid";
+  insecure.DOCUMENT_STORAGE_ENCRYPTION_KEY = "not-a-32-byte-key";
   const insecureReadiness = getInfrastructureReadiness(insecure);
   if (!insecureReadiness.issues.some((issue) => issue.includes("sslmode=require"))) {
     throw new Error("Production PostgreSQL URL did not require TLS");
+  }
+  if (!insecureReadiness.issues.some((issue) => issue.includes("S3_ENDPOINT must use https"))) {
+    throw new Error("Production S3 endpoint did not require TLS");
+  }
+  if (!insecureReadiness.issues.some((issue) => issue.includes("DOCUMENT_STORAGE_ENCRYPTION_KEY"))) {
+    throw new Error("Invalid document encryption key was accepted");
   }
 });
 
@@ -135,6 +158,10 @@ check("7. Environment template declares every Stage 4 provider and durable endpo
     "REDIS_URL",
     "S3_BUCKET",
     "S3_REGION",
+    "S3_ENDPOINT",
+    "S3_ACCESS_KEY_ID",
+    "S3_SECRET_ACCESS_KEY",
+    "DOCUMENT_STORAGE_ENCRYPTION_KEY",
   ];
   for (const key of requiredKeys) {
     if (!envSource.includes(`${key}=`)) throw new Error(`.env.example is missing ${key}`);
@@ -145,24 +172,27 @@ check("7. Environment template declares every Stage 4 provider and durable endpo
   if (!envSource.includes("rediss://")) {
     throw new Error(".env.example does not document TLS-capable Redis configuration");
   }
+  if (!envSource.includes("AES-256-GCM")) {
+    throw new Error(".env.example does not document document-object encryption");
+  }
 });
 
-check("8. Stage 4C marks database, audit, session, and rate-limit authorities as durable", () => {
+check("8. Stage 4D marks every authority except search index as durable", () => {
   const expected = {
     database: true,
     session: true,
     rateLimit: true,
     audit: true,
-    objectStorage: false,
+    objectStorage: true,
     searchIndex: false,
   };
   for (const [authority, value] of Object.entries(expected)) {
     if (DURABLE_IMPLEMENTATION_STATUS[authority as keyof typeof DURABLE_IMPLEMENTATION_STATUS] !== value) {
-      throw new Error(`${authority} durable status does not match Stage 4C scope`);
+      throw new Error(`${authority} durable status does not match Stage 4D scope`);
     }
   }
   if (getInfrastructureReadiness(durableProductionEnv()).ready) {
-    throw new Error("Stage 4C incorrectly made the entire Stage 4 production stack ready");
+    throw new Error("Stage 4D incorrectly made the entire Stage 4 production stack ready");
   }
 });
 
@@ -192,18 +222,9 @@ check("11. Redis session/rate-limit composition and integration gate are committ
     if (!fs.existsSync(path.join(process.cwd(), relative))) throw new Error(`${relative} is missing`);
   }
 
-  const sessionSource = fs.readFileSync(
-    path.join(process.cwd(), "lib/backend/domains/auth/authProvider.ts"),
-    "utf-8"
-  );
-  const limiterSource = fs.readFileSync(
-    path.join(process.cwd(), "lib/backend/domains/auth/rateLimiter.ts"),
-    "utf-8"
-  );
-  const workflowSource = fs.readFileSync(
-    path.join(process.cwd(), ".github/workflows/apex-one-ci.yml"),
-    "utf-8"
-  );
+  const sessionSource = fs.readFileSync(path.join(process.cwd(), "lib/backend/domains/auth/authProvider.ts"), "utf-8");
+  const limiterSource = fs.readFileSync(path.join(process.cwd(), "lib/backend/domains/auth/rateLimiter.ts"), "utf-8");
+  const workflowSource = fs.readFileSync(path.join(process.cwd(), ".github/workflows/apex-one-ci.yml"), "utf-8");
 
   if (!sessionSource.includes("class RedisSessionStore")) throw new Error("RedisSessionStore is not implemented");
   if (!sessionSource.includes("createSessionStoreFromEnvironment")) throw new Error("Session provider composition is not environment-aware");
@@ -212,6 +233,29 @@ check("11. Redis session/rate-limit composition and integration gate are committ
   if (!limiterSource.includes("createRateLimiterFromEnvironment")) throw new Error("Rate-limit provider composition is not environment-aware");
   if (!workflowSource.includes("Redis Authentication State Integration")) throw new Error("CI does not run the real Redis integration gate");
   if (!workflowSource.includes("bun run test:redis")) throw new Error("CI does not execute the Redis auth-state test command");
+});
+
+check("12. S3 document storage, encryption, compensation, and integration gate are committed", () => {
+  for (const relative of [
+    "lib/backend/infrastructure/s3/S3WireClient.ts",
+    "lib/backend/domains/documents/documentStorage.ts",
+    "scripts/runS3DocumentStorageTests.ts",
+  ]) {
+    if (!fs.existsSync(path.join(process.cwd(), relative))) throw new Error(`${relative} is missing`);
+  }
+
+  const storageSource = fs.readFileSync(path.join(process.cwd(), "lib/backend/domains/documents/documentStorage.ts"), "utf-8");
+  const serviceSource = fs.readFileSync(path.join(process.cwd(), "lib/backend/domains/documents/documentService.ts"), "utf-8");
+  const workflowSource = fs.readFileSync(path.join(process.cwd(), ".github/workflows/apex-one-ci.yml"), "utf-8");
+
+  if (!storageSource.includes("class S3CompatibleObjectStorageService")) throw new Error("S3-compatible object storage adapter is missing");
+  if (!storageSource.includes("aes-256-gcm")) throw new Error("Document object encryption is not AES-256-GCM");
+  if (!storageSource.includes("buildTenantDocumentObjectKey")) throw new Error("Tenant-scoped object-key builder is missing");
+  if (!serviceSource.includes("document_storage:upload_cleanup_pending")) throw new Error("Upload compensation outbox is missing");
+  if (!serviceSource.includes("document_storage:delete_pending")) throw new Error("Delete retry outbox is missing");
+  if (!serviceSource.includes("retryPendingStorageOperations")) throw new Error("Durable storage retry drain is missing");
+  if (!workflowSource.includes("S3 Document Storage Integration")) throw new Error("CI does not run the real S3 integration gate");
+  if (!workflowSource.includes("bun run test:s3")) throw new Error("CI does not execute the S3 document-storage test command");
 });
 
 const failed = results.filter((result) => !result.passed);
