@@ -1,45 +1,42 @@
 /**
  * APEX ONE — Standard Pagination Contract & Deterministic Sorting Engine
- * 
- * ARCHITECTURAL SPECIFICATION:
- * 1. Reusable paginated result abstraction (`PaginatedResult<T>`).
- * 2. Strict, centralized limits (`DEFAULT_PAGE_SIZE = 50`, `MAX_PAGE_SIZE = 100`).
- * 3. Cursor-based pagination with opaque base64url encoding and tenant isolation binding.
- * 4. Deterministic multi-key sorting with automatic secondary tie-breaker (`id`).
- * 5. Sort field whitelisting to eliminate unvalidated / injection-prone order clauses.
- * 6. Storage-agnostic contract directly translatable to PostgreSQL keyset pagination.
+ *
+ * Stage 3 architectural rules:
+ * 1. Cursor pagination is the single public pagination model.
+ * 2. Page limits come from the shared HTTP contract foundation.
+ * 3. Cursors are opaque, tenant-bound, and deterministic.
+ * 4. Sorting is whitelist-controlled with an automatic `id` tie-breaker.
+ * 5. The engine remains storage-agnostic for future SQL/keyset adapters.
  */
 
 import { TenantContext, ValidationError, CrossTenantViolationError } from "../core/errors";
+import {
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+  type CursorPaginationRequest,
+  type PaginatedResult,
+} from "../../contracts/http";
 
-export const DEFAULT_PAGE_SIZE = 50;
-export const MAX_PAGE_SIZE = 100;
+export {
+  DEFAULT_PAGE_SIZE,
+  MAX_PAGE_SIZE,
+  type PaginatedResult,
+};
 
-export interface PaginationOptions {
-  limit?: number;
-  cursor?: string | null;
-}
-
-export interface PaginatedResult<T> {
-  items: T[];
-  nextCursor?: string | null;
-  hasMore: boolean;
-  totalCount?: number;
-  count?: number;
-}
+export type PaginationOptions = CursorPaginationRequest;
 
 export interface CursorPayload {
-  v: unknown;            // Primary sort field value
-  id: string;            // Entity unique ID tie-breaker
-  f: string;             // Primary sort field key
-  d: "asc" | "desc";     // Sort direction
-  t: string;             // Tenant organizationId (strict isolation check)
+  v: unknown;             // Primary sort field value
+  id: string;             // Entity unique ID tie-breaker
+  f: string;              // Primary sort field key
+  d: "asc" | "desc";    // Sort direction
+  t: string;              // Tenant organizationId (strict isolation check)
 }
 
 /**
  * Normalizes and validates the requested limit against centralized platform boundaries.
- * Rejects 0, negative numbers, NaN, Infinity, and non-numeric values.
- * Caps values exceeding MAX_PAGE_SIZE to MAX_PAGE_SIZE.
+ * Invalid/non-positive values normalize to DEFAULT_PAGE_SIZE; oversized positive values
+ * clamp to MAX_PAGE_SIZE.
  */
 export function normalizeLimit(limit?: unknown): number {
   if (limit === undefined || limit === null) {
@@ -85,7 +82,7 @@ export function encodeCursor(payload: CursorPayload): string {
 }
 
 /**
- * Decodes and validates an opaque pagination cursor, verifying tenant context ownership.
+ * Decodes and validates an opaque pagination cursor, verifying tenant ownership.
  */
 export function decodeCursor(cursor: string, expectedTenantId?: string): CursorPayload {
   if (!cursor || typeof cursor !== "string" || cursor.trim().length === 0) {
@@ -104,15 +101,19 @@ export function decodeCursor(cursor: string, expectedTenantId?: string): CursorP
       throw new ValidationError("Pagination cursor is missing required keys.");
     }
 
+    if (parsed.d !== "asc" && parsed.d !== "desc") {
+      throw new ValidationError("Pagination cursor contains an invalid sort direction.");
+    }
+
     if (expectedTenantId && parsed.t !== expectedTenantId) {
-      throw new ValidationError(`Pagination cursor organization mismatch: cursor issued for ${parsed.t}, expected ${expectedTenantId}`);
+      throw new ValidationError("Pagination cursor is not valid for this organization.");
     }
 
     return {
       v: parsed.v,
       id: String(parsed.id),
       f: String(parsed.f),
-      d: parsed.d === "desc" ? "desc" : "asc",
+      d: parsed.d,
       t: String(parsed.t),
     };
   } catch (err: unknown) {
@@ -124,8 +125,7 @@ export function decodeCursor(cursor: string, expectedTenantId?: string): CursorP
 }
 
 /**
- * Entity Sort Whitelists
- * Prevents arbitrary persistence column injection and unknown property lookups.
+ * Entity sort whitelists prevent arbitrary persistence-column injection.
  */
 export const ENTITY_SORT_WHITELIST: Record<string, readonly string[]> = {
   Customer: ["id", "name", "tier", "status", "healthScore", "arr", "since", "createdAt", "updatedAt", "contractRenewalDate"],
@@ -149,13 +149,15 @@ export interface OrderBySpec<T = Record<string, unknown>> {
 }
 
 /**
- * Validates requested sort fields against entity whitelists and appends a deterministic secondary tie-breaker.
+ * Validates requested sort fields and appends a deterministic secondary `id` tie-breaker.
  */
 export function normalizeAndValidateOrderBy<T>(
   entityName?: string,
   orderBy?: OrderBySpec<T>[] | OrderBySpec<T>
 ): OrderBySpec<T>[] {
-  const whitelist = entityName && ENTITY_SORT_WHITELIST[entityName] ? ENTITY_SORT_WHITELIST[entityName] : undefined;
+  const whitelist = entityName && ENTITY_SORT_WHITELIST[entityName]
+    ? ENTITY_SORT_WHITELIST[entityName]
+    : undefined;
 
   let orderList: OrderBySpec<T>[] = [];
   if (orderBy) {
@@ -166,11 +168,12 @@ export function normalizeAndValidateOrderBy<T>(
     for (const ord of orderList) {
       const fieldStr = String(ord.field);
       if (whitelist && !whitelist.includes(fieldStr)) {
-        throw new ValidationError(`Invalid sort field '${fieldStr}' for entity '${entityName}'. Allowed fields: ${whitelist.join(", ")}`);
+        throw new ValidationError(
+          `Invalid sort field '${fieldStr}' for entity '${entityName}'. Allowed fields: ${whitelist.join(", ")}`
+        );
       }
     }
   } else {
-    // Default deterministic sorting
     if (entityName === "AuditLog") {
       orderList = [{ field: "timestamp", direction: "desc" }];
     } else if (whitelist?.includes("createdAt")) {
@@ -180,7 +183,6 @@ export function normalizeAndValidateOrderBy<T>(
     }
   }
 
-  // Ensure deterministic tie-breaker: always end with `id`
   const hasIdTieBreaker = orderList.some((o) => String(o.field) === "id");
   if (!hasIdTieBreaker) {
     const primaryDir = orderList[0]?.direction || "desc";
@@ -204,10 +206,7 @@ export function compareRecords<T>(a: T, b: T, orderBys: OrderBySpec<T>[]): numbe
     const valA = objA[fieldKey];
     const valB = objB[fieldKey];
 
-    if (valA === valB) {
-      continue;
-    }
-
+    if (valA === valB) continue;
     if (valA === undefined || valA === null) return 1;
     if (valB === undefined || valB === null) return -1;
 
@@ -222,7 +221,6 @@ export function compareRecords<T>(a: T, b: T, orderBys: OrderBySpec<T>[]): numbe
     const strA = String(valA);
     const strB = String(valB);
 
-    // Attempt date comparison for ISO strings
     if (strA.includes("T") && strB.includes("T")) {
       const timeA = Date.parse(strA);
       const timeB = Date.parse(strB);
@@ -232,9 +230,7 @@ export function compareRecords<T>(a: T, b: T, orderBys: OrderBySpec<T>[]): numbe
     }
 
     const comp = strA.localeCompare(strB);
-    if (comp !== 0) {
-      return comp * direction;
-    }
+    if (comp !== 0) return comp * direction;
   }
 
   return 0;
