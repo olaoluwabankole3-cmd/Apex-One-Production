@@ -34,12 +34,15 @@ interface CheckResult {
   error?: string;
 }
 
-const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) {
-  console.error("DATABASE_URL is required for Stage 4B PostgreSQL integration tests");
-  process.exit(1);
+function requireDatabaseUrl(): string {
+  const value = process.env.DATABASE_URL;
+  if (!value) {
+    throw new Error("DATABASE_URL is required for Stage 4B PostgreSQL integration tests");
+  }
+  return value;
 }
 
+const databaseUrl = requireDatabaseUrl();
 const results: CheckResult[] = [];
 
 async function check(name: string, fn: () => Promise<void>): Promise<void> {
