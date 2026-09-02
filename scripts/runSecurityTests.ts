@@ -22,6 +22,7 @@ import { runImmutableUpdateContractsTestSuite } from "../lib/backend/tests/immut
 import { runQueryLimitsAndSortSafetyTestSuite } from "../lib/backend/tests/queryLimitsAndSortSafety.test";
 import { runFinalRepositoryAuditTestSuite } from "../lib/backend/tests/finalRepositoryAudit.test";
 import { runRepositoryQuerySpecificationTestSuite } from "../lib/backend/tests/repositoryQuerySpecification.test";
+import { runHttpContractFoundationTestSuite } from "../lib/backend/tests/httpContractFoundation.test";
 
 interface TestResult {
   suite: string;
@@ -62,6 +63,7 @@ const REGISTERED_SUITES: RegisteredSuite[] = [
   { fileName: "queryLimitsAndSortSafety.test.ts", suiteIdentity: "Query Limits & Sort/Filter Safety Suite", run: runQueryLimitsAndSortSafetyTestSuite as () => Promise<GenericSuiteSummary> },
   { fileName: "finalRepositoryAudit.test.ts", suiteIdentity: "Final Repository Contract Hardening Audit", run: runFinalRepositoryAuditTestSuite as () => Promise<GenericSuiteSummary> },
   { fileName: "repositoryQuerySpecification.test.ts", suiteIdentity: "Repository Query Specification & Pagination Suite", run: runRepositoryQuerySpecificationTestSuite as () => Promise<GenericSuiteSummary> },
+  { fileName: "httpContractFoundation.test.ts", suiteIdentity: "Canonical HTTP Contract Foundation Suite", run: runHttpContractFoundationTestSuite as () => Promise<GenericSuiteSummary> },
 ];
 
 function verifySuiteCompleteness(testsDir: string): void {
