@@ -35,6 +35,7 @@ import RoleSwitcher from "./RoleSwitcher";
 
 import { useRole } from "./RoleContext";
 import { useOrganization } from "./OrganizationContext";
+import { useAuth } from "@/components/auth/AuthContext";
 
 const navItems = [
   { href: "/", label: "Overview", icon: LayoutGrid },
@@ -68,9 +69,18 @@ export default function Topbar() {
   const pathname = usePathname();
   const { role, notifications } = useRole();
   const { organization, isFeatureEnabled } = useOrganization();
+  const { user } = useAuth();
 
   const isCustomer = role === "Customer / Investor";
   const unreadCount = notifications ? notifications.length : 0;
+  const userInitials = user?.name
+    ? user.name
+        .trim()
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((part) => part.charAt(0).toUpperCase())
+        .join("")
+    : "--";
 
   // Filter navigation for the Customer / Investor role (APEX CONNECT)
   const visibleNavItems = navItems.filter((item) => {
@@ -159,8 +169,12 @@ export default function Topbar() {
               <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-crimson" />
             )}
           </Link>
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gold-gradient font-display text-[12px] font-bold text-matte">
-            OA
+          <div
+            className="flex h-9 w-9 items-center justify-center rounded-lg bg-gold-gradient font-display text-[12px] font-bold text-matte"
+            aria-label={user ? `Authenticated user: ${user.name}` : "No authenticated user"}
+            title={user?.name || "Unauthenticated"}
+          >
+            {userInitials}
           </div>
         </div>
       </header>

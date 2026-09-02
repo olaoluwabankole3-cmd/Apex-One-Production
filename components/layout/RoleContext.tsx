@@ -1,13 +1,14 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { Role, ActivityItem, NotificationItem } from "@/lib/types";
+import { ALL_ROLES, Role, ActivityItem, NotificationItem } from "@/lib/types";
 import { notificationRepository } from "@/lib/data/repositories";
 import { isDemoMode } from "@/lib/demo";
-
+import { useAuth } from "@/components/auth/AuthContext";
 
 interface EcosystemContextValue {
   role: Role;
+  /** @deprecated Role is derived from the authenticated session and cannot be changed client-side. */
   setRole: (role: Role) => void;
   activities: ActivityItem[];
   setActivities: React.Dispatch<React.SetStateAction<ActivityItem[]>>;
@@ -28,13 +29,25 @@ interface EcosystemContextValue {
 const RoleContext = createContext<EcosystemContextValue | undefined>(undefined);
 
 export function RoleProvider({ children }: { children: ReactNode }) {
-  const [role, setRole] = useState<Role>("CEO");
+  const { user } = useAuth();
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [submittedDocuments, setSubmittedDocuments] = useState<any[]>([]);
   const [bookedMeetings, setBookedMeetings] = useState<any[]>([]);
   const [appliedProducts, setAppliedProducts] = useState<string[]>([]);
   const [portfolioValue, setPortfolioValue] = useState<number>(0);
+
+  const role: Role = user && ALL_ROLES.includes(user.role as Role)
+    ? (user.role as Role)
+    : "Customer / Investor";
+
+  // Compatibility shim for any legacy consumer. This deliberately does not mutate role.
+  // The authenticated backend session is the only role authority.
+  const setRole = (_requestedRole: Role) => {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("Role is assigned by the authenticated session and cannot be changed client-side.");
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -48,7 +61,6 @@ export function RoleProvider({ children }: { children: ReactNode }) {
         setActivities(acts);
         setNotifications(notifs);
         setSubmittedDocuments([
-
           {
             id: "doc-init-1",
             name: "Government_Issued_ID.pdf",
@@ -131,8 +143,7 @@ export function RoleProvider({ children }: { children: ReactNode }) {
       date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
     };
     setSubmittedDocuments((prev) => [newDoc, ...prev]);
-    
-    // Auto-trigger activity inside the ecosystem
+
     addActivity({
       actor: "Customer Portal",
       action: "submitted a new document",
@@ -157,7 +168,6 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     };
     setBookedMeetings((prev) => [newMeet, ...prev]);
 
-    // Auto-trigger activity inside the ecosystem
     addActivity({
       actor: "Customer Portal",
       action: "booked a RM consultation on",
@@ -178,11 +188,10 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     if (appliedProducts.includes(productId)) return;
     setAppliedProducts((prev) => [...prev, productId]);
 
-    const productName = productId === "yield" ? "High-Yield Custody Note" 
-      : productId === "realestate" ? "Prime Real Estate Bond" 
+    const productName = productId === "yield" ? "High-Yield Custody Note"
+      : productId === "realestate" ? "Prime Real Estate Bond"
       : "Private Wealth Managed Fund";
 
-    // Auto-trigger activity inside the ecosystem
     addActivity({
       actor: "Customer Portal",
       action: "applied for financial product",

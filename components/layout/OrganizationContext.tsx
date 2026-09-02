@@ -9,6 +9,7 @@ import {
   formatNumber as baseFormatNumber,
   formatDate as baseFormatDate
 } from "@/lib/organizationConfig";
+import { useAuth } from "@/components/auth/AuthContext";
 
 interface OrganizationContextValue {
   organization: OrganizationConfig;
@@ -36,7 +37,17 @@ interface OrganizationContextValue {
 const OrganizationContext = createContext<OrganizationContextValue | undefined>(undefined);
 
 export function OrganizationProvider({ children }: { children: ReactNode }) {
-  const [organization, setOrganizationState] = useState<OrganizationConfig>(defaultOrganizationConfig);
+  const { organization: sessionOrganization } = useAuth();
+  const [organizationConfig, setOrganizationState] = useState<OrganizationConfig>(defaultOrganizationConfig);
+
+  const organization: OrganizationConfig = sessionOrganization
+    ? {
+        ...organizationConfig,
+        id: sessionOrganization.id,
+        name: sessionOrganization.name,
+        displayName: sessionOrganization.name,
+      }
+    : organizationConfig;
 
   const setOrganization = (config: OrganizationConfig) => {
     setOrganizationState(config);
