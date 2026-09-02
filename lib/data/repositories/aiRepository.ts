@@ -1,5 +1,6 @@
 import { SuggestedPrompt, QuickAction, ReportSection, Role } from "@/lib/types";
-import { apiClient } from "@/lib/apiClient";
+import { ApiClientContractError, apiClient } from "@/lib/apiClient";
+import type { AiIntelligenceResponse } from "@/lib/backend/domains/ai/aiOrchestratorService";
 
 export interface AIConversationMessage {
   id: string;
@@ -18,22 +19,19 @@ export interface AIRepository {
 
 export class ApiAIRepository implements AIRepository {
   async ask(prompt: string): Promise<string> {
-    try {
-      const res = await apiClient.post<{ success: boolean; data?: { text?: string; response?: string }; text?: string }>("/api/v1/ai/chat", {
-        prompt,
-      });
-      const responseText = res?.data?.text || res?.data?.response || res?.text;
-      if (responseText) return responseText;
-    } catch (e: any) {
-      try {
-        const fallback = await apiClient.post<{ text: string }>("/api/gemini", { prompt });
-        if (fallback?.text) return fallback.text;
-      } catch (err) {
-        console.error("AI service failure:", err);
-        throw new Error("AI intelligence service is currently unavailable.");
-      }
+    const result = await apiClient.postData<AiIntelligenceResponse>("/api/v1/ai/chat", {
+      prompt,
+    });
+
+    if (typeof result.text !== "string" || result.text.trim().length === 0) {
+      throw new ApiClientContractError(
+        "AI intelligence service returned an empty canonical response",
+        "/api/v1/ai/chat",
+        "POST"
+      );
     }
-    throw new Error("AI intelligence service returned an empty response.");
+
+    return result.text;
   }
 
   async getConversationHistory(_conversationId: string): Promise<AIConversationMessage[]> {
@@ -48,7 +46,7 @@ export class ApiAIRepository implements AIRepository {
       { id: "sp-4", label: "At-Risk Account Mitigation", prompt: "List enterprise accounts with health scores below 75 and formulate recovery plans.", roles: ["CEO", "Relationship Manager", "Customer Service"] },
     ];
     if (!role) return defaultPrompts;
-    return defaultPrompts.filter(p => p.roles.includes(role));
+    return defaultPrompts.filter((p) => p.roles.includes(role));
   }
 
   async getQuickActions(role?: Role): Promise<QuickAction[]> {
@@ -58,7 +56,7 @@ export class ApiAIRepository implements AIRepository {
       { id: "qa-3", label: "Verify Compliance Ledger", description: "Validate multi-tenant isolation proofs", icon: "ShieldCheck", roles: ["Compliance", "Operations"] },
     ];
     if (!role) return defaultActions;
-    return defaultActions.filter(q => q.roles.includes(role));
+    return defaultActions.filter((q) => q.roles.includes(role));
   }
 
   async getReportSections(): Promise<ReportSection[]> {
@@ -79,4 +77,3 @@ export class ApiAIRepository implements AIRepository {
 }
 
 export const aiRepository = new ApiAIRepository();
-
