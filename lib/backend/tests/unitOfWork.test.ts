@@ -361,15 +361,27 @@ export async function runUnitOfWorkTestSuite(): Promise<TestSuiteSummary> {
     if (action.status !== "Ready") throw new Error("ActionService create failed");
   });
 
-  await run("10. Repository update mutations cannot change organizationId even in transaction", async () => {
+  await run("10. Repository immutable-field attacks fail the transaction without partial mutation", async () => {
     const store = DatabaseStore.createFreshStore(new ProductionDataProvider());
     const record = await store.customersRepo.create(customer("cust-org-lock-test", "Org Lock"), alphaCtx);
-    await store.runInTransaction(alphaCtx, async (uow) => {
-      await uow.customers.update(record.id, { organizationId: betaCtx.organizationId, name: "Still Alpha" } as any, uow.context);
-    });
+    let error: unknown;
+    try {
+      await store.runInTransaction(alphaCtx, async (uow) => {
+        await uow.customers.update(
+          record.id,
+          { organizationId: betaCtx.organizationId, name: "Should Not Commit" } as any,
+          uow.context
+        );
+      });
+    } catch (caught) {
+      error = caught;
+    }
+    if (!(error instanceof ValidationError)) {
+      throw new Error("immutable organizationId mutation did not fail closed with ValidationError");
+    }
     const persisted = await store.customersRepo.findById(record.id, alphaCtx);
-    if (persisted.organizationId !== alphaCtx.organizationId || persisted.name !== "Still Alpha") {
-      throw new Error("organizationId mutation defense failed inside transaction");
+    if (persisted.organizationId !== alphaCtx.organizationId || persisted.name !== record.name) {
+      throw new Error("rejected immutable-field transaction partially mutated the record");
     }
   });
 
