@@ -4,6 +4,7 @@
 
 import { db, DatabaseStore } from "../../database/store";
 import { OrganizationalMemoryRecord } from "../../database/schema";
+import { PaginatedResult } from "../../database/querySpecification";
 import { TenantContext, requirePermission } from "../../core/security";
 import { Validator } from "../../core/validation";
 
@@ -18,6 +19,13 @@ export interface CreateMemoryDto {
   verified?: boolean;
 }
 
+export interface MemoryListOptions {
+  type?: string;
+  search?: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
 export class MemoryService {
   constructor(private readonly database: DatabaseStore = db) {}
 
@@ -26,15 +34,29 @@ export class MemoryService {
    */
   public async getMemoryItems(
     ctx: TenantContext,
-    filters?: { type?: string; search?: string }
-  ): Promise<OrganizationalMemoryRecord[]> {
+    filters?: MemoryListOptions
+  ): Promise<PaginatedResult<OrganizationalMemoryRecord>> {
     requirePermission(ctx, "org:read");
 
+    const searchTerm = filters?.search?.trim();
+
     return this.database.memoryRepo.findMany(ctx, {
-      filter: {
-        type: filters?.type && filters.type !== "all" ? (filters.type as any) : undefined,
-        search: filters?.search,
+      where: {
+        type:
+          filters?.type && filters.type !== "all"
+            ? (filters.type as any)
+            : undefined,
       },
+      ...(searchTerm
+        ? {
+            search: {
+              fields: ["title", "content", "source", "sourceReference"],
+              term: searchTerm,
+            },
+          }
+        : {}),
+      limit: filters?.limit,
+      cursor: filters?.cursor,
     });
   }
 
