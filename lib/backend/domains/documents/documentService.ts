@@ -1,17 +1,24 @@
 /**
  * APEX ONE — Document Domain Service
- * 
+ *
  * Manages document metadata, secure upload tracking, extraction pipelines,
  * and tenant-isolated index querying.
  */
 
 import { db, DatabaseStore } from "../../database/store";
 import { DocumentRecord } from "../../database/schema";
-import { TenantContext, requirePermission, ValidationError, NotFoundError } from "../../core/security";
+import { PaginatedResult, MAX_PAGE_SIZE } from "../../database/querySpecification";
+import { collectAllPages } from "../../database/paginationTraversal";
+import { TenantContext, requirePermission, ValidationError } from "../../core/security";
 import { UploadDocumentDto, DocumentFilterDto, DocumentSummaryDto } from "./documentTypes";
 import { objectStorageService, IObjectStorageService } from "./documentStorage";
 import { documentExtractor } from "./documentExtractor";
 import { documentSearchIndex, IDocumentSearchIndex } from "./documentSearchIndex";
+
+export interface DocumentListOptions extends DocumentFilterDto {
+  limit?: number;
+  cursor?: string | null;
+}
 
 export class DocumentService {
   constructor(
@@ -21,23 +28,36 @@ export class DocumentService {
   ) {}
 
   /**
-   * List all documents matching tenant criteria.
+   * List documents matching tenant criteria while preserving cursor metadata.
    */
-  public async getDocuments(ctx: TenantContext, filters?: DocumentFilterDto): Promise<DocumentRecord[]> {
+  public async getDocuments(
+    ctx: TenantContext,
+    filters?: DocumentListOptions
+  ): Promise<PaginatedResult<DocumentRecord>> {
     requirePermission(ctx, "document:read");
 
-    let docIdsFromSearch: string[] | undefined;
-    if (filters?.query && filters.query.trim().length > 0) {
-      docIdsFromSearch = await this.searchIndex.search(ctx.organizationId, filters.query.trim());
-    }
+    const query = filters?.query?.trim();
+    const docIdsFromSearch = query
+      ? await this.searchIndex.search(ctx.organizationId, query)
+      : undefined;
 
     return this.database.documentsRepo.findMany(ctx, {
-      filter: {
-        category: filters?.category && filters.category !== "all" ? (filters.category as any) : undefined,
-        status: filters?.status && filters.status !== "all" ? (filters.status as any) : undefined,
+      where: {
+        category:
+          filters?.category && filters.category !== "all"
+            ? (filters.category as any)
+            : undefined,
+        status:
+          filters?.status && filters.status !== "all"
+            ? (filters.status as any)
+            : undefined,
         customerId: filters?.customerId,
-        search: filters?.query,
+        ...(docIdsFromSearch !== undefined
+          ? { id: { in: docIdsFromSearch } }
+          : {}),
       },
+      limit: filters?.limit,
+      cursor: filters?.cursor,
     });
   }
 
@@ -62,7 +82,6 @@ export class DocumentService {
     const docId = `doc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const storageKey = `documents/${ctx.organizationId}/${docId}/${dto.name}`;
 
-    // 1. Put into object storage
     const content = dto.contentBuffer || `Simulated document content for ${dto.name}`;
     const storageResult = await this.storage.putObject(
       storageKey,
@@ -70,7 +89,6 @@ export class DocumentService {
       dto.fileType === "pdf" ? "application/pdf" : "application/octet-stream"
     );
 
-    // 2. Base Record Creation
     const newDoc: DocumentRecord = {
       id: docId,
       organizationId: ctx.organizationId,
@@ -111,7 +129,6 @@ export class DocumentService {
       return doc;
     });
 
-    // 3. Process & Extract
     return this.processDocument(savedDoc.id, ctx, content);
   }
 
@@ -124,14 +141,13 @@ export class DocumentService {
     const doc = await this.database.documentsRepo.findById(id, ctx, "Document");
     const extraction = await documentExtractor.extractFields(doc, content);
 
-    // Index search tokens
     const fullText = `${doc.name} ${doc.category} ${doc.tags.join(" ")} ${extraction.summary} ${extraction.fields
       .map((f) => `${f.label} ${f.value}`)
       .join(" ")}`;
     const indexRef = await this.searchIndex.indexDocument(ctx.organizationId, doc.id, fullText);
 
     return this.database.runInTransaction(ctx, async (uow) => {
-      const updated = await uow.documents.update(
+      return uow.documents.update(
         id,
         {
           status: "indexed",
@@ -146,8 +162,6 @@ export class DocumentService {
         uow.context,
         "Document"
       );
-
-      return updated;
     });
   }
 
@@ -180,12 +194,14 @@ export class DocumentService {
   }
 
   /**
-   * Get metrics summary of tenant documents.
+   * Get metrics summary across the complete tenant document dataset.
    */
   public async getSummary(ctx: TenantContext): Promise<DocumentSummaryDto> {
     requirePermission(ctx, "document:read");
 
-    const docs = await this.database.documentsRepo.findMany(ctx);
+    const docs = await collectAllPages<DocumentRecord>((cursor) =>
+      this.database.documentsRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
+    );
     const byCategory: Record<string, number> = {};
     const byStatus: Record<string, number> = {};
     let totalStorageBytes = 0;
