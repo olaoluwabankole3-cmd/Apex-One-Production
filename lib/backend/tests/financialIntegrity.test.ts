@@ -33,6 +33,24 @@ export interface TestSuiteSummary {
   results: TestCaseResult[];
 }
 
+function makeTenantContext(
+  organizationId: string,
+  userId: string,
+  userEmail: string,
+  requestId: string,
+  permissions: string[]
+): TenantContext {
+  return {
+    organizationId,
+    userId,
+    userEmail,
+    userRole: "admin",
+    permissions,
+    requestId,
+    timestamp: "2026-09-02T00:00:00.000Z",
+  };
+}
+
 export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore): Promise<TestSuiteSummary> {
   const results: TestCaseResult[] = [];
   const originalApiClientGet = apiClient.get;
@@ -63,22 +81,32 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
     const db = isolatedDb || DatabaseStore.createFreshStore();
     new DemoDataProvider().seedInitialTenants(db);
 
-    const orgAContext: TenantContext = {
-      organizationId: "apex-demo",
-      userId: "usr-demo-admin",
-      userRole: "admin",
-      permissions: ["transaction:read", "transaction:write", "customer:read"],
-    };
+    // Financial fixtures intentionally include organizationId in raw records to
+    // exercise tenant isolation. The repository remains authoritative and binds
+    // organization ownership from the supplied TenantContext.
+    const createTransactionFixture = (
+      data: Record<string, unknown>,
+      ctx: TenantContext
+    ) => db.transactionsRepo.create(data as any, ctx);
 
-    const orgBContext: TenantContext = {
-      organizationId: "org-titan-corp",
-      userId: "usr-titan-admin",
-      userRole: "admin",
-      permissions: ["transaction:read", "transaction:write", "customer:read"],
-    };
+    const orgAContext = makeTenantContext(
+      "apex-demo",
+      "usr-demo-admin",
+      "demo-admin@apex.local",
+      "req-financial-org-a",
+      ["transaction:read", "transaction:write", "customer:read"]
+    );
+
+    const orgBContext = makeTenantContext(
+      "org-titan-corp",
+      "usr-titan-admin",
+      "titan-admin@apex.local",
+      "req-financial-org-b",
+      ["transaction:read", "transaction:write", "customer:read"]
+    );
 
     // Register Tenant B USD transaction for isolation testing
-    await db.transactionsRepo.create(
+    await createTransactionFixture(
       {
         id: "txn-titan-1",
         organizationId: "org-titan-corp",
@@ -100,12 +128,13 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
     // =========================================================================
 
     await testCase("Financial Aggregation", "Same currency transactions aggregate accurately", async () => {
-      const testCtx: TenantContext = {
-        organizationId: "org-same-curr-test",
-        userId: "usr-tester",
-        userRole: "admin",
-        permissions: ["transaction:read", "transaction:write", "customer:read", "customer:write"],
-      };
+      const testCtx = makeTenantContext(
+        "org-same-curr-test",
+        "usr-tester",
+        "same-currency@test.local",
+        "req-same-currency",
+        ["transaction:read", "transaction:write", "customer:read", "customer:write"]
+      );
 
       await db.customersRepo.create(
         {
@@ -127,7 +156,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
       );
 
       // Insert 3 NGN transactions: 1,000, 2,500, 500
-      await db.transactionsRepo.create(
+      await createTransactionFixture(
         {
           id: "txn-same-1",
           organizationId: "org-same-curr-test",
@@ -144,7 +173,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
         testCtx
       );
 
-      await db.transactionsRepo.create(
+      await createTransactionFixture(
         {
           id: "txn-same-2",
           organizationId: "org-same-curr-test",
@@ -161,7 +190,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
         testCtx
       );
 
-      await db.transactionsRepo.create(
+      await createTransactionFixture(
         {
           id: "txn-same-3",
           organizationId: "org-same-curr-test",
@@ -199,12 +228,13 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
     // =========================================================================
 
     await testCase("Financial Aggregation", "Mixed currency transactions are NEVER summed into a single universal total", async () => {
-      const testCtx: TenantContext = {
-        organizationId: "org-mixed-curr-test",
-        userId: "usr-tester",
-        userRole: "admin",
-        permissions: ["transaction:read", "transaction:write", "customer:read", "customer:write"],
-      };
+      const testCtx = makeTenantContext(
+        "org-mixed-curr-test",
+        "usr-tester",
+        "mixed-currency@test.local",
+        "req-mixed-currency",
+        ["transaction:read", "transaction:write", "customer:read", "customer:write"]
+      );
 
       await db.customersRepo.create(
         {
@@ -245,7 +275,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
       );
 
       // Insert 1000 NGN and 100 USD
-      await db.transactionsRepo.create(
+      await createTransactionFixture(
         {
           id: "txn-mix-1",
           organizationId: "org-mixed-curr-test",
@@ -262,7 +292,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
         testCtx
       );
 
-      await db.transactionsRepo.create(
+      await createTransactionFixture(
         {
           id: "txn-mix-2",
           organizationId: "org-mixed-curr-test",
@@ -367,12 +397,13 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
     // =========================================================================
 
     await testCase("Financial Aggregation", "Failed, pending, and disputed transactions are excluded from realized totals", async () => {
-      const testCtx: TenantContext = {
-        organizationId: "org-status-filter-test",
-        userId: "usr-tester",
-        userRole: "admin",
-        permissions: ["transaction:read", "transaction:write", "customer:read", "customer:write"],
-      };
+      const testCtx = makeTenantContext(
+        "org-status-filter-test",
+        "usr-tester",
+        "status-filter@test.local",
+        "req-status-filter",
+        ["transaction:read", "transaction:write", "customer:read", "customer:write"]
+      );
 
       await db.customersRepo.create(
         {
@@ -394,7 +425,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
       );
 
       // 1000 cleared revenue
-      await db.transactionsRepo.create(
+      await createTransactionFixture(
         {
           id: "txn-stat-1",
           organizationId: "org-status-filter-test",
@@ -412,7 +443,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
       );
 
       // 500 failed revenue (MUST NOT BE IN REALIZED REVENUE)
-      await db.transactionsRepo.create(
+      await createTransactionFixture(
         {
           id: "txn-stat-2",
           organizationId: "org-status-filter-test",
@@ -430,7 +461,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
       );
 
       // 300 pending revenue (MUST NOT BE IN REALIZED REVENUE)
-      await db.transactionsRepo.create(
+      await createTransactionFixture(
         {
           id: "txn-stat-3",
           organizationId: "org-status-filter-test",
@@ -448,7 +479,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
       );
 
       // 200 disputed revenue (MUST NOT BE IN REALIZED REVENUE)
-      await db.transactionsRepo.create(
+      await createTransactionFixture(
         {
           id: "txn-stat-4",
           organizationId: "org-status-filter-test",
