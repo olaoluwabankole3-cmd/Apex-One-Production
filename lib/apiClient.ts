@@ -154,9 +154,6 @@ export class ApiClientContractError extends Error {
 export class ApiClient {
   private unauthorizedListeners: Set<UnauthorizedListener> = new Set();
 
-  /**
-   * Subscribe to 401 Unauthorized events from backend requests.
-   */
   public onUnauthorized(listener: UnauthorizedListener): () => void {
     this.unauthorizedListeners.add(listener);
     return () => {
@@ -228,13 +225,6 @@ export class ApiClient {
     );
   }
 
-  /**
-   * Perform an API request with same-origin credentials (HttpOnly cookie).
-   *
-   * This is the compatibility/raw transport primitive. It preserves the
-   * response body shape on success while converting failed HTTP responses into
-   * ApiClientError without discarding canonical backend metadata.
-   */
   public async request<TResponse = unknown>(
     endpoint: string,
     init: RequestInit = {}
@@ -271,9 +261,6 @@ export class ApiClient {
     return body as TResponse;
   }
 
-  /**
-   * Require the canonical entity/single-result success envelope and return data.
-   */
   public async requestData<T>(
     endpoint: string,
     init: RequestInit = {}
@@ -299,9 +286,6 @@ export class ApiClient {
     return payload.data;
   }
 
-  /**
-   * Require the canonical collection envelope and preserve pagination metadata.
-   */
   public async requestCollection<T>(
     endpoint: string,
     init: RequestInit = {}
@@ -366,7 +350,24 @@ export class ApiClient {
   }
 
   public async getData<T>(endpoint: string, headers?: HeadersInit): Promise<T> {
-    return this.requestData<T>(endpoint, { method: "GET", headers });
+    const payload = await this.get<unknown>(endpoint, headers);
+
+    if (!isCanonicalSuccessResponse<T>(payload)) {
+      const requestId =
+        isRecord(payload) && typeof payload.requestId === "string"
+          ? payload.requestId
+          : undefined;
+      const error = new ApiClientContractError(
+        "API server returned an invalid canonical success response",
+        endpoint,
+        "GET",
+        requestId
+      );
+      this.publishFailure(error);
+      throw error;
+    }
+
+    return payload.data;
   }
 
   public async postData<T>(
