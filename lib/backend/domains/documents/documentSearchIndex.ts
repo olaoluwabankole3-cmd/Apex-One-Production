@@ -11,7 +11,10 @@
 import { createHash } from "node:crypto";
 import { PostgresConnectionManager } from "../../database/adapters/postgres/PostgresPersistence";
 import { quotePostgresLiteral } from "../../database/adapters/postgres/PostgresWireClient";
-import { isProductionInfrastructureEnvironment } from "../../infrastructure/runtime";
+import {
+  isProductionInfrastructureEnvironment,
+  type InfrastructureEnvironment,
+} from "../../infrastructure/runtime";
 
 export interface IDocumentSearchIndex {
   indexDocument(organizationId: string, documentId: string, textContent: string): Promise<string>;
@@ -19,11 +22,7 @@ export interface IDocumentSearchIndex {
   search(organizationId: string, query: string): Promise<string[]>;
 }
 
-export interface DocumentSearchEnvironment {
-  APP_ENV?: string;
-  APEX_SEARCH_INDEX_ADAPTER?: string;
-  DATABASE_URL?: string;
-}
+export interface DocumentSearchEnvironment extends InfrastructureEnvironment {}
 
 export function tokenizeDocumentSearchText(text: string): string[] {
   return Array.from(

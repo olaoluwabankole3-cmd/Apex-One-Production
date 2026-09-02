@@ -82,6 +82,15 @@ export class AuthService {
       authIdentityRepository ?? new TenantScopedAuthIdentityRepository(this.database);
   }
 
+  /**
+   * Exposes the session authority already composed for this application service.
+   * Core security resolves it dynamically to preserve the security/auth module
+   * cycle boundary without recreating an in-memory store between local requests.
+   */
+  public getAuthoritativeSessionStore(): ISessionStore {
+    return this.sessionStore;
+  }
+
   private async getAvailableOrganizationsForUser(userId: string): Promise<SafeAuthOrganization[]> {
     const memberships = await this.database.findMembershipsForUser(userId);
     const organizations = await Promise.all(

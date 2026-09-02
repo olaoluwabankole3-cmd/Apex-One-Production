@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTenantContext, requirePermission } from "@/lib/backend/core/security";
-import { db } from "@/lib/backend/database/store";
+import { createDatabaseStoreFromEnvironment } from "@/lib/backend/infrastructure/composition";
 import { Validator } from "@/lib/backend/core/validation";
 import { BackendError } from "@/lib/backend/core/errors";
 
@@ -24,21 +24,22 @@ export async function POST(req: NextRequest) {
   try {
     const ctx = await resolveTenantContext(req.headers);
     requirePermission(ctx, "ai:execute");
+    const database = createDatabaseStoreFromEnvironment();
 
     const body = await req.json().catch(() => ({}));
     const validatedPrompt = Validator.requireString(body.prompt, "prompt", { minLength: 1, maxLength: 4000 });
 
-    const org = db.organizations.get(ctx.organizationId);
+    const org = await database.findOrganizationById(ctx.organizationId);
     const orgName = org?.name || "Enterprise Workspace";
     const currency = org?.currencySymbol || "₦";
 
     // Dynamic ground context strictly from authenticated tenant data
-    const customers = await db.customersRepo.findMany(ctx);
-    const opps = await db.opportunitiesRepo.findMany(ctx);
+    const customers = await database.customersRepo.findMany(ctx);
+    const opps = await database.opportunitiesRepo.findMany(ctx);
     const totalArr = customers.items.reduce((sum: number, c) => sum + (c.arr || 0), 0);
     const totalOpps = opps.items.reduce((sum: number, o) => sum + (o.potentialValue || 0), 0);
 
-    db.recordAuditLog({
+    await database.recordAuditLog({
       organizationId: ctx.organizationId,
       actorId: ctx.userId,
       actorEmail: ctx.userEmail,
@@ -83,4 +84,3 @@ When replying to queries about executive intelligence, financial analysis, audit
     );
   }
 }
-
