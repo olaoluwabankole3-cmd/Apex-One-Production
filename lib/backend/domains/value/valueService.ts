@@ -1,6 +1,6 @@
 /**
  * APEX ONE — Value Intelligence Domain Service & Evidence Engine
- * 
+ *
  * Computes live, evidence-backed value metrics from tenant data entities.
  * Strictly adheres to: Source -> Calculation -> Result -> Evidence -> Confidence.
  * Zero hardcoded financial constants.
@@ -8,6 +8,8 @@
 
 import { db, DatabaseStore } from "../../database/store";
 import { ValueOpportunityRecord, ValueCapturedRecord } from "../../database/schema";
+import { PaginatedResult, MAX_PAGE_SIZE } from "../../database/querySpecification";
+import { collectAllPages } from "../../database/paginationTraversal";
 import { TenantContext, requirePermission, ValidationError } from "../../core/security";
 
 export interface ValueEvidenceChain {
@@ -26,7 +28,7 @@ export interface ValueSummaryDto {
   revenueLeakageTotal: ValueEvidenceChain;
   unusedCapacityValue: ValueEvidenceChain;
   verifiedValueCaptured: ValueEvidenceChain;
-  realizationEfficiencyRate: number; // percentage
+  realizationEfficiencyRate: number;
   vectors: { label: string; value: number; count: number; color?: string }[];
   journeyPipeline: {
     identified: number;
@@ -64,38 +66,56 @@ export interface ScenarioSimulationResult {
   };
 }
 
+export interface ValueOpportunityListOptions {
+  category?: string;
+  status?: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
+export interface ValueCapturedListOptions {
+  limit?: number;
+  cursor?: string | null;
+}
+
 export class ValueService {
   constructor(private readonly database: DatabaseStore = db) {}
 
   /**
    * Get consolidated Value Intelligence Command Center metrics for the tenant.
-   * Derived purely from tenant repository entities.
+   * Aggregations traverse the complete cursor-paginated tenant dataset.
    */
   public async getSummary(ctx: TenantContext): Promise<ValueSummaryDto> {
     requirePermission(ctx, "value:read");
 
     const now = new Date().toISOString();
 
-    // 1. Fetch tenant entities
-    const [opps, captured, customers, contracts, txns, signals] = await Promise.all([
-      this.database.opportunitiesRepo.findMany(ctx),
-      this.database.valueCapturedRepo.findMany(ctx),
-      this.database.customersRepo.findMany(ctx),
-      this.database.contractsRepo.findMany(ctx),
-      this.database.transactionsRepo.findMany(ctx),
-      this.database.signalsRepo.findMany(ctx),
+    const [opps, captured, customers, contracts, signals, txnTotals] = await Promise.all([
+      collectAllPages<ValueOpportunityRecord>((cursor) =>
+        this.database.opportunitiesRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
+      ),
+      collectAllPages<ValueCapturedRecord>((cursor) =>
+        this.database.valueCapturedRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
+      ),
+      collectAllPages((cursor) =>
+        this.database.customersRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
+      ),
+      collectAllPages((cursor) =>
+        this.database.contractsRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
+      ),
+      collectAllPages((cursor) =>
+        this.database.signalsRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
+      ),
+      this.database.transactionsRepo.calculateFinancialTotals(ctx),
     ]);
 
-    // 2. Compute Tenant Baseline
     const totalArr = customers.reduce((sum, c) => sum + (c.arr || 0), 0);
     const activeContractsValue = contracts
       .filter((c) => c.status === "active" || c.status === "expiring_soon")
       .reduce((sum, c) => sum + (c.contractValue || 0), 0);
-    const txnTotals = await this.database.transactionsRepo.calculateFinancialTotals(ctx);
     const recordedRevenue = txnTotals.totalRevenue ?? 0;
     const recordedCosts = txnTotals.totalCosts ?? 0;
 
-    // 3. Potential Value Identified (Sum of open/active opportunities)
     const activeOpps = opps.filter((o) => o.status !== "Captured");
     const potentialValueTotal = activeOpps.reduce((sum, o) => sum + o.potentialValue, 0);
     const potentialValueIdentified: ValueEvidenceChain = {
@@ -120,11 +140,13 @@ export class ValueService {
       timestamp: now,
     };
 
-    // 4. Revenue Leakage Total (Sum of active revenue signals + unindexed expiring contracts)
     const revenueSignals = signals.filter((s) => s.category === "revenue" && s.status === "active");
     const unindexedContracts = contracts.filter((c) => !c.volatilityIndexationClause && c.status === "active");
     const signalLeakage = revenueSignals.reduce((sum, s) => sum + s.estimatedFinancialImpact, 0);
-    const contractLeakageRisk = unindexedContracts.reduce((sum, c) => sum + Math.round(c.contractValue * 0.12), 0); // 12% inflation drag
+    const contractLeakageRisk = unindexedContracts.reduce(
+      (sum, c) => sum + Math.round(c.contractValue * 0.12),
+      0
+    );
     const totalLeakage = signalLeakage + contractLeakageRisk;
 
     const leakageSources = [
@@ -157,7 +179,6 @@ export class ValueService {
       timestamp: now,
     };
 
-    // 5. Unused Capacity Value (Sum of active capacity signals)
     const capacitySignals = signals.filter((s) => s.category === "capacity" && s.status === "active");
     const totalCapacityWaste = capacitySignals.reduce((sum, s) => sum + s.estimatedFinancialImpact, 0);
     const unusedCapacityValue: ValueEvidenceChain = {
@@ -179,7 +200,6 @@ export class ValueService {
       timestamp: now,
     };
 
-    // 6. Verified Value Captured (Sum of audited ledger entries)
     const totalCaptured = captured.reduce((sum, c) => sum + c.capturedValue, 0);
     const verifiedValueCaptured: ValueEvidenceChain = {
       metricId: "verified_value_captured",
@@ -200,7 +220,6 @@ export class ValueService {
       timestamp: now,
     };
 
-    // 7. Dynamic Category Vectors (Derived from real tenant opportunities)
     const categories = [
       { key: "Revenue recovery", label: "Revenue Recovery", color: "text-gold" },
       { key: "Customer expansion", label: "Customer Expansion", color: "text-emerald" },
@@ -223,7 +242,6 @@ export class ValueService {
       })
       .filter((v) => v.value > 0 || opps.length === 0);
 
-    // If no opps exist, deliver empty vectors cleanly
     const finalVectors =
       vectors.length > 0
         ? vectors
@@ -234,7 +252,6 @@ export class ValueService {
             { label: "Process & Capacity", value: 0, count: 0, color: "text-purple-400" },
           ];
 
-    // 8. Dynamic Journey Pipeline
     const journeyPipeline = {
       identified: opps.filter((o) => o.status === "Identified").reduce((s, o) => s + o.potentialValue, 0),
       validated: opps.filter((o) => o.status === "Validated").reduce((s, o) => s + o.potentialValue, 0),
@@ -276,15 +293,23 @@ export class ValueService {
    */
   public async getOpportunities(
     ctx: TenantContext,
-    filters?: { category?: string; status?: string }
-  ): Promise<ValueOpportunityRecord[]> {
+    filters?: ValueOpportunityListOptions
+  ): Promise<PaginatedResult<ValueOpportunityRecord>> {
     requirePermission(ctx, "value:read");
 
     return this.database.opportunitiesRepo.findMany(ctx, {
-      filter: {
-        category: filters?.category && filters.category !== "all" ? (filters.category as any) : undefined,
-        status: filters?.status && filters.status !== "all" ? (filters.status as any) : undefined,
+      where: {
+        category:
+          filters?.category && filters.category !== "all"
+            ? (filters.category as any)
+            : undefined,
+        status:
+          filters?.status && filters.status !== "all"
+            ? (filters.status as any)
+            : undefined,
       },
+      limit: filters?.limit,
+      cursor: filters?.cursor,
     });
   }
 
@@ -297,11 +322,17 @@ export class ValueService {
   }
 
   /**
-   * List all verified ROI captured value ledger records.
+   * List captured value ledger records through the canonical cursor contract.
    */
-  public async getCapturedLedger(ctx: TenantContext): Promise<ValueCapturedRecord[]> {
+  public async getCapturedLedger(
+    ctx: TenantContext,
+    options?: ValueCapturedListOptions
+  ): Promise<PaginatedResult<ValueCapturedRecord>> {
     requirePermission(ctx, "value:read");
-    return this.database.valueCapturedRepo.findMany(ctx);
+    return this.database.valueCapturedRepo.findMany(ctx, {
+      limit: options?.limit,
+      cursor: options?.cursor,
+    });
   }
 
   /**
@@ -320,10 +351,13 @@ export class ValueService {
   ): Promise<ScenarioSimulationResult> {
     requirePermission(ctx, "value:read");
 
-    // Dynamically derive baseline from tenant's real customer ARR and contract telemetry
     const [customers, contracts, txnTotals] = await Promise.all([
-      this.database.customersRepo.findMany(ctx),
-      this.database.contractsRepo.findMany(ctx),
+      collectAllPages((cursor) =>
+        this.database.customersRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
+      ),
+      collectAllPages((cursor) =>
+        this.database.contractsRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
+      ),
       this.database.transactionsRepo.calculateFinancialTotals(ctx),
     ]);
 
@@ -336,10 +370,7 @@ export class ValueService {
     const clearedRevenue = txnTotals.totalRevenue ?? 0;
     const clearedCosts = txnTotals.totalCosts ?? 0;
 
-    // Dynamic base revenue selection: prefer ARR, fallback to contract sum or recorded transactions
     const baseRevenue = arrSum > 0 ? arrSum : contractSum > 0 ? contractSum : clearedRevenue;
-
-    // Dynamic base costs selection: prefer cleared costs, fallback to 65% of base revenue if not tracked
     const baseCosts = clearedCosts > 0 ? clearedCosts : Math.round(baseRevenue * 0.65);
 
     if (baseRevenue === 0) {
