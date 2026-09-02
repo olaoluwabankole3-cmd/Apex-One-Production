@@ -1,5 +1,19 @@
 "use client";
 
+/**
+ * APEX ONE — Legacy Ecosystem Presentation Context
+ *
+ * SECURITY BOUNDARY:
+ * - This context is NOT an authentication or authorization authority.
+ * - `role` is a read-only presentation projection of the authenticated backend session.
+ * - `role` may tailor copy, navigation visibility, or view composition only.
+ * - It MUST NOT grant permissions, authorize API calls, approve mutations, or establish tenant identity.
+ * - Permission UX hints belong to AuthContext.hasPermission; backend authorization remains authoritative.
+ *
+ * The legacy `useRole` name is retained because this provider also owns unrelated demo/ecosystem UI state.
+ * Do not add role mutation, permissions, authentication state, or tenant authority to this context.
+ */
+
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { ALL_ROLES, Role, ActivityItem, NotificationItem } from "@/lib/types";
 import { notificationRepository } from "@/lib/data/repositories";
@@ -7,9 +21,11 @@ import { isDemoMode } from "@/lib/demo";
 import { useAuth } from "@/components/auth/AuthContext";
 
 interface EcosystemContextValue {
-  role: Role;
-  /** @deprecated Role is derived from the authenticated session and cannot be changed client-side. */
-  setRole: (role: Role) => void;
+  /**
+   * Presentation-only projection of the authenticated server session role.
+   * Never use this value as proof of permission or as a backend authorization claim.
+   */
+  readonly role: Role;
   activities: ActivityItem[];
   setActivities: React.Dispatch<React.SetStateAction<ActivityItem[]>>;
   addActivity: (act: { actor: string; action: string; target: string; type: ActivityItem["type"] }) => void;
@@ -37,17 +53,11 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   const [appliedProducts, setAppliedProducts] = useState<string[]>([]);
   const [portfolioValue, setPortfolioValue] = useState<number>(0);
 
+  // Read-only UI projection from the authenticated session. Unauthenticated/unknown roles
+  // fall back to the least-privileged customer presentation and never elevate access.
   const role: Role = user && ALL_ROLES.includes(user.role as Role)
     ? (user.role as Role)
     : "Customer / Investor";
-
-  // Compatibility shim for any legacy consumer. This deliberately does not mutate role.
-  // The authenticated backend session is the only role authority.
-  const setRole = (_requestedRole: Role) => {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn("Role is assigned by the authenticated session and cannot be changed client-side.");
-    }
-  };
 
   useEffect(() => {
     let isMounted = true;
@@ -216,7 +226,6 @@ export function RoleProvider({ children }: { children: ReactNode }) {
     <RoleContext.Provider
       value={{
         role,
-        setRole,
         activities,
         setActivities,
         addActivity,
@@ -238,6 +247,10 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Legacy ecosystem UI-state hook.
+ * `role` is presentation-only and must never be treated as authorization evidence.
+ */
 export function useRole() {
   const ctx = useContext(RoleContext);
   if (!ctx) throw new Error("useRole must be used within RoleProvider");
