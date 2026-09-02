@@ -4,6 +4,7 @@
 
 import { db, DatabaseStore } from "../../database/store";
 import { CustomerRecord } from "../../database/schema";
+import { PaginatedResult } from "../../database/querySpecification";
 import { TenantContext, requirePermission } from "../../core/security";
 import { Validator } from "../../core/validation";
 
@@ -35,26 +36,46 @@ export interface UpdateCustomerDto {
   tags?: string[];
 }
 
+export interface CustomerListOptions {
+  tier?: "Enterprise" | "Mid-Market" | "SMB" | "all" | string;
+  status?: "active" | "at-risk" | "onboarding" | "dormant" | "all" | string;
+  search?: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
 export class CustomerService {
   constructor(private readonly database: DatabaseStore = db) {}
 
   /**
-   * List all customers belonging STRICTLY to the authenticated tenant.
+   * List customers belonging STRICTLY to the authenticated tenant.
+   * Cursor pagination is preserved through the service boundary.
    */
   public async getCustomers(
     ctx: TenantContext,
-    filters?: { tier?: "Enterprise" | "Mid-Market" | "SMB" | "all" | string; status?: "active" | "at-risk" | "onboarding" | "dormant" | "all" | string; search?: string; limit?: number; offset?: number }
-  ): Promise<CustomerRecord[]> {
+    filters?: CustomerListOptions
+  ): Promise<PaginatedResult<CustomerRecord>> {
     requirePermission(ctx, "customer:read");
 
+    const tier = filters?.tier && filters.tier !== "all" ? filters.tier : undefined;
+    const status = filters?.status && filters.status !== "all" ? filters.status : undefined;
+    const searchTerm = filters?.search?.trim();
+
     return this.database.customersRepo.findMany(ctx, {
-      filter: {
-        tier: filters?.tier as any,
-        status: filters?.status as any,
-        search: filters?.search,
+      where: {
+        tier: tier as any,
+        status: status as any,
       },
+      ...(searchTerm
+        ? {
+            search: {
+              fields: ["name", "contactName", "contactEmail", "industry", "subsidiary"],
+              term: searchTerm,
+            },
+          }
+        : {}),
       limit: filters?.limit,
-      offset: filters?.offset,
+      cursor: filters?.cursor,
     });
   }
 
