@@ -195,7 +195,10 @@ export class PostgresDocumentSearchIndex implements IDocumentSearchIndex {
 }
 
 export function createDocumentSearchIndexFromEnvironment(
-  env: DocumentSearchEnvironment = process.env
+  env: DocumentSearchEnvironment = {
+    APEX_SEARCH_INDEX_ADAPTER: process.env.APEX_SEARCH_INDEX_ADAPTER,
+    DATABASE_URL: process.env.DATABASE_URL,
+  }
 ): IDocumentSearchIndex {
   const adapter = (env.APEX_SEARCH_INDEX_ADAPTER || "memory").trim().toLowerCase();
 
