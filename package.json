@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test:security": "tsx scripts/runSecurityTests.ts"
+    "test:infrastructure": "tsx scripts/checkInfrastructureBoundary.ts",
+    "test:security": "bun run test:infrastructure && tsx scripts/runSecurityTests.ts"
   },
   "dependencies": {
     "@google/genai": "^2.16.0",
