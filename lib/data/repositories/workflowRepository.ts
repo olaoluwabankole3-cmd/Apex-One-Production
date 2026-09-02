@@ -1,7 +1,8 @@
 import { WorkflowDef, IntegrationItem } from "@/lib/types";
 import { CustomWorkflowDef } from "@/lib/data/demo";
 import { apiClient } from "@/lib/apiClient";
-import { WorkflowRecord } from "@/lib/backend/database/schema";
+import { WorkflowRecord, WorkflowRunRecord } from "@/lib/backend/database/schema";
+import { collectAllCollectionData, isApiNotFound } from "./httpCollection";
 
 export interface WorkflowRepository {
   getWorkflows(organizationId?: string): Promise<WorkflowDef[]>;
@@ -60,52 +61,32 @@ function mapRecordToCustomWorkflow(w: WorkflowRecord): CustomWorkflowDef {
 }
 
 export class ApiWorkflowRepository implements WorkflowRepository {
-  async getWorkflows(organizationId?: string): Promise<WorkflowDef[]> {
-    try {
-      const res = await apiClient.get<{ success: boolean; data: WorkflowRecord[] }>("/api/v1/workflows");
-      if (res && Array.isArray(res.data)) {
-        return res.data.map(mapRecordToCustomWorkflow);
-      }
-      return [];
-    } catch (err) {
-      console.error("Failed to fetch workflows from API:", err);
-      return [];
-    }
+  async getWorkflows(_organizationId?: string): Promise<WorkflowDef[]> {
+    const records = await collectAllCollectionData<WorkflowRecord>("/api/v1/workflows");
+    return records.map(mapRecordToCustomWorkflow);
   }
 
-  async getCustomWorkflows(organizationId?: string): Promise<CustomWorkflowDef[]> {
-    try {
-      const res = await apiClient.get<{ success: boolean; data: WorkflowRecord[] }>("/api/v1/workflows");
-      if (res && Array.isArray(res.data)) {
-        return res.data.map(mapRecordToCustomWorkflow);
-      }
-      return [];
-    } catch (err) {
-      console.error("Failed to fetch custom workflows from API:", err);
-      return [];
-    }
+  async getCustomWorkflows(_organizationId?: string): Promise<CustomWorkflowDef[]> {
+    const records = await collectAllCollectionData<WorkflowRecord>("/api/v1/workflows");
+    return records.map(mapRecordToCustomWorkflow);
   }
 
   async getWorkflow(id: string): Promise<CustomWorkflowDef | undefined> {
     try {
-      const res = await apiClient.get<{ success: boolean; data: WorkflowRecord }>(`/api/v1/workflows/${id}`);
-      if (res && res.data) {
-        return mapRecordToCustomWorkflow(res.data);
-      }
-      return undefined;
-    } catch (err) {
-      console.error(`Failed to fetch workflow ${id} from API:`, err);
-      const list = await this.getCustomWorkflows();
-      return list.find(w => w.id === id);
+      const record = await apiClient.getData<WorkflowRecord>(`/api/v1/workflows/${id}`);
+      return mapRecordToCustomWorkflow(record);
+    } catch (error: unknown) {
+      if (isApiNotFound(error)) return undefined;
+      throw error;
     }
   }
 
   async runWorkflow(id: string): Promise<{ success: boolean; runId: string; logs: string[] }> {
-    const res = await apiClient.post<{ success: boolean; data: { runId: string; logs: string[] } }>(`/api/v1/workflows/${id}/run`);
+    const run = await apiClient.postData<WorkflowRunRecord>(`/api/v1/workflows/${id}/run`, {});
     return {
-      success: !!res?.success,
-      runId: res?.data?.runId || `run-${Date.now()}`,
-      logs: res?.data?.logs || ["Workflow executed successfully."],
+      success: true,
+      runId: run.id,
+      logs: run.steps.map((step) => `${step.nodeTitle}: ${step.status}`),
     };
   }
 
@@ -114,15 +95,14 @@ export class ApiWorkflowRepository implements WorkflowRepository {
   }
 
   async createWorkflow(data: Partial<WorkflowRecord>): Promise<WorkflowDef> {
-    const res = await apiClient.post<{ success: boolean; data: WorkflowRecord }>("/api/v1/workflows", data);
-    return mapRecordToCustomWorkflow(res.data);
+    const record = await apiClient.postData<WorkflowRecord>("/api/v1/workflows", data);
+    return mapRecordToCustomWorkflow(record);
   }
 
   async updateWorkflow(id: string, data: Partial<WorkflowRecord>): Promise<WorkflowDef> {
-    const res = await apiClient.put<{ success: boolean; data: WorkflowRecord }>(`/api/v1/workflows/${id}`, data);
-    return mapRecordToCustomWorkflow(res.data);
+    const record = await apiClient.putData<WorkflowRecord>(`/api/v1/workflows/${id}`, data);
+    return mapRecordToCustomWorkflow(record);
   }
 }
 
 export const workflowRepository = new ApiWorkflowRepository();
-
