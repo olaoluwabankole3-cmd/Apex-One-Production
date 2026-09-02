@@ -1,30 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTenantContext } from "@/lib/backend/core/security";
 import { auditService } from "@/lib/backend/domains/audit/auditService";
-import { BackendError } from "@/lib/backend/core/errors";
-import { Validator } from "@/lib/backend/core/validation";
+import {
+  assertAllowedQueryKeys,
+  parseCursorPagination,
+} from "@/lib/backend/core/requestValidation";
+import { serializeApiError } from "@/lib/backend/core/httpContract";
+import { toCollectionResponse } from "@/lib/contracts/http";
 
 export async function GET(req: NextRequest) {
+  let requestId: string | undefined;
+
   try {
     const ctx = await resolveTenantContext(req.headers);
-    const { searchParams } = new URL(req.url);
-    const rawLimit = searchParams.get("limit");
-    const limit = rawLimit ? parseInt(rawLimit, 10) : undefined;
-    const cursor = searchParams.get("cursor") || undefined;
+    requestId = ctx.requestId;
+    const { searchParams } = req.nextUrl;
 
-    const result = await auditService.getAuditLogs(ctx, { limit, cursor });
-    return NextResponse.json({
-      success: true,
-      data: result.items,
-      cursor: result.nextCursor,
-      hasMore: result.hasMore,
-      count: result.count,
-    });
-  } catch (err: any) {
-    if (err instanceof BackendError) {
-      return NextResponse.json({ error: err.message, code: err.code }, { status: err.statusCode });
-    }
-    return NextResponse.json({ error: "Internal server error", code: "INTERNAL_ERROR" }, { status: 500 });
+    assertAllowedQueryKeys(searchParams, ["limit", "cursor"]);
+    const pagination = parseCursorPagination(searchParams);
+    const result = await auditService.getAuditLogs(ctx, pagination);
+
+    return NextResponse.json(toCollectionResponse(result, requestId));
+  } catch (error: unknown) {
+    const serialized = serializeApiError(error, requestId);
+    return NextResponse.json(serialized.body, { status: serialized.status });
   }
 }
-
