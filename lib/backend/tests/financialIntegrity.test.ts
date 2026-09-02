@@ -138,7 +138,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
 
       await db.customersRepo.create(
         {
-          id: "cust-1",
+          id: "cust-same-1",
           name: "Test Customer 1",
           tier: "Enterprise",
           status: "active",
@@ -160,7 +160,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
         {
           id: "txn-same-1",
           organizationId: "org-same-curr-test",
-          customerId: "cust-1",
+          customerId: "cust-same-1",
           type: "revenue",
           amount: 1000,
           currency: "NGN",
@@ -177,7 +177,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
         {
           id: "txn-same-2",
           organizationId: "org-same-curr-test",
-          customerId: "cust-1",
+          customerId: "cust-same-1",
           type: "revenue",
           amount: 2500,
           currency: "NGN",
@@ -194,7 +194,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
         {
           id: "txn-same-3",
           organizationId: "org-same-curr-test",
-          customerId: "cust-1",
+          customerId: "cust-same-1",
           type: "revenue",
           amount: 500,
           currency: "NGN",
@@ -238,7 +238,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
 
       await db.customersRepo.create(
         {
-          id: "cust-1",
+          id: "cust-mix-1",
           name: "Test Customer 1",
           tier: "Enterprise",
           status: "active",
@@ -257,7 +257,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
 
       await db.customersRepo.create(
         {
-          id: "cust-2",
+          id: "cust-mix-2",
           name: "Test Customer 2",
           tier: "Enterprise",
           status: "active",
@@ -279,7 +279,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
         {
           id: "txn-mix-1",
           organizationId: "org-mixed-curr-test",
-          customerId: "cust-1",
+          customerId: "cust-mix-1",
           type: "revenue",
           amount: 1000,
           currency: "NGN",
@@ -296,7 +296,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
         {
           id: "txn-mix-2",
           organizationId: "org-mixed-curr-test",
-          customerId: "cust-2",
+          customerId: "cust-mix-2",
           type: "revenue",
           amount: 100,
           currency: "USD",
@@ -407,7 +407,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
 
       await db.customersRepo.create(
         {
-          id: "cust-1",
+          id: "cust-status-1",
           name: "Test Customer 1",
           tier: "Enterprise",
           status: "active",
@@ -429,7 +429,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
         {
           id: "txn-stat-1",
           organizationId: "org-status-filter-test",
-          customerId: "cust-1",
+          customerId: "cust-status-1",
           type: "revenue",
           amount: 1000,
           currency: "NGN",
@@ -447,7 +447,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
         {
           id: "txn-stat-2",
           organizationId: "org-status-filter-test",
-          customerId: "cust-1",
+          customerId: "cust-status-1",
           type: "revenue",
           amount: 500,
           currency: "NGN",
@@ -465,7 +465,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
         {
           id: "txn-stat-3",
           organizationId: "org-status-filter-test",
-          customerId: "cust-1",
+          customerId: "cust-status-1",
           type: "revenue",
           amount: 300,
           currency: "NGN",
@@ -483,7 +483,7 @@ export async function runFinancialIntegrityTestSuite(isolatedDb?: DatabaseStore)
         {
           id: "txn-stat-4",
           organizationId: "org-status-filter-test",
-          customerId: "cust-1",
+          customerId: "cust-status-1",
           type: "revenue",
           amount: 200,
           currency: "NGN",
