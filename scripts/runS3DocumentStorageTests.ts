@@ -341,7 +341,8 @@ async function main(): Promise<void> {
       (log) => log.action === "document_storage:upload_cleanup_pending" &&
         !before.some((previous) => previous.resourceId === log.resourceId)
     );
-    const key = newPending?.metadata?.storageKey;
+    if (!newPending) throw new Error("Upload compensation reservation was not durably recorded");
+    const key = newPending.metadata?.storageKey;
     if (typeof key !== "string") throw new Error("Upload compensation reservation was not durably recorded");
     if (await s3.headObject(key)) throw new Error("Compensation left an orphan S3 blob after PostgreSQL rejection");
     if (!after.some((log) => log.resourceId === newPending.resourceId && log.action === "document_storage:completed")) {
