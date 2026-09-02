@@ -173,7 +173,12 @@ check("8. Stage 4F marks all six production authorities durable and ready", () =
 
 check("9. PostgreSQL store has explicit durable construction and no process-global db singleton", () => {
   const storeSource = fs.readFileSync(path.join(process.cwd(), "lib/backend/database/store.ts"), "utf-8");
-  if (!storeSource.includes("PostgresPersistence")) throw new Error("DatabaseStore does not compose PostgreSQL persistence");
+  const integrityFacadeSource = fs.readFileSync(
+    path.join(process.cwd(), "lib/backend/database/adapters/postgres/PostgresIntegrityPersistence.ts"),
+    "utf-8"
+  );
+  if (!storeSource.includes("PostgresIntegrityPersistence")) throw new Error("DatabaseStore does not compose the hardened PostgreSQL persistence facade");
+  if (!integrityFacadeSource.includes("new PostgresPersistence")) throw new Error("PostgreSQL integrity facade is not backed by durable PostgresPersistence");
   if (!storeSource.includes("createPostgresStore")) throw new Error("DatabaseStore has no explicit PostgreSQL construction path");
   if (!storeSource.includes("intentionally NOT authoritative")) throw new Error("Compatibility Map authority is not explicitly constrained in PostgreSQL mode");
   if (!storeSource.includes("this.postgresPersistence.runInTransaction")) throw new Error("Unit of Work does not delegate to PostgreSQL transactions");
