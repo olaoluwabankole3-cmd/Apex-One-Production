@@ -210,7 +210,7 @@ async function main() {
   console.log(`PASSED: ${passedCount}`);
   console.log(`FAILED: ${failedCount}`);
   console.log(`SKIPPED: 0`);
-  console.log(`STATUS: ${passed ? "ALL SECURITY CHECKS PASSED ✅" : "SECURITY VULNERABILITIES DETECTED ❌"}`);
+  console.log(`STATUS: ${passed ? "ALL SECURITY & INTEGRITY CHECKS PASSED ✅" : "RELEASE SAFETY CHECKS FAILED ❌"}`);
   console.log(`DURATION: ${duration}ms`);
   console.log("=".repeat(80) + "\n");
 

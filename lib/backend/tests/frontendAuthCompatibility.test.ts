@@ -286,7 +286,7 @@ export async function runFrontendAuthCompatibilityTestSuite(): Promise<TestSuite
     }
   });
 
-  // Scenario 14: No hardcoded authentication secrets exist in frontend source
+  // Scenario 14: No genuine authentication secrets or private API keys exist in frontend source
   await testCase(suiteName, "14. No genuine authentication secrets or private API keys exist in frontend source", async () => {
     const filesToAudit = [
       "components/layout/Topbar.tsx",
@@ -307,6 +307,19 @@ export async function runFrontendAuthCompatibilityTestSuite(): Promise<TestSuite
       // Check for hardcoded session secrets or bearer strings
       if (content.includes("apex_sec_") || content.includes("Bearer eyJ") || content.includes("secret_key_")) {
         throw new Error(`Hardcoded secret found in ${relPath}`);
+      }
+
+      // Check for embedded literal authentication passwords in frontend source
+      const literalPasswordPattern = /\bpassword\s*:\s*["'][^"'\r\n]+["']/i;
+      const literalPasswordAssignPattern = /\bpassword\s*=\s*["'][^"'\r\n]+["']/i;
+      const literalJsonPasswordPattern = /"password"\s*:\s*"[^"\r\n]+"/i;
+
+      if (
+        literalPasswordPattern.test(content) ||
+        literalPasswordAssignPattern.test(content) ||
+        literalJsonPasswordPattern.test(content)
+      ) {
+        throw new Error(`Embedded authentication credential or password literal found in ${relPath}`);
       }
     }
   });
