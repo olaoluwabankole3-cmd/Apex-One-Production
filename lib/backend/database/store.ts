@@ -26,6 +26,11 @@ import {
   ActionRecord,
   AuditLogRecord,
 } from "./schema";
+import type {
+  CertificationRecord,
+  ProvenanceRecord,
+  VerificationRecord,
+} from "../domains/evidence/model";
 import {
   ICustomerRepository,
   IContractRepository,
@@ -41,6 +46,11 @@ import {
   IWorkflowRunRepository,
   IAuditLogRepository,
 } from "./repository";
+import type {
+  ICertificationRepository,
+  IProvenanceRepository,
+  IVerificationRepository,
+} from "./evidenceRepository";
 import {
   InMemoryCustomerRepository,
   InMemoryContractRepository,
@@ -56,7 +66,17 @@ import {
   InMemoryWorkflowRunRepository,
   InMemoryAuditLogRepository,
 } from "./adapters/inMemory/InMemoryDomainRepositories";
+import {
+  InMemoryCertificationRepository,
+  InMemoryProvenanceRepository,
+  InMemoryVerificationRepository,
+} from "./adapters/inMemory/InMemoryEvidenceRepositories";
 import { PostgresIntegrityPersistence } from "./adapters/postgres/PostgresIntegrityPersistence";
+import {
+  PostgresCertificationRepository,
+  PostgresProvenanceRepository,
+  PostgresVerificationRepository,
+} from "./adapters/postgres/PostgresEvidenceRepositories";
 import { IDataProvider, ProductionDataProvider } from "./demoDataProvider";
 import {
   TenantContext,
@@ -84,6 +104,9 @@ export interface DatabaseStateSnapshot {
   workflows: Map<string, WorkflowRecord>;
   workflowRuns: Map<string, WorkflowRunRecord>;
   actions: Map<string, ActionRecord>;
+  provenance: Map<string, ProvenanceRecord>;
+  verifications: Map<string, VerificationRecord>;
+  certifications: Map<string, CertificationRecord>;
   auditLogs: AuditLogRecord[];
 }
 
@@ -116,6 +139,9 @@ export class DatabaseStore implements IUnitOfWorkProvider {
   public workflows: Map<string, WorkflowRecord> = new Map();
   public workflowRuns: Map<string, WorkflowRunRecord> = new Map();
   public actions: Map<string, ActionRecord> = new Map();
+  public provenance: Map<string, ProvenanceRecord> = new Map();
+  public verifications: Map<string, VerificationRecord> = new Map();
+  public certifications: Map<string, CertificationRecord> = new Map();
 
   public customersRepo: ICustomerRepository;
   public contractsRepo: IContractRepository;
@@ -129,6 +155,9 @@ export class DatabaseStore implements IUnitOfWorkProvider {
   public knowledgeRepo: IKnowledgeRepository;
   public workflowsRepo: IWorkflowRepository;
   public workflowRunsRepo: IWorkflowRunRepository;
+  public provenanceRepo: IProvenanceRepository;
+  public verificationsRepo: IVerificationRepository;
+  public certificationsRepo: ICertificationRepository;
   public auditLogsRepo: IAuditLogRepository;
 
   private readonly postgresPersistence?: PostgresIntegrityPersistence;
@@ -168,6 +197,9 @@ export class DatabaseStore implements IUnitOfWorkProvider {
       this.knowledgeRepo = pg.knowledgeRepo;
       this.workflowsRepo = pg.workflowsRepo;
       this.workflowRunsRepo = pg.workflowRunsRepo;
+      this.provenanceRepo = new PostgresProvenanceRepository(pg.manager);
+      this.verificationsRepo = new PostgresVerificationRepository(pg.manager);
+      this.certificationsRepo = new PostgresCertificationRepository(pg.manager);
       this.auditLogsRepo = pg.auditLogsRepo;
       return;
     }
@@ -199,6 +231,9 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     this.knowledgeRepo = new InMemoryKnowledgeRepository("Knowledge", this.knowledge, handleViolation, this);
     this.workflowsRepo = new InMemoryWorkflowRepository("Workflow", this.workflows, handleViolation, this);
     this.workflowRunsRepo = new InMemoryWorkflowRunRepository("WorkflowRun", this.workflowRuns, handleViolation, this);
+    this.provenanceRepo = new InMemoryProvenanceRepository("Provenance", this.provenance, handleViolation);
+    this.verificationsRepo = new InMemoryVerificationRepository("Verification", this.verifications, handleViolation);
+    this.certificationsRepo = new InMemoryCertificationRepository("Certification", this.certifications, handleViolation);
     this.auditLogsRepo = new InMemoryAuditLogRepository();
 
     dataProvider.seedInitialTenants(this);
@@ -245,6 +280,9 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     this.workflows.clear();
     this.workflowRuns.clear();
     this.actions.clear();
+    this.provenance.clear();
+    this.verifications.clear();
+    this.certifications.clear();
     if (this.auditLogsRepo instanceof InMemoryAuditLogRepository) this.auditLogsRepo.clear();
   }
 
@@ -405,6 +443,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
       documents: this.cloneMap(this.documents), knowledge: this.cloneMap(this.knowledge), memory: this.cloneMap(this.memory), events: this.cloneMap(this.events),
       signals: this.cloneMap(this.signals), opportunities: this.cloneMap(this.opportunities), valueCaptured: this.cloneMap(this.valueCaptured),
       workflows: this.cloneMap(this.workflows), workflowRuns: this.cloneMap(this.workflowRuns), actions: this.cloneMap(this.actions),
+      provenance: this.cloneMap(this.provenance), verifications: this.cloneMap(this.verifications), certifications: this.cloneMap(this.certifications),
       auditLogs: this.auditLogsRepo instanceof InMemoryAuditLogRepository ? this.auditLogsRepo.getSnapshot() : [],
     };
   }
@@ -416,7 +455,8 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     this.restoreMap(this.documents, snapshot.documents); this.restoreMap(this.knowledge, snapshot.knowledge); this.restoreMap(this.memory, snapshot.memory);
     this.restoreMap(this.events, snapshot.events); this.restoreMap(this.signals, snapshot.signals); this.restoreMap(this.opportunities, snapshot.opportunities);
     this.restoreMap(this.valueCaptured, snapshot.valueCaptured); this.restoreMap(this.workflows, snapshot.workflows); this.restoreMap(this.workflowRuns, snapshot.workflowRuns);
-    this.restoreMap(this.actions, snapshot.actions);
+    this.restoreMap(this.actions, snapshot.actions); this.restoreMap(this.provenance, snapshot.provenance); this.restoreMap(this.verifications, snapshot.verifications);
+    this.restoreMap(this.certifications, snapshot.certifications);
     if (this.auditLogsRepo instanceof InMemoryAuditLogRepository) this.auditLogsRepo.restoreSnapshot(snapshot.auditLogs);
   }
 
