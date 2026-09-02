@@ -6,6 +6,7 @@
  * PostgreSQL; DatabaseStore itself no longer owns a process-global default.
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import {
   OrganizationRecord,
   UserRecord,
@@ -57,7 +58,12 @@ import {
 } from "./adapters/inMemory/InMemoryDomainRepositories";
 import { PostgresPersistence } from "./adapters/postgres/PostgresPersistence";
 import { IDataProvider, ProductionDataProvider } from "./demoDataProvider";
-import { TenantContext, CrossTenantViolationError, ValidationError } from "../core/errors";
+import {
+  TenantContext,
+  ConflictError,
+  CrossTenantViolationError,
+  ValidationError,
+} from "../core/errors";
 import { IUnitOfWork, IUnitOfWorkProvider, InMemoryUnitOfWork } from "./unitOfWork";
 import { isProductionInfrastructureEnvironment } from "../infrastructure/runtime";
 
@@ -84,6 +90,11 @@ export interface DatabaseStateSnapshot {
 export interface DatabaseStoreOptions {
   adapter?: "memory" | "postgres";
   databaseUrl?: string;
+}
+
+interface InMemoryTransactionState {
+  context: Readonly<TenantContext>;
+  active: boolean;
 }
 
 export class DatabaseStore implements IUnitOfWorkProvider {
@@ -121,7 +132,8 @@ export class DatabaseStore implements IUnitOfWorkProvider {
   public auditLogsRepo: IAuditLogRepository;
 
   private readonly postgresPersistence?: PostgresPersistence;
-  private activeTransactionContext: Readonly<TenantContext> | null = null;
+  private readonly inMemoryTransactionState = new AsyncLocalStorage<InMemoryTransactionState>();
+  private inMemoryTransactionTail: Promise<void> = Promise.resolve();
 
   constructor(
     dataProvider: IDataProvider = new ProductionDataProvider(),
@@ -312,21 +324,47 @@ export class DatabaseStore implements IUnitOfWorkProvider {
 
   public async createOrganizationRecord(record: OrganizationRecord): Promise<OrganizationRecord> {
     if (this.postgresPersistence) return this.postgresPersistence.createOrganization(record);
-    if (this.organizations.has(record.id)) throw new ValidationError("Organization ID already exists");
+    const normalizedSlug = record.slug.trim().toLowerCase();
+    const duplicate =
+      this.organizations.has(record.id) ||
+      Array.from(this.organizations.values()).some(
+        (organization) => organization.slug.trim().toLowerCase() === normalizedSlug
+      );
+    if (duplicate) {
+      throw new ConflictError("Organization violates a uniqueness constraint", { resource: "Organization" });
+    }
     this.organizations.set(record.id, record);
     return record;
   }
 
   public async createUserRecord(record: UserRecord): Promise<UserRecord> {
     if (this.postgresPersistence) return this.postgresPersistence.createUser(record);
-    if (this.users.has(record.id)) throw new ValidationError("User ID already exists");
+    const normalizedEmail = record.email.trim().toLowerCase();
+    const duplicate =
+      this.users.has(record.id) ||
+      Array.from(this.users.values()).some(
+        (user) => user.email.trim().toLowerCase() === normalizedEmail
+      );
+    if (duplicate) {
+      throw new ConflictError("User violates a uniqueness constraint", { resource: "User" });
+    }
     this.users.set(record.id, record);
     return record;
   }
 
   public async createMembershipRecord(record: OrganizationMembershipRecord): Promise<OrganizationMembershipRecord> {
     if (this.postgresPersistence) return this.postgresPersistence.createMembership(record);
-    if (this.memberships.has(record.id)) throw new ValidationError("Membership ID already exists");
+    const duplicate =
+      this.memberships.has(record.id) ||
+      Array.from(this.memberships.values()).some(
+        (membership) =>
+          membership.organizationId === record.organizationId && membership.userId === record.userId
+      );
+    if (duplicate) {
+      throw new ConflictError("OrganizationMembership violates a uniqueness constraint", {
+        resource: "OrganizationMembership",
+      });
+    }
     this.memberships.set(record.id, record);
     return record;
   }
@@ -342,6 +380,21 @@ export class DatabaseStore implements IUnitOfWorkProvider {
   private restoreMap<T>(target: Map<string, T>, snapshot: Map<string, T>): void {
     target.clear();
     for (const [key, value] of snapshot.entries()) target.set(key, value);
+  }
+
+  private async withInMemoryTransactionLock<T>(work: () => Promise<T>): Promise<T> {
+    const previous = this.inMemoryTransactionTail;
+    let release!: () => void;
+    this.inMemoryTransactionTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    await previous;
+    try {
+      return await work();
+    } finally {
+      release();
+    }
   }
 
   public createSnapshot(): DatabaseStateSnapshot {
@@ -374,32 +427,41 @@ export class DatabaseStore implements IUnitOfWorkProvider {
 
     if (this.postgresPersistence) return this.postgresPersistence.runInTransaction(ctx, work);
 
-    if (this.activeTransactionContext) {
-      if (this.activeTransactionContext.organizationId !== ctx.organizationId) {
-        throw new CrossTenantViolationError(ctx.organizationId, this.activeTransactionContext.organizationId);
+    const activeState = this.inMemoryTransactionState.getStore();
+    if (activeState) {
+      if (!activeState.active) {
+        throw new ValidationError("In-memory transaction context is no longer active");
+      }
+      if (activeState.context.organizationId !== ctx.organizationId) {
+        throw new CrossTenantViolationError(ctx.organizationId, activeState.context.organizationId);
       }
       const nestedUow = new InMemoryUnitOfWork(
-        this.activeTransactionContext, this.customersRepo, this.contractsRepo, this.transactionsRepo, this.signalsRepo,
+        activeState.context, this.customersRepo, this.contractsRepo, this.transactionsRepo, this.signalsRepo,
         this.opportunitiesRepo, this.valueCapturedRepo, this.memoryRepo, this.actionsRepo, this.documentsRepo,
         this.knowledgeRepo, this.workflowsRepo, this.workflowRunsRepo, this.auditLogsRepo, this
       );
       return work(nestedUow);
     }
 
-    const snapshot = this.createSnapshot();
-    const uow = new InMemoryUnitOfWork(
-      ctx, this.customersRepo, this.contractsRepo, this.transactionsRepo, this.signalsRepo,
-      this.opportunitiesRepo, this.valueCapturedRepo, this.memoryRepo, this.actionsRepo, this.documentsRepo,
-      this.knowledgeRepo, this.workflowsRepo, this.workflowRunsRepo, this.auditLogsRepo, this
-    );
-    this.activeTransactionContext = uow.context;
-    try {
-      return await work(uow);
-    } catch (error) {
-      this.restoreSnapshot(snapshot);
-      throw error;
-    } finally {
-      this.activeTransactionContext = null;
-    }
+    return this.withInMemoryTransactionLock(async () => {
+      const snapshot = this.createSnapshot();
+      const uow = new InMemoryUnitOfWork(
+        ctx, this.customersRepo, this.contractsRepo, this.transactionsRepo, this.signalsRepo,
+        this.opportunitiesRepo, this.valueCapturedRepo, this.memoryRepo, this.actionsRepo, this.documentsRepo,
+        this.knowledgeRepo, this.workflowsRepo, this.workflowRunsRepo, this.auditLogsRepo, this
+      );
+      const state: InMemoryTransactionState = { context: uow.context, active: true };
+
+      return this.inMemoryTransactionState.run(state, async () => {
+        try {
+          return await work(uow);
+        } catch (error) {
+          this.restoreSnapshot(snapshot);
+          throw error;
+        } finally {
+          state.active = false;
+        }
+      });
+    });
   }
 }
