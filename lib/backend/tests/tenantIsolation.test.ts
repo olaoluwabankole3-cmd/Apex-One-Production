@@ -131,7 +131,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     userId: "usr-marcus-thorne",
     userEmail: "m.thorne@apexsync.ai",
     userRole: "CEO",
-    permissions: ROLE_PERMISSIONS["CEO"],
+    permissions: [...ROLE_PERMISSIONS["CEO"]],
     requestId: "test_req_tenant_a_ceo",
     timestamp: new Date().toISOString(),
   };
@@ -151,7 +151,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     userId: "usr-elena-cho",
     userEmail: "e.cho@apexsync.ai",
     userRole: "Relationship Manager",
-    permissions: ROLE_PERMISSIONS["Relationship Manager"],
+    permissions: [...ROLE_PERMISSIONS["Relationship Manager"]],
     requestId: "test_req_tenant_a_rm",
     timestamp: new Date().toISOString(),
   };
@@ -161,7 +161,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     userId: "usr-titan-admin",
     userEmail: "admin@titancorp.internal",
     userRole: "CEO",
-    permissions: ROLE_PERMISSIONS["CEO"],
+    permissions: [...ROLE_PERMISSIONS["CEO"]],
     requestId: "test_req_tenant_b_ceo",
     timestamp: new Date().toISOString(),
   };
@@ -634,7 +634,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
       { id: "usr-temp-expired", email: "temp@example.com", name: "Temp" },
       { id: "apex-demo", name: "Apex Demo" },
       "CEO",
-      ROLE_PERMISSIONS["CEO"],
+      [...ROLE_PERMISSIONS["CEO"]],
       -10 // Expired 10 seconds ago
     );
     let rejected = false;
@@ -1525,7 +1525,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
       userId: "usr-empty",
       userEmail: "empty@test.com",
       userRole: "CEO",
-      permissions: ROLE_PERMISSIONS["CEO"],
+      permissions: [...ROLE_PERMISSIONS["CEO"]],
       requestId: "test_empty_org",
       timestamp: new Date().toISOString(),
     };
@@ -1596,7 +1596,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
   // =========================================================================
 
   await testCase("Concurrency & Isolation", "Concurrent parallel operations across Tenant A and Tenant B execute without cross-contamination", async () => {
-    const operations = [
+    const [custA, custB, summaryA, summaryB, docsA, docsB, knowA, knowB] = await Promise.all([
       customerService.getCustomers(tenantAContext),
       customerService.getCustomers(tenantBContext),
       valueService.getSummary(tenantAContext),
@@ -1605,9 +1605,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
       documentService.getDocuments(tenantBContext),
       knowledgeService.getKnowledgeItems(tenantAContext),
       knowledgeService.getKnowledgeItems(tenantBContext),
-    ];
-
-    const [custA, custB, summaryA, summaryB, docsA, docsB, knowA, knowB] = await Promise.all(operations);
+    ] as const);
 
     if (custA.items.some((c) => c.organizationId !== "apex-demo")) throw new Error("Concurrent custA contaminated");
     if (custB.items.some((c) => c.organizationId !== "org-titan-corp")) throw new Error("Concurrent custB contaminated");
@@ -1637,7 +1635,10 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
   await testCase("Validation & Sanitization", "Missing required fields rejected during customer creation", async () => {
     let rejected = false;
     try {
-      await customerService.createCustomer({ name: "" }, tenantAContext);
+      await customerService.createCustomer(
+        { name: "", contactEmail: "missing-name@test.local" },
+        tenantAContext
+      );
     } catch (err: any) {
       if (err instanceof ValidationError) rejected = true;
     }
@@ -1691,7 +1692,10 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
     let rejected = false;
     try {
       // Viewer lacks customer:write
-      await customerService.createCustomer({ name: "Unauthorized Add" }, limitedContext);
+      await customerService.createCustomer(
+        { name: "Unauthorized Add", contactEmail: "unauthorized.add@test.local" },
+        limitedContext
+      );
     } catch (err: any) {
       if (err instanceof ForbiddenError) rejected = true;
     }
@@ -1744,7 +1748,7 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
       {
         name: "Enterprise Audit Policy Verification.pdf",
         fileType: "pdf",
-        category: "Policy",
+        category: "Compliance Document",
         content: "Enterprise governance and multi-tenant authorization guidelines.",
       },
       tenantAContext
