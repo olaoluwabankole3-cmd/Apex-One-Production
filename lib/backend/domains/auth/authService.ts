@@ -14,6 +14,10 @@ import {
   ForbiddenError,
   ValidationError,
 } from "../../core/errors";
+import {
+  IAuthIdentityRepository,
+  TenantScopedAuthIdentityRepository,
+} from "./authIdentityRepository";
 
 export interface LoginDto {
   email: string;
@@ -33,12 +37,18 @@ export interface LoginOptions {
 }
 
 export class AuthService {
+  private readonly authIdentityRepository: IAuthIdentityRepository;
+
   constructor(
     private readonly database: DatabaseStore = db,
     private readonly authProvider: IAuthenticationProvider = defaultAuthProvider,
     private readonly sessionStore: ISessionStore = defaultSessionStore,
-    private readonly rateLimiter: IRateLimiter = defaultAuthRateLimiter
-  ) {}
+    private readonly rateLimiter: IRateLimiter = defaultAuthRateLimiter,
+    authIdentityRepository?: IAuthIdentityRepository
+  ) {
+    this.authIdentityRepository =
+      authIdentityRepository ?? new TenantScopedAuthIdentityRepository(database);
+  }
 
   /**
    * Authenticate a user, verify organization membership, enforce rate limiting,
@@ -131,23 +141,29 @@ export class AuthService {
   }
 
   /**
-   * Change user password with cryptographic verification of current password,
+   * Change a user password with cryptographic verification of the current password,
    * enterprise policy validation, and complete invalidation of prior active sessions.
+   *
+   * SECURITY INVARIANT:
+   * The target identity is resolved and mutated exclusively through the tenant-scoped
+   * auth identity repository. org:admin permits changing another user only inside the
+   * caller's authenticated organization; it never grants cross-tenant identity access.
    */
   public async changePassword(dto: ChangePasswordDto, ctx: TenantContext): Promise<boolean> {
     if (!dto.userId || !dto.currentPassword || !dto.newPassword) {
       throw new ValidationError("User ID, current password, and new password are required");
     }
 
-    // Only allow users to change their own password unless caller possesses org:admin
+    // Only allow users to change their own password unless caller possesses org:admin.
+    // Tenant membership is enforced independently by the repository below.
     if (ctx.userId !== dto.userId && !ctx.permissions.includes("org:admin")) {
       throw new ForbiddenError("You are not authorized to change credentials for another user");
     }
 
-    const user = this.database.users.get(dto.userId);
-    if (!user) {
-      throw new NotFoundError("User");
-    }
+    // Tenant-scoped lookup occurs before any credential verification. Cross-tenant
+    // targets therefore fail as not-found without revealing whether the user exists
+    // or whether the supplied current password is correct.
+    const user = await this.authIdentityRepository.findUserById(dto.userId, ctx);
 
     // Verify current password against stored credentials
     if (!user.passwordHash || !user.passwordSalt) {
@@ -166,12 +182,17 @@ export class AuthService {
 
     // Generate new secure hash and salt
     const newCredentials = hashPassword(dto.newPassword);
-    user.passwordHash = newCredentials.hash;
-    user.passwordSalt = newCredentials.salt;
-    this.database.users.set(user.id, user);
+    const updatedUser = await this.authIdentityRepository.updatePasswordCredentials(
+      user.id,
+      {
+        passwordHash: newCredentials.hash,
+        passwordSalt: newCredentials.salt,
+      },
+      ctx
+    );
 
-    // Invalidate all active sessions for the user to force re-authentication across all devices
-    await this.sessionStore.revokeUserSessions(user.id);
+    // Invalidate all active sessions for the target user to force re-authentication across all devices
+    await this.sessionStore.revokeUserSessions(updatedUser.id);
 
     this.database.recordAuditLog({
       organizationId: ctx.organizationId,
@@ -179,7 +200,7 @@ export class AuthService {
       actorEmail: ctx.userEmail,
       action: "auth:password_change",
       resource: "User",
-      resourceId: user.id,
+      resourceId: updatedUser.id,
       requestId: ctx.requestId,
       status: "success",
     });

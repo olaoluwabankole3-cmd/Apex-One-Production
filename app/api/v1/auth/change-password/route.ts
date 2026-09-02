@@ -8,6 +8,19 @@ export async function POST(req: NextRequest) {
     const ctx = await resolveTenantContext(req.headers);
     const body = await req.json().catch(() => ({}));
 
+    // Tenant identity is derived exclusively from the authenticated session.
+    // Client-supplied organization selectors are not valid on this endpoint.
+    if (body.organizationId !== undefined || body.tenantId !== undefined) {
+      throw new ValidationError("Organization selection is not permitted for password changes");
+    }
+
+    if (
+      body.userId !== undefined &&
+      (typeof body.userId !== "string" || body.userId.trim().length === 0)
+    ) {
+      throw new ValidationError("User ID must be a non-empty string when provided");
+    }
+
     if (!body.currentPassword || typeof body.currentPassword !== "string") {
       throw new ValidationError("Current password is required");
     }
@@ -16,9 +29,12 @@ export async function POST(req: NextRequest) {
       throw new ValidationError("New password is required");
     }
 
+    const targetUserId =
+      typeof body.userId === "string" ? body.userId.trim() : ctx.userId;
+
     await authService.changePassword(
       {
-        userId: body.userId || ctx.userId,
+        userId: targetUserId,
         currentPassword: body.currentPassword,
         newPassword: body.newPassword,
       },

@@ -11,6 +11,7 @@ import { runTenantIsolationTestSuite } from "../lib/backend/tests/tenantIsolatio
 import { runFrontendAuthCompatibilityTestSuite } from "../lib/backend/tests/frontendAuthCompatibility.test";
 import { runFrontendRoleAuthorityTestSuite } from "../lib/backend/tests/frontendRoleAuthority.test";
 import { runFrontendPrivilegedUiAuthorizationTestSuite } from "../lib/backend/tests/frontendPrivilegedUiAuthorization.test";
+import { runPasswordChangeTenantBoundaryTestSuite } from "../lib/backend/tests/passwordChangeTenantBoundary.test";
 import { runCustomerDataTruthfulnessTestSuite } from "../lib/backend/tests/customerDataTruthfulness.test";
 import { runFinancialIntegrityTestSuite } from "../lib/backend/tests/financialIntegrity.test";
 import { runRelationshipIntegrityTestSuite } from "../lib/backend/tests/relationshipIntegrity.test";
@@ -64,6 +65,11 @@ const REGISTERED_SUITES: RegisteredSuite[] = [
     fileName: "frontendPrivilegedUiAuthorization.test.ts",
     suiteIdentity: "Frontend Privileged UI Authorization Suite",
     run: runFrontendPrivilegedUiAuthorizationTestSuite as () => Promise<GenericSuiteSummary>,
+  },
+  {
+    fileName: "passwordChangeTenantBoundary.test.ts",
+    suiteIdentity: "Password Change Tenant Boundary Suite",
+    run: runPasswordChangeTenantBoundaryTestSuite as () => Promise<GenericSuiteSummary>,
   },
   {
     fileName: "customerDataTruthfulness.test.ts",
