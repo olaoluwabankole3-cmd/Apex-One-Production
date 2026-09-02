@@ -1,45 +1,19 @@
 /**
  * APEX ONE — Repository Interfaces & Data Access Contracts
- * 
- * Defines abstract data access boundaries between domain services and underlying storage.
- * In Phase 2, these are backed by InMemory Adapters.
- * In Phase 3, these interfaces will be backed by PostgreSQL / Cloud SQL.
+ *
+ * Stage 3 canonical collection boundary:
+ * - every collection read returns PaginatedResult<T>
+ * - every collection query uses QuerySpecification<T>
+ * - cursor pagination is the only repository pagination model
+ * - findOne/count are explicit primitives
+ * - executable predicate search is not part of the repository contract
  */
 
 import { TenantContext } from "../core/errors";
-import {
-  DEFAULT_PAGE_SIZE,
-  MAX_PAGE_SIZE,
-  CollectionQuery,
-  SortOptions,
-  SortDirection,
-  CustomerQueryFilter,
-  CustomerSortField,
-  ContractQueryFilter,
-  ContractSortField,
-  TransactionQueryFilter,
-  TransactionSortField,
-  SignalQueryFilter,
-  SignalSortField,
-  ValueOpportunityQueryFilter,
-  ValueOpportunitySortField,
-  ValueCapturedQueryFilter,
-  ValueCapturedSortField,
-  OrganizationalMemoryQueryFilter,
-  OrganizationalMemorySortField,
-  ActionQueryFilter,
-  ActionSortField,
-  DocumentQueryFilter,
-  DocumentSortField,
-  KnowledgeQueryFilter,
-  KnowledgeSortField,
-  WorkflowQueryFilter,
-  WorkflowSortField,
-  WorkflowRunQueryFilter,
-  WorkflowRunSortField,
-  AuditLogQueryFilter,
-  AuditLogSortField,
-} from "./query";
+import type {
+  PaginatedResult,
+  QuerySpecification,
+} from "./querySpecification";
 import {
   CustomerRecord,
   ContractRecord,
@@ -70,31 +44,27 @@ import {
 
 export interface ITenantScopedRepository<
   T extends { id: string; organizationId: string },
-  TUpdate = Partial<Omit<T, "id" | "organizationId" | "createdAt">>,
-  TFilter = unknown,
-  TSortField extends string = string
+  TUpdate = Partial<Omit<T, "id" | "organizationId" | "createdAt">>
 > {
   findById(id: string, ctx: TenantContext, resourceName?: string): Promise<T>;
-  findMany(
-    ctx: TenantContext,
-    query?: CollectionQuery<TFilter, TSortField> | ((item: T) => boolean)
-  ): Promise<T[]>;
+  findMany(ctx: TenantContext, query?: QuerySpecification<T>): Promise<PaginatedResult<T>>;
+  findOne(ctx: TenantContext, query?: QuerySpecification<T>): Promise<T | undefined>;
+  count(ctx: TenantContext, query?: QuerySpecification<T>): Promise<number>;
   create(data: Omit<T, "organizationId">, ctx: TenantContext): Promise<T>;
   update(id: string, updates: TUpdate, ctx: TenantContext, resourceName?: string): Promise<T>;
   delete(id: string, ctx: TenantContext, resourceName?: string): Promise<boolean>;
-  search(ctx: TenantContext, predicate: (item: T) => boolean): Promise<T[]>;
 }
 
 export interface ICustomerRepository
-  extends ITenantScopedRepository<CustomerRecord, UpdateCustomerInput, CustomerQueryFilter, CustomerSortField> {
+  extends ITenantScopedRepository<CustomerRecord, UpdateCustomerInput> {
   findByEmail(email: string, ctx: TenantContext): Promise<CustomerRecord | undefined>;
-  findAtRisk(ctx: TenantContext): Promise<CustomerRecord[]>;
+  findAtRisk(ctx: TenantContext): Promise<PaginatedResult<CustomerRecord>>;
 }
 
 export interface IContractRepository
-  extends ITenantScopedRepository<ContractRecord, UpdateContractInput, ContractQueryFilter, ContractSortField> {
-  findByCustomer(customerId: string, ctx: TenantContext): Promise<ContractRecord[]>;
-  findExpiringSoon(daysThreshold: number, ctx: TenantContext): Promise<ContractRecord[]>;
+  extends ITenantScopedRepository<ContractRecord, UpdateContractInput> {
+  findByCustomer(customerId: string, ctx: TenantContext): Promise<PaginatedResult<ContractRecord>>;
+  findExpiringSoon(daysThreshold: number, ctx: TenantContext): Promise<PaginatedResult<ContractRecord>>;
 }
 
 export interface FinancialTotalsByCurrency {
@@ -113,122 +83,101 @@ export interface FinancialTotalsResult {
 }
 
 export interface ITransactionRepository
-  extends ITenantScopedRepository<TransactionRecord, UpdateTransactionInput, TransactionQueryFilter, TransactionSortField> {
-  findByCustomer(customerId: string, ctx: TenantContext): Promise<TransactionRecord[]>;
+  extends ITenantScopedRepository<TransactionRecord, UpdateTransactionInput> {
+  findByCustomer(customerId: string, ctx: TenantContext): Promise<PaginatedResult<TransactionRecord>>;
   calculateFinancialTotals(ctx: TenantContext): Promise<FinancialTotalsResult>;
 }
 
 export interface ISignalRepository
-  extends ITenantScopedRepository<SignalRecord, UpdateSignalInput, SignalQueryFilter, SignalSortField> {
-  findActiveByCategory(category: string, ctx: TenantContext): Promise<SignalRecord[]>;
+  extends ITenantScopedRepository<SignalRecord, UpdateSignalInput> {
+  findActiveByCategory(category: string, ctx: TenantContext): Promise<PaginatedResult<SignalRecord>>;
 }
 
 export interface IValueOpportunityRepository
-  extends ITenantScopedRepository<ValueOpportunityRecord, UpdateValueOpportunityInput, ValueOpportunityQueryFilter, ValueOpportunitySortField> {
-  findByCategory(category: string, ctx: TenantContext): Promise<ValueOpportunityRecord[]>;
-  findByStatus(status: string, ctx: TenantContext): Promise<ValueOpportunityRecord[]>;
+  extends ITenantScopedRepository<ValueOpportunityRecord, UpdateValueOpportunityInput> {
+  findByCategory(category: string, ctx: TenantContext): Promise<PaginatedResult<ValueOpportunityRecord>>;
+  findByStatus(status: string, ctx: TenantContext): Promise<PaginatedResult<ValueOpportunityRecord>>;
 }
 
 export interface IValueCapturedRepository
-  extends ITenantScopedRepository<ValueCapturedRecord, UpdateValueCapturedInput, ValueCapturedQueryFilter, ValueCapturedSortField> {
+  extends ITenantScopedRepository<ValueCapturedRecord, UpdateValueCapturedInput> {
   calculateTotalCaptured(ctx: TenantContext): Promise<number>;
 }
 
 export interface IOrganizationalMemoryRepository
-  extends ITenantScopedRepository<OrganizationalMemoryRecord, UpdateOrganizationalMemoryInput, OrganizationalMemoryQueryFilter, OrganizationalMemorySortField> {
-  searchKeywords(keywords: string[], ctx: TenantContext): Promise<OrganizationalMemoryRecord[]>;
+  extends ITenantScopedRepository<OrganizationalMemoryRecord, UpdateOrganizationalMemoryInput> {
+  searchKeywords(keywords: string[], ctx: TenantContext): Promise<PaginatedResult<OrganizationalMemoryRecord>>;
 }
 
 export interface IActionRepository
-  extends ITenantScopedRepository<ActionRecord, UpdateActionInput, ActionQueryFilter, ActionSortField> {
-  findByStatus(status: string, ctx: TenantContext): Promise<ActionRecord[]>;
+  extends ITenantScopedRepository<ActionRecord, UpdateActionInput> {
+  findByStatus(status: string, ctx: TenantContext): Promise<PaginatedResult<ActionRecord>>;
 }
 
 export interface IDocumentRepository
-  extends ITenantScopedRepository<DocumentRecord, UpdateDocumentInput, DocumentQueryFilter, DocumentSortField> {
-  findByCategory(category: string, ctx: TenantContext): Promise<DocumentRecord[]>;
-  findByCustomer(customerId: string, ctx: TenantContext): Promise<DocumentRecord[]>;
-  findByStatus(status: string, ctx: TenantContext): Promise<DocumentRecord[]>;
+  extends ITenantScopedRepository<DocumentRecord, UpdateDocumentInput> {
+  findByCategory(category: string, ctx: TenantContext): Promise<PaginatedResult<DocumentRecord>>;
+  findByCustomer(customerId: string, ctx: TenantContext): Promise<PaginatedResult<DocumentRecord>>;
+  findByStatus(status: string, ctx: TenantContext): Promise<PaginatedResult<DocumentRecord>>;
 }
 
 export interface IKnowledgeRepository
-  extends ITenantScopedRepository<KnowledgeItemRecord, UpdateKnowledgeItemInput, KnowledgeQueryFilter, KnowledgeSortField> {
-  findByCategory(category: string, ctx: TenantContext): Promise<KnowledgeItemRecord[]>;
-  findByTags(tags: string[], ctx: TenantContext): Promise<KnowledgeItemRecord[]>;
-  searchContent(query: string, ctx: TenantContext): Promise<KnowledgeItemRecord[]>;
+  extends ITenantScopedRepository<KnowledgeItemRecord, UpdateKnowledgeItemInput> {
+  findByCategory(category: string, ctx: TenantContext): Promise<PaginatedResult<KnowledgeItemRecord>>;
+  findByTags(tags: string[], ctx: TenantContext): Promise<PaginatedResult<KnowledgeItemRecord>>;
+  searchContent(query: string, ctx: TenantContext): Promise<PaginatedResult<KnowledgeItemRecord>>;
 }
 
 export interface IWorkflowRepository
-  extends ITenantScopedRepository<WorkflowRecord, UpdateWorkflowInput, WorkflowQueryFilter, WorkflowSortField> {
-  findActive(ctx: TenantContext): Promise<WorkflowRecord[]>;
+  extends ITenantScopedRepository<WorkflowRecord, UpdateWorkflowInput> {
+  findActive(ctx: TenantContext): Promise<PaginatedResult<WorkflowRecord>>;
 }
 
 export interface IWorkflowRunRepository
-  extends ITenantScopedRepository<WorkflowRunRecord, UpdateWorkflowRunInput, WorkflowRunQueryFilter, WorkflowRunSortField> {
-  findByWorkflow(workflowId: string, ctx: TenantContext): Promise<WorkflowRunRecord[]>;
-  findActiveRuns(ctx: TenantContext): Promise<WorkflowRunRecord[]>;
+  extends ITenantScopedRepository<WorkflowRunRecord, UpdateWorkflowRunInput> {
+  findByWorkflow(workflowId: string, ctx: TenantContext): Promise<PaginatedResult<WorkflowRunRecord>>;
+  findActiveRuns(ctx: TenantContext): Promise<PaginatedResult<WorkflowRunRecord>>;
 }
 
 export interface IAuditLogRepository {
-  record(log: Omit<AuditLogRecord, "id"> | (Omit<AuditLogRecord, "id" | "timestamp"> & { timestamp?: string })): Promise<AuditLogRecord>;
+  record(
+    log:
+      | Omit<AuditLogRecord, "id">
+      | (Omit<AuditLogRecord, "id" | "timestamp"> & { timestamp?: string })
+  ): Promise<AuditLogRecord>;
   findMany(
     ctx: TenantContext,
-    queryOrLimit?: CollectionQuery<AuditLogQueryFilter, AuditLogSortField> | number
-  ): Promise<AuditLogRecord[]>;
+    query?: QuerySpecification<AuditLogRecord>
+  ): Promise<PaginatedResult<AuditLogRecord>>;
+  findOne(
+    ctx: TenantContext,
+    query?: QuerySpecification<AuditLogRecord>
+  ): Promise<AuditLogRecord | undefined>;
+  count(ctx: TenantContext, query?: QuerySpecification<AuditLogRecord>): Promise<number>;
 }
 
 export {
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
-  normalizeQueryLimit,
-  normalizeQueryOffset,
-  validateSortOptions,
-  CUSTOMER_SORT_FIELDS,
-  CONTRACT_SORT_FIELDS,
-  TRANSACTION_SORT_FIELDS,
-  SIGNAL_SORT_FIELDS,
-  VALUE_OPPORTUNITY_SORT_FIELDS,
-  VALUE_CAPTURED_SORT_FIELDS,
-  ORGANIZATIONAL_MEMORY_SORT_FIELDS,
-  ACTION_SORT_FIELDS,
-  DOCUMENT_SORT_FIELDS,
-  KNOWLEDGE_SORT_FIELDS,
-  WORKFLOW_SORT_FIELDS,
-  WORKFLOW_RUN_SORT_FIELDS,
-  AUDIT_LOG_SORT_FIELDS,
-} from "./query";
+  normalizeLimit,
+  encodeCursor,
+  decodeCursor,
+  ENTITY_SORT_WHITELIST,
+  normalizeAndValidateOrderBy,
+  compareRecords,
+} from "./querySpecification";
 
 export type {
-  CollectionQuery,
-  SortOptions,
-  SortDirection,
-  CustomerQueryFilter,
-  CustomerSortField,
-  ContractQueryFilter,
-  ContractSortField,
-  TransactionQueryFilter,
-  TransactionSortField,
-  SignalQueryFilter,
-  SignalSortField,
-  ValueOpportunityQueryFilter,
-  ValueOpportunitySortField,
-  ValueCapturedQueryFilter,
-  ValueCapturedSortField,
-  OrganizationalMemoryQueryFilter,
-  OrganizationalMemorySortField,
-  ActionQueryFilter,
-  ActionSortField,
-  DocumentQueryFilter,
-  DocumentSortField,
-  KnowledgeQueryFilter,
-  KnowledgeSortField,
-  WorkflowQueryFilter,
-  WorkflowSortField,
-  WorkflowRunQueryFilter,
-  WorkflowRunSortField,
-  AuditLogQueryFilter,
-  AuditLogSortField,
-} from "./query";
+  PaginatedResult,
+  PaginationOptions,
+  QuerySpecification,
+  QueryFilter,
+  FieldCondition,
+  ComparisonOperator,
+  SearchSpecification,
+  OrderBySpecification,
+  OrderByClause,
+} from "./querySpecification";
 
 export type {
   UpdateCustomerInput,
