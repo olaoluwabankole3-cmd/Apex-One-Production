@@ -1,6 +1,6 @@
 /**
  * APEX ONE — Audit Domain Service
- * 
+ *
  * Provides immutable audit logging and retrieval for enterprise compliance.
  */
 
@@ -13,11 +13,11 @@ export class AuditService {
   constructor(private readonly database: DatabaseStore = db) {}
 
   /**
-   * Fetch immutable audit logs for the authenticated tenant.
+   * Fetch immutable audit logs for the authenticated tenant through the canonical cursor contract.
    */
   public async getAuditLogs(
     ctx: TenantContext,
-    options?: PaginationOptions | number
+    options?: PaginationOptions
   ): Promise<PaginatedResult<AuditLogRecord>> {
     requirePermission(ctx, "audit:read");
     return this.database.auditLogsRepo.findMany(ctx, options);
