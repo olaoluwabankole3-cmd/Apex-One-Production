@@ -1,30 +1,55 @@
 /**
  * APEX ONE — Knowledge Domain Service
- * 
+ *
  * Manages institutional memory, playbooks, policies, and regulatory guidelines
  * with strict organization-level scoping.
  */
 
 import { db, DatabaseStore } from "../../database/store";
 import { KnowledgeItemRecord } from "../../database/schema";
-import { TenantContext, requirePermission, ValidationError, NotFoundError } from "../../core/security";
+import { PaginatedResult } from "../../database/querySpecification";
+import { TenantContext, requirePermission, ValidationError } from "../../core/security";
 import { CreateKnowledgeItemDto, UpdateKnowledgeItemDto, KnowledgeFilterDto } from "./knowledgeTypes";
+
+export interface KnowledgeListOptions extends KnowledgeFilterDto {
+  limit?: number;
+  cursor?: string | null;
+}
 
 export class KnowledgeService {
   constructor(private readonly database: DatabaseStore = db) {}
 
   /**
-   * List all knowledge items accessible in the tenant context.
+   * List knowledge items accessible in the tenant context.
    */
-  public async getKnowledgeItems(ctx: TenantContext, filters?: KnowledgeFilterDto): Promise<KnowledgeItemRecord[]> {
+  public async getKnowledgeItems(
+    ctx: TenantContext,
+    filters?: KnowledgeListOptions
+  ): Promise<PaginatedResult<KnowledgeItemRecord>> {
     requirePermission(ctx, "knowledge:read");
 
+    const query = filters?.query?.trim();
+
     return this.database.knowledgeRepo.findMany(ctx, {
-      filter: {
-        category: filters?.category && filters.category !== "all" ? (filters.category as any) : undefined,
-        tags: filters?.tags,
-        search: filters?.query,
+      where: {
+        category:
+          filters?.category && filters.category !== "all"
+            ? (filters.category as any)
+            : undefined,
+        ...(filters?.tags && filters.tags.length > 0
+          ? { tags: { arrayContainsAny: filters.tags } }
+          : {}),
       },
+      ...(query
+        ? {
+            search: {
+              fields: ["title", "content", "summary", "tags"],
+              term: query,
+            },
+          }
+        : {}),
+      limit: filters?.limit,
+      cursor: filters?.cursor,
     });
   }
 
