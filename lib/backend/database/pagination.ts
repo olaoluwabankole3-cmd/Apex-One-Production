@@ -140,6 +140,9 @@ export const ENTITY_SORT_WHITELIST: Record<string, readonly string[]> = {
   KnowledgeItem: ["id", "title", "category", "confidenceScore", "verifiedAt", "createdAt", "updatedAt"],
   Workflow: ["id", "name", "category", "status", "createdAt", "updatedAt"],
   WorkflowRun: ["id", "workflowId", "status", "startedAt", "completedAt", "createdAt", "updatedAt"],
+  Provenance: ["id", "subjectType", "subjectId", "relation", "producerType", "createdAt"],
+  Verification: ["id", "subjectType", "subjectId", "state", "verifierId", "createdAt"],
+  Certification: ["id", "subjectType", "subjectId", "state", "certifierId", "validFrom", "validUntil", "createdAt"],
   AuditLog: ["id", "timestamp", "actorEmail", "action", "resource", "resourceId", "status"],
 };
 
