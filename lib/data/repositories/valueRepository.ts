@@ -113,7 +113,8 @@ export class ApiValueRepository implements ValueRepository {
       category: c.category,
       amountCaptured: c.capturedValue,
       impactMetrics: c.evidenceDescription,
-      recordedBy: c.recordedBy,
+      // Legacy ValueCaptured.certifiedBy is intentionally not projected here.
+      // Verification/certification attribution must come from canonical evidence history.
     }));
   }
 
