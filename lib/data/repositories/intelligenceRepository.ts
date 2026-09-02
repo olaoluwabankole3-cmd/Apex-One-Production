@@ -1,6 +1,11 @@
 import { Role } from "@/lib/types";
 import { apiClient } from "@/lib/apiClient";
 import { CustomerRecord } from "@/lib/backend/database/schema";
+import { collectAllCollectionData } from "./httpCollection";
+
+interface ValueSummaryResponse {
+  totalCapturedValue: number;
+}
 
 export interface IntelligenceRepository {
   getExecutiveSummary(role: Role, organizationId?: string): Promise<string>;
@@ -9,31 +14,28 @@ export interface IntelligenceRepository {
 
 export class ApiIntelligenceRepository implements IntelligenceRepository {
   async getExecutiveSummary(role: Role, _organizationId?: string): Promise<string> {
-    try {
-      const [custRes, valRes] = await Promise.all([
-        apiClient.get<{ success: boolean; data: CustomerRecord[] }>("/api/v1/customers").catch(() => null),
-        apiClient.get<{ success: boolean; data: any }>("/api/v1/value/summary").catch(() => null),
-      ]);
+    const [customers, valueSummary] = await Promise.all([
+      collectAllCollectionData<CustomerRecord>("/api/v1/customers"),
+      apiClient.getData<ValueSummaryResponse>("/api/v1/value/summary"),
+    ]);
 
-      const customers = custRes?.data || [];
-      const totalArrUSD = customers.reduce((sum, c) => sum + (c.arr || 0), 0);
-      const totalArrM = (totalArrUSD / 1000000).toFixed(1);
-      const atRiskCount = customers.filter(c => c.status === "at-risk" || c.healthScore < 70).length;
-      const totalCaptured = valRes?.data?.totalCapturedValue ? (valRes.data.totalCapturedValue / 1000000).toFixed(1) : "0.0";
+    const totalArrUSD = customers.reduce((sum, c) => sum + (c.arr || 0), 0);
+    const totalArrM = (totalArrUSD / 1000000).toFixed(1);
+    const atRiskCount = customers.filter((c) => c.status === "at-risk" || c.healthScore < 70).length;
+    const totalCaptured = valueSummary.totalCapturedValue
+      ? (valueSummary.totalCapturedValue / 1000000).toFixed(1)
+      : "0.0";
 
-      if (role === "CEO") {
-        return `Enterprise portfolio ARR stands at $${totalArrM}M across ${customers.length} accounts. ₦${totalCaptured}M in verified captured value recorded.`;
-      } else if (role === "Operations") {
-        return `Workflow pipelines and system telemetry active across organizational infrastructure.`;
-      } else if (role === "Compliance") {
-        return `Multi-tenant security boundaries and immutable audit logs active.`;
-      } else {
-        return `Relationship portfolio monitoring ${customers.length} active enterprise accounts with ${atRiskCount} accounts flagged for review.`;
-      }
-    } catch (err) {
-      console.error("Failed to generate executive summary:", err);
-      return "Executive intelligence summary not available.";
+    if (role === "CEO") {
+      return `Enterprise portfolio ARR stands at $${totalArrM}M across ${customers.length} accounts. ₦${totalCaptured}M in verified captured value recorded.`;
     }
+    if (role === "Operations") {
+      return "Workflow pipelines and system telemetry active across organizational infrastructure.";
+    }
+    if (role === "Compliance") {
+      return "Multi-tenant security boundaries and immutable audit logs active.";
+    }
+    return `Relationship portfolio monitoring ${customers.length} active enterprise accounts with ${atRiskCount} accounts flagged for review.`;
   }
 
   async getSuggestedPrompts(role: Role, _organizationId?: string): Promise<string[]> {
@@ -65,11 +67,10 @@ export class ApiIntelligenceRepository implements IntelligenceRepository {
       "Customer / Investor": [
         "View portfolio performance and ESG compliance metrics",
         "Review institutional governance disclosures",
-      ]
+      ],
     };
     return promptMap[role] || promptMap.CEO;
   }
 }
 
 export const intelligenceRepository = new ApiIntelligenceRepository();
-
