@@ -1,11 +1,5 @@
 /**
  * APEX ONE — Authentication Provider & Session Store Interfaces
- * 
- * Implements an enterprise-grade pluggable identity abstraction:
- * 1. Cryptographically secure random session tokens (crypto.randomBytes 256-bit entropy)
- * 2. Constant-time salted PBKDF2 password verification with timing normalization
- * 3. Formal ISessionStore contract supporting pluggable in-memory and Redis/SQL persistence
- * 4. Authoritative tenant membership and RBAC capability derivation
  */
 
 import {
@@ -69,7 +63,7 @@ export class InMemorySessionStore implements ISessionStore {
       };
     }
 
-    const ttlSeconds = params.ttlSeconds !== undefined ? params.ttlSeconds : 86400; // 24 hours default
+    const ttlSeconds = params.ttlSeconds !== undefined ? params.ttlSeconds : 86400;
     const token = generateSecureToken("apex_sec");
     const now = new Date();
     const expires = new Date(now.getTime() + ttlSeconds * 1000);
@@ -99,14 +93,10 @@ export class InMemorySessionStore implements ISessionStore {
     if (!token || typeof token !== "string") return undefined;
     const session = this.sessions.get(token);
     if (!session) return undefined;
-
-    // Check TTL expiration
     if (new Date(session.expiresAt) < new Date()) {
       this.sessions.delete(token);
       return undefined;
     }
-
-    // Update last activity timestamp
     session.lastActivityAt = new Date().toISOString();
     return session;
   }
@@ -115,12 +105,10 @@ export class InMemorySessionStore implements ISessionStore {
     if (!token || typeof token !== "string") return false;
     const session = this.sessions.get(token);
     if (!session) return false;
-
     if (new Date(session.expiresAt) < new Date()) {
       this.sessions.delete(token);
       return false;
     }
-
     session.lastActivityAt = new Date().toISOString();
     return true;
   }
@@ -136,7 +124,7 @@ export class InMemorySessionStore implements ISessionStore {
     for (const [token, session] of this.sessions.entries()) {
       if (session.userId === userId) {
         this.sessions.delete(token);
-        count++;
+        count += 1;
       }
     }
     return count;
@@ -148,7 +136,7 @@ export class InMemorySessionStore implements ISessionStore {
     for (const [token, session] of this.sessions.entries()) {
       if (session.organizationId === organizationId) {
         this.sessions.delete(token);
-        count++;
+        count += 1;
       }
     }
     return count;
@@ -160,7 +148,7 @@ export class InMemorySessionStore implements ISessionStore {
     for (const [token, session] of this.sessions.entries()) {
       if (new Date(session.expiresAt) < now) {
         this.sessions.delete(token);
-        cleaned++;
+        cleaned += 1;
       }
     }
     return cleaned;
@@ -169,11 +157,7 @@ export class InMemorySessionStore implements ISessionStore {
   public async getActiveSessionCount(): Promise<number> {
     const now = new Date();
     let count = 0;
-    for (const session of this.sessions.values()) {
-      if (new Date(session.expiresAt) >= now) {
-        count++;
-      }
-    }
+    for (const session of this.sessions.values()) if (new Date(session.expiresAt) >= now) count += 1;
     return count;
   }
 
@@ -214,36 +198,24 @@ export class LocalAuthenticationProvider implements IAuthenticationProvider {
     session: AuthSession;
     availableOrganizations: { id: string; name: string; role: string }[];
   }> {
-    // 1. Validate email input presence and format
     if (!email || typeof email !== "string" || email.trim().length === 0) {
       throw new UnauthorizedError("Invalid email or password");
     }
-
-    // 2. Validate password input strictly
     if (!password || typeof password !== "string" || password.length === 0) {
       throw new UnauthorizedError("Invalid email or password");
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const user = await this.database.findUserByEmail(normalizedEmail);
 
-    // 3. User lookup
-    const user = Array.from(this.database.users.values()).find(
-      (u) => u.email.toLowerCase() === normalizedEmail
-    );
-
-    // Timing-attack normalization: If user not found, perform dummy PBKDF2 hash computation
     if (!user) {
       dummyPasswordVerification(password);
       throw new UnauthorizedError("Invalid email or password");
     }
-
-    // 4. Account status verification: Only active accounts may authenticate
     if (user.status !== "active") {
       dummyPasswordVerification(password);
       throw new UnauthorizedError("Invalid email or password");
     }
-
-    // 5. Mandatory credential verification: Password hash and salt must exist
     if (
       !user.passwordHash ||
       !user.passwordSalt ||
@@ -255,39 +227,28 @@ export class LocalAuthenticationProvider implements IAuthenticationProvider {
       dummyPasswordVerification(password);
       throw new UnauthorizedError("Invalid email or password");
     }
-
-    // 6. Cryptographically verify password against stored PBKDF2 hash
-    const isPasswordValid = verifyPassword(password, user.passwordHash, user.passwordSalt);
-    if (!isPasswordValid) {
+    if (!verifyPassword(password, user.passwordHash, user.passwordSalt)) {
       throw new UnauthorizedError("Invalid email or password");
     }
 
-    // 7. Resolve verified tenant memberships for authenticated user
-    const memberships = Array.from(this.database.memberships.values()).filter((m) => m.userId === user.id);
+    const memberships = await this.database.findMembershipsForUser(user.id);
     if (memberships.length === 0) {
       throw new ForbiddenError("User is not associated with any active organization tenant");
     }
 
-    // 8. Enforce organization boundary: targetOrganizationId must be a verified membership
     let chosenMembership = memberships[0];
     if (targetOrganizationId) {
-      const match = memberships.find((m) => m.organizationId === targetOrganizationId);
+      const match = memberships.find((membership) => membership.organizationId === targetOrganizationId);
       if (!match) {
         throw new ForbiddenError(`User is not an authorized member of organization ${targetOrganizationId}`);
       }
       chosenMembership = match;
     }
 
-    const org = this.database.organizations.get(chosenMembership.organizationId);
-    if (!org) {
-      throw new NotFoundError("Organization");
-    }
+    const org = await this.database.findOrganizationById(chosenMembership.organizationId);
+    if (!org) throw new NotFoundError("Organization");
 
-    // 9. Derive authoritative permissions strictly from database-backed role.
-    // Unknown roles fail closed in getPermissionsForRole rather than inheriting a default role.
     const permissions = [...getPermissionsForRole(chosenMembership.role)];
-
-    // 10. Issue secure authenticated session only after all checks have passed (Session Fixation Prevention)
     const session = await this.sessionStore.createSession({
       user: { id: user.id, email: user.email, name: user.name },
       org: { id: org.id, name: org.name },
@@ -297,14 +258,16 @@ export class LocalAuthenticationProvider implements IAuthenticationProvider {
       userAgent: options?.userAgent,
     });
 
-    const availableOrganizations = memberships.map((m) => {
-      const o = this.database.organizations.get(m.organizationId);
-      return {
-        id: m.organizationId,
-        name: o?.name || m.organizationId,
-        role: m.role,
-      };
-    });
+    const availableOrganizations = await Promise.all(
+      memberships.map(async (membership) => {
+        const organization = await this.database.findOrganizationById(membership.organizationId);
+        return {
+          id: membership.organizationId,
+          name: organization?.name || membership.organizationId,
+          role: membership.role,
+        };
+      })
+    );
 
     return { session, availableOrganizations };
   }

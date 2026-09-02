@@ -37,7 +37,7 @@ function durableProductionEnv(): InfrastructureEnvironment {
     APEX_AUDIT_ADAPTER: "postgres",
     APEX_OBJECT_STORAGE_ADAPTER: "s3",
     APEX_SEARCH_INDEX_ADAPTER: "postgres",
-    DATABASE_URL: "postgres://example.invalid/apex",
+    DATABASE_URL: "postgres://example.invalid/apex?sslmode=require",
     REDIS_URL: "redis://example.invalid:6379",
     S3_BUCKET: "apex-production-documents",
     S3_REGION: "eu-west-1",
@@ -64,20 +64,23 @@ check("2. Production with missing adapter configuration fails closed", () => {
   }
 });
 
-check("3. Durable provider selection alone cannot bypass missing implementations", () => {
+check("3. Durable provider selection cannot bypass authorities that remain unimplemented", () => {
   const readiness = getInfrastructureReadiness(durableProductionEnv());
   if (readiness.ready) {
-    throw new Error("Production became ready before durable adapters were implemented and wired");
+    throw new Error("Production became ready before all Stage 4 durable adapters were implemented and wired");
   }
   for (const [authority, implemented] of Object.entries(DURABLE_IMPLEMENTATION_STATUS)) {
-    if (implemented) continue;
-    if (!readiness.issues.some((issue) => issue.includes(`${authority} durable adapter`))) {
+    const hasImplementationIssue = readiness.issues.some((issue) => issue.includes(`${authority} durable adapter`));
+    if (implemented && hasImplementationIssue) {
+      throw new Error(`${authority} is implemented but readiness still reports it missing`);
+    }
+    if (!implemented && !hasImplementationIssue) {
       throw new Error(`Missing code-owned implementation gate for ${authority}`);
     }
   }
 });
 
-check("4. Production durable providers require their connection metadata", () => {
+check("4. Production durable providers require their connection metadata and PostgreSQL TLS", () => {
   const env = durableProductionEnv();
   delete env.DATABASE_URL;
   delete env.REDIS_URL;
@@ -89,6 +92,13 @@ check("4. Production durable providers require their connection metadata", () =>
       throw new Error(`Missing required infrastructure variable check for ${key}`);
     }
   }
+
+  const insecure = durableProductionEnv();
+  insecure.DATABASE_URL = "postgres://db.example/apex?sslmode=disable";
+  const insecureReadiness = getInfrastructureReadiness(insecure);
+  if (!insecureReadiness.issues.some((issue) => issue.includes("sslmode=require"))) {
+    throw new Error("Production PostgreSQL URL did not require TLS");
+  }
 });
 
 check("5. Unsupported provider names are rejected rather than trusted", () => {
@@ -97,28 +107,18 @@ check("5. Unsupported provider names are rejected rather than trusted", () => {
     { APP_ENV: "production", APEX_DATABASE_ADAPTER: "mystery-db" },
     issues
   );
-  if (configuration.database !== "memory") {
-    throw new Error("Unsupported database provider was accepted");
-  }
+  if (configuration.database !== "memory") throw new Error("Unsupported database provider was accepted");
   if (!issues.some((issue) => issue.includes("APEX_DATABASE_ADAPTER"))) {
     throw new Error("Unsupported provider did not produce a configuration issue");
   }
 });
 
-check("6. Middleware blocks production traffic with canonical HTTP 503 before memory state", () => {
+check("6. Middleware blocks production traffic with canonical HTTP 503 before incomplete infrastructure", () => {
   const middlewareSource = fs.readFileSync(path.join(process.cwd(), "middleware.ts"), "utf-8");
-  if (!middlewareSource.includes("getInfrastructureReadiness")) {
-    throw new Error("Middleware does not consult infrastructure readiness");
-  }
-  if (!middlewareSource.includes("INFRASTRUCTURE_NOT_READY")) {
-    throw new Error("Middleware does not expose the canonical infrastructure readiness error code");
-  }
-  if (!middlewareSource.includes("status: 503")) {
-    throw new Error("Middleware does not fail closed with HTTP 503");
-  }
-  if (/APEX_(ALLOW|BYPASS).*MEMORY/i.test(middlewareSource)) {
-    throw new Error("Middleware contains an environment-controlled memory bypass");
-  }
+  if (!middlewareSource.includes("getInfrastructureReadiness")) throw new Error("Middleware does not consult infrastructure readiness");
+  if (!middlewareSource.includes("INFRASTRUCTURE_NOT_READY")) throw new Error("Middleware does not expose the canonical infrastructure readiness error code");
+  if (!middlewareSource.includes("status: 503")) throw new Error("Middleware does not fail closed with HTTP 503");
+  if (/APEX_(ALLOW|BYPASS).*MEMORY/i.test(middlewareSource)) throw new Error("Middleware contains an environment-controlled memory bypass");
 });
 
 check("7. Environment template declares every Stage 4 provider and durable endpoint", () => {
@@ -137,17 +137,47 @@ check("7. Environment template declares every Stage 4 provider and durable endpo
     "S3_REGION",
   ];
   for (const key of requiredKeys) {
-    if (!envSource.includes(`${key}=`)) {
-      throw new Error(`.env.example is missing ${key}`);
-    }
+    if (!envSource.includes(`${key}=`)) throw new Error(`.env.example is missing ${key}`);
+  }
+  if (!envSource.includes("sslmode=require")) {
+    throw new Error(".env.example does not document production PostgreSQL TLS requirement");
   }
 });
 
-check("8. Code-owned durable readiness cannot be enabled by configuration alone", () => {
-  const statusValues = Object.values(DURABLE_IMPLEMENTATION_STATUS);
-  if (statusValues.length !== 6) throw new Error("Stage 4 implementation status does not cover all six authorities");
-  if (statusValues.some(Boolean)) {
-    throw new Error("Stage 4A must not claim a durable implementation before concrete adapters land");
+check("8. Stage 4B marks only database and audit as durably implemented", () => {
+  const expected = {
+    database: true,
+    session: false,
+    rateLimit: false,
+    audit: true,
+    objectStorage: false,
+    searchIndex: false,
+  };
+  for (const [authority, value] of Object.entries(expected)) {
+    if (DURABLE_IMPLEMENTATION_STATUS[authority as keyof typeof DURABLE_IMPLEMENTATION_STATUS] !== value) {
+      throw new Error(`${authority} durable status does not match Stage 4B scope`);
+    }
+  }
+  if (getInfrastructureReadiness(durableProductionEnv()).ready) {
+    throw new Error("Stage 4B incorrectly made the entire Stage 4 production stack ready");
+  }
+});
+
+check("9. PostgreSQL store composition exists and production Maps are documented as non-authoritative", () => {
+  const storeSource = fs.readFileSync(path.join(process.cwd(), "lib/backend/database/store.ts"), "utf-8");
+  if (!storeSource.includes("PostgresPersistence")) throw new Error("DatabaseStore does not compose PostgreSQL persistence");
+  if (!storeSource.includes("createPostgresStore")) throw new Error("DatabaseStore has no explicit PostgreSQL construction path");
+  if (!storeSource.includes("intentionally NOT authoritative")) throw new Error("Compatibility Map authority is not explicitly constrained in PostgreSQL mode");
+  if (!storeSource.includes("this.postgresPersistence.runInTransaction")) throw new Error("Unit of Work does not delegate to PostgreSQL transactions");
+});
+
+check("10. PostgreSQL migration and integration gate are committed as release artifacts", () => {
+  for (const relative of [
+    "lib/backend/database/migrations/001_stage4_postgres.sql",
+    "scripts/runPostgresMigrations.ts",
+    "scripts/runPostgresPersistenceTests.ts",
+  ]) {
+    if (!fs.existsSync(path.join(process.cwd(), relative))) throw new Error(`${relative} is missing`);
   }
 });
 

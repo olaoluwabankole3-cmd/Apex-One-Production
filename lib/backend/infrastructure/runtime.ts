@@ -1,10 +1,8 @@
 /**
  * APEX ONE — Stage 4 production infrastructure boundary.
  *
- * This module is deliberately dependency-free so it can be consumed from
- * Next.js middleware as well as the Node.js backend. Environment variables
- * may select a durable provider, but readiness is granted only when the
- * corresponding adapter is actually implemented and wired in code.
+ * Environment variables may select providers, but readiness is granted only
+ * when the corresponding durable adapter is actually implemented and wired.
  */
 
 export type InfrastructureAuthority =
@@ -63,16 +61,16 @@ const DURABLE_PROVIDER_REQUIREMENTS: Readonly<InfrastructureConfiguration> = Obj
 });
 
 /**
- * Code-owned implementation truth. Environment variables cannot override this.
- * Each flag must be changed to true only in the slice that lands and wires the
- * corresponding durable adapter.
+ * Code-owned implementation truth. Configuration cannot override these flags.
+ * Stage 4B implements the PostgreSQL database and audit authorities. The other
+ * authorities deliberately remain false until their own slices are landed.
  */
 export const DURABLE_IMPLEMENTATION_STATUS: Readonly<Record<InfrastructureAuthority, boolean>> =
   Object.freeze({
-    database: false,
+    database: true,
     session: false,
     rateLimit: false,
-    audit: false,
+    audit: true,
     objectStorage: false,
     searchIndex: false,
   });
@@ -127,6 +125,19 @@ function requireValue(
   }
 }
 
+function requireProductionPostgresTls(databaseUrl: string | undefined, issues: string[]): void {
+  if (!databaseUrl?.trim()) return;
+  try {
+    const url = new URL(databaseUrl);
+    const sslMode = (url.searchParams.get("sslmode") || "").toLowerCase();
+    if (sslMode !== "require" && sslMode !== "verify-full") {
+      issues.push("DATABASE_URL must set sslmode=require or sslmode=verify-full in production");
+    }
+  } catch {
+    issues.push("DATABASE_URL must be a valid PostgreSQL URL");
+  }
+}
+
 export function getInfrastructureReadiness(
   env: InfrastructureEnvironment = process.env
 ): InfrastructureReadiness {
@@ -155,6 +166,7 @@ export function getInfrastructureReadiness(
     configuration.searchIndex === "postgres"
   ) {
     requireValue(env, "DATABASE_URL", issues);
+    requireProductionPostgresTls(env.DATABASE_URL, issues);
   }
 
   if (configuration.session === "redis" || configuration.rateLimit === "redis") {
