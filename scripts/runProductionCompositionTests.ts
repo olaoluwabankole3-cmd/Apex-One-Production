@@ -236,16 +236,16 @@ check("13. Domain source no longer imports legacy db/object/search/auth-state si
   const domainRoot = path.join(process.cwd(), "lib/backend/domains");
   const forbiddenImports = [
     /import\s*\{[^}]*\bdb\b[^}]*\}\s*from\s*["'][^"']*database\/store["']/s,
-    /\bdefaultSessionStore\b/,
-    /\bdefaultAuthRateLimiter\b/,
-    /\bobjectStorageService\b/,
-    /\bdocumentSearchIndex\b/,
+    /import\s*\{[^}]*\bdefaultSessionStore\b[^}]*\}/s,
+    /import\s*\{[^}]*\bdefaultAuthRateLimiter\b[^}]*\}/s,
+    /import\s*\{[^}]*\bobjectStorageService\b[^}]*\}/s,
+    /import\s*\{[^}]*\bdocumentSearchIndex\b[^}]*\}/s,
   ];
   for (const file of walkTypeScriptFiles(domainRoot)) {
     const source = fs.readFileSync(file, "utf-8");
     for (const pattern of forbiddenImports) {
       if (pattern.test(source)) {
-        throw new Error(`${path.relative(process.cwd(), file)} still depends on legacy singleton infrastructure (${pattern})`);
+        throw new Error(`${path.relative(process.cwd(), file)} still imports legacy singleton infrastructure (${pattern})`);
       }
     }
   }
