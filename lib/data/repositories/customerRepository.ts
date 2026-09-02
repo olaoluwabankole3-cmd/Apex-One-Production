@@ -1,6 +1,7 @@
 import { Customer, TimelineEvent, CustomerNote, CustomerTask, CustomerMeeting, CustomerFile, AtRiskCustomer, UnifiedCustomer, RelationshipEvent } from "@/lib/types";
 import { apiClient } from "@/lib/apiClient";
 import { CustomerRecord } from "@/lib/backend/database/schema";
+import { collectAllCollectionData, isApiNotFound } from "./httpCollection";
 
 export interface CustomerRepository {
   getCustomers(organizationId?: string): Promise<Customer[]>;
@@ -82,54 +83,38 @@ function mapRecordToUnifiedCustomer(c: CustomerRecord): UnifiedCustomer {
 }
 
 export class ApiCustomerRepository implements CustomerRepository {
-  async getCustomers(organizationId?: string): Promise<Customer[]> {
-    const res = await apiClient.get<{ success: boolean; data: CustomerRecord[] }>("/api/v1/customers");
-    if (res && Array.isArray(res.data)) {
-      return res.data.map(mapRecordToCustomer);
-    }
-    return [];
+  async getCustomers(_organizationId?: string): Promise<Customer[]> {
+    const records = await collectAllCollectionData<CustomerRecord>("/api/v1/customers");
+    return records.map(mapRecordToCustomer);
   }
 
-  async getUnifiedCustomers(organizationId?: string): Promise<UnifiedCustomer[]> {
-    const res = await apiClient.get<{ success: boolean; data: CustomerRecord[] }>("/api/v1/customers");
-    if (res && Array.isArray(res.data)) {
-      return res.data.map(mapRecordToUnifiedCustomer);
-    }
-    return [];
+  async getUnifiedCustomers(_organizationId?: string): Promise<UnifiedCustomer[]> {
+    const records = await collectAllCollectionData<CustomerRecord>("/api/v1/customers");
+    return records.map(mapRecordToUnifiedCustomer);
   }
 
-  async getRelationshipHistory(customerId?: string): Promise<Record<string, RelationshipEvent[]>> {
-    // Relationship event history requires a dedicated customer audit/activity endpoint
+  async getRelationshipHistory(_customerId?: string): Promise<Record<string, RelationshipEvent[]>> {
+    // Relationship event history requires a dedicated customer audit/activity endpoint.
     return {};
   }
 
   async getCustomer(id: string): Promise<Customer | undefined> {
     try {
-      const res = await apiClient.get<{ success: boolean; data: CustomerRecord }>(`/api/v1/customers/${id}`);
-      if (res && res.data) {
-        return mapRecordToCustomer(res.data);
-      }
-      return undefined;
-    } catch (err: any) {
-      if (err?.status === 404 || err?.message?.includes("404") || err?.message?.toLowerCase().includes("not found")) {
-        return undefined;
-      }
-      throw err;
+      const record = await apiClient.getData<CustomerRecord>(`/api/v1/customers/${id}`);
+      return mapRecordToCustomer(record);
+    } catch (error: unknown) {
+      if (isApiNotFound(error)) return undefined;
+      throw error;
     }
   }
 
   async getUnifiedCustomer(id: string): Promise<UnifiedCustomer | undefined> {
     try {
-      const res = await apiClient.get<{ success: boolean; data: CustomerRecord }>(`/api/v1/customers/${id}`);
-      if (res && res.data) {
-        return mapRecordToUnifiedCustomer(res.data);
-      }
-      return undefined;
-    } catch (err: any) {
-      if (err?.status === 404 || err?.message?.includes("404") || err?.message?.toLowerCase().includes("not found")) {
-        return undefined;
-      }
-      throw err;
+      const record = await apiClient.getData<CustomerRecord>(`/api/v1/customers/${id}`);
+      return mapRecordToUnifiedCustomer(record);
+    } catch (error: unknown) {
+      if (isApiNotFound(error)) return undefined;
+      throw error;
     }
   }
 
@@ -156,8 +141,8 @@ export class ApiCustomerRepository implements CustomerRepository {
   async getAtRiskCustomers(organizationId?: string): Promise<AtRiskCustomer[]> {
     const list = await this.getCustomers(organizationId);
     return list
-      .filter(c => c.status === "at-risk" || c.healthScore < 70)
-      .map(c => ({
+      .filter((c) => c.status === "at-risk" || c.healthScore < 70)
+      .map((c) => ({
         id: c.id,
         name: c.name,
         subsidiary: c.subsidiary,
@@ -168,13 +153,13 @@ export class ApiCustomerRepository implements CustomerRepository {
           c.status === "at-risk"
             ? "Account status flagged at-risk"
             : c.healthScore < 70
-            ? "Health score below 70 threshold"
-            : undefined,
+              ? "Health score below 70 threshold"
+              : undefined,
       }));
   }
 
   async createCustomer(data: Partial<Customer>): Promise<Customer> {
-    const res = await apiClient.post<{ success: boolean; data: CustomerRecord }>("/api/v1/customers", {
+    const record = await apiClient.postData<CustomerRecord>("/api/v1/customers", {
       name: data.name,
       subsidiary: data.subsidiary,
       tier: data.tier,
@@ -187,19 +172,18 @@ export class ApiCustomerRepository implements CustomerRepository {
       contactEmail: data.contactEmail,
       tags: data.tags,
     });
-    return mapRecordToCustomer(res.data);
+    return mapRecordToCustomer(record);
   }
 
   async updateCustomer(id: string, data: Partial<Customer>): Promise<Customer> {
-    const res = await apiClient.put<{ success: boolean; data: CustomerRecord }>(`/api/v1/customers/${id}`, data);
-    return mapRecordToCustomer(res.data);
+    const record = await apiClient.putData<CustomerRecord>(`/api/v1/customers/${id}`, data);
+    return mapRecordToCustomer(record);
   }
 
   async deleteCustomer(id: string): Promise<boolean> {
-    const res = await apiClient.delete<{ success: boolean }>(`/api/v1/customers/${id}`);
-    return !!res?.success;
+    const result = await apiClient.deleteData<{ deleted: boolean; id: string }>(`/api/v1/customers/${id}`);
+    return result.deleted === true && result.id === id;
   }
 }
 
 export const customerRepository = new ApiCustomerRepository();
-
