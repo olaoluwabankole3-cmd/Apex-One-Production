@@ -1,39 +1,66 @@
 import { NextRequest, NextResponse } from "next/server";
-import { resolveTenantContext, getClearSessionCookieOptions } from "@/lib/backend/core/security";
+import {
+  AUTH_COOKIE_NAME,
+  resolveTenantContext,
+  getClearSessionCookieOptions,
+} from "@/lib/backend/core/security";
 import { authService } from "@/lib/backend/domains/auth/authService";
 import { BackendError } from "@/lib/backend/core/errors";
 
+function getRequestSessionToken(req: NextRequest): string | undefined {
+  const authHeader = req.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice("Bearer ".length).trim();
+    if (token) return token;
+  }
+
+  return req.cookies.get(AUTH_COOKIE_NAME)?.value;
+}
+
+function withClearedSessionCookie(response: NextResponse): NextResponse {
+  response.cookies.set(getClearSessionCookieOptions());
+  return response;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    // Extract token from Bearer header or cookie
-    let token: string | undefined;
-    const authHeader = req.headers.get("authorization");
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      token = authHeader.replace("Bearer ", "").trim();
-    } else {
-      token = req.cookies.get("apex_session")?.value;
-    }
+    const token = getRequestSessionToken(req);
 
     if (token) {
       let ctx;
       try {
         ctx = await resolveTenantContext(req.headers);
       } catch {
-        // Continue even if context resolution failed to guarantee session is revoked
+        // Logout is idempotent. A stale/expired context must not prevent
+        // the browser-held session cookie from being cleared.
       }
+
       await authService.logout(token, ctx);
     }
 
-    const response = NextResponse.json({ success: true, message: "Logged out successfully" });
-    
-    // Clear HttpOnly session cookie
-    response.cookies.set(getClearSessionCookieOptions());
-
-    return response;
+    return withClearedSessionCookie(
+      NextResponse.json({
+        success: true,
+        authenticated: false,
+        message: "Logged out successfully",
+      })
+    );
   } catch (err: any) {
-    if (err instanceof BackendError) {
-      return NextResponse.json({ error: err.message, code: err.code }, { status: err.statusCode });
-    }
-    return NextResponse.json({ error: "Logout failed", code: "INTERNAL_ERROR" }, { status: 500 });
+    const response =
+      err instanceof BackendError
+        ? NextResponse.json(
+            { error: err.message, code: err.code, authenticated: false },
+            { status: err.statusCode }
+          )
+        : NextResponse.json(
+            {
+              error: "Logout failed",
+              code: "INTERNAL_ERROR",
+              authenticated: false,
+            },
+            { status: 500 }
+          );
+
+    return withClearedSessionCookie(response);
   }
 }

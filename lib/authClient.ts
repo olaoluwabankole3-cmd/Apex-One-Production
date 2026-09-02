@@ -2,13 +2,13 @@
  * APEX ONE — Frontend Authentication Client
  *
  * Implements secure HttpOnly cookie-based session compatibility.
- * 
+ *
  * Rules:
  * 1. The frontend NEVER stores session tokens in localStorage, sessionStorage, or JavaScript variables.
  * 2. The frontend NEVER attempts to read or parse the `apex_session` HttpOnly cookie.
  * 3. All session state is maintained and validated server-side.
  * 4. API requests rely entirely on browser-managed same-origin cookies.
- * 5. Frontend state contains ONLY safe non-sensitive metadata (user info, roles, UI permission hints).
+ * 5. Frontend state contains ONLY safe non-sensitive metadata.
  */
 
 export interface SafeUser {
@@ -25,11 +25,11 @@ export interface SafeOrganization {
 }
 
 export interface AuthSessionMetadata {
-  success: boolean;
+  success: true;
   user: SafeUser;
   organization: SafeOrganization;
-  availableOrganizations?: SafeOrganization[];
-  expiresAt: string;
+  availableOrganizations: SafeOrganization[];
+  expiresAt: string | null;
 }
 
 export interface LoginCredentials {
@@ -39,11 +39,78 @@ export interface LoginCredentials {
 }
 
 export class AuthClient {
-  /**
-   * Authenticate user with credentials.
-   * Backend sets the secure HttpOnly `apex_session` cookie.
-   * Response contains ONLY sanitized metadata — NO raw session tokens.
-   */
+  private parseSessionMetadata(data: any): AuthSessionMetadata | null {
+    if (
+      !data ||
+      data.success !== true ||
+      !data.user ||
+      typeof data.user.id !== "string" ||
+      typeof data.user.email !== "string" ||
+      typeof data.user.name !== "string" ||
+      typeof data.user.role !== "string" ||
+      !Array.isArray(data.user.permissions) ||
+      !data.user.permissions.every((permission: unknown) => typeof permission === "string") ||
+      !data.organization ||
+      typeof data.organization.id !== "string" ||
+      typeof data.organization.name !== "string" ||
+      !Array.isArray(data.availableOrganizations)
+    ) {
+      return null;
+    }
+
+    const availableOrganizations: SafeOrganization[] = [];
+    const seen = new Set<string>();
+
+    for (const organization of data.availableOrganizations) {
+      if (
+        !organization ||
+        typeof organization.id !== "string" ||
+        typeof organization.name !== "string"
+      ) {
+        return null;
+      }
+
+      const id = organization.id.trim();
+      const name = organization.name.trim();
+      if (!id || !name) return null;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      availableOrganizations.push({ id, name });
+    }
+
+    const activeOrganization: SafeOrganization = {
+      id: data.organization.id.trim(),
+      name: data.organization.name.trim(),
+    };
+
+    if (!activeOrganization.id || !activeOrganization.name) {
+      return null;
+    }
+
+    if (!seen.has(activeOrganization.id)) {
+      availableOrganizations.push(activeOrganization);
+    }
+
+    const expiresAt =
+      typeof data.expiresAt === "string" && data.expiresAt.trim().length > 0
+        ? data.expiresAt
+        : null;
+
+    return {
+      success: true,
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+        name: data.user.name,
+        role: data.user.role,
+        permissions: [...data.user.permissions],
+      },
+      organization: activeOrganization,
+      availableOrganizations,
+      expiresAt,
+    };
+  }
+
   public async login(credentials: LoginCredentials): Promise<AuthSessionMetadata> {
     const response = await fetch("/api/v1/auth/login", {
       method: "POST",
@@ -64,56 +131,41 @@ export class AuthClient {
       throw new Error(data.error || `Login failed with status ${response.status}`);
     }
 
-    return {
-      success: true,
-      user: data.user,
-      organization: data.organization,
-      availableOrganizations: data.availableOrganizations || [],
-      expiresAt: data.expiresAt,
-    };
+    const session = this.parseSessionMetadata(data);
+    if (!session) {
+      throw new Error("Authentication server returned an invalid session contract");
+    }
+
+    return session;
   }
 
-  /**
-   * Retrieve current authenticated session metadata from the server-managed cookie.
-   * Returns null if unauthenticated or session is expired/invalid.
-   */
   public async getCurrentSession(): Promise<AuthSessionMetadata | null> {
-    try {
-      const response = await fetch("/api/v1/auth/me", {
-        method: "GET",
-        credentials: "same-origin",
-      });
+    const response = await fetch("/api/v1/auth/me", {
+      method: "GET",
+      credentials: "same-origin",
+    });
 
-      if (response.status === 401 || response.status === 403) {
-        return null;
-      }
-
-      if (!response.ok) {
-        return null;
-      }
-
-      const data = await response.json();
-      if (!data || !data.user) {
-        return null;
-      }
-
-      return {
-        success: true,
-        user: data.user,
-        organization: data.organization,
-        availableOrganizations: data.availableOrganizations || [],
-        expiresAt: data.expiresAt,
-      };
-    } catch {
+    if (response.status === 401 || response.status === 403) {
       return null;
     }
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data.error || `Session verification failed (${response.status})`);
+    }
+
+    const session = this.parseSessionMetadata(data);
+    if (!session) {
+      throw new Error("Authentication server returned an invalid session contract");
+    }
+
+    return session;
   }
 
-  /**
-   * Switch active organization for the current authenticated user.
-   * Backend verifies membership, issues a new tenant-scoped session, and updates the cookie.
-   */
-  public async switchOrganization(targetOrganizationId: string): Promise<AuthSessionMetadata> {
+  public async switchOrganization(
+    targetOrganizationId: string
+  ): Promise<AuthSessionMetadata> {
     const response = await fetch("/api/v1/auth/switch-organization", {
       method: "POST",
       headers: {
@@ -131,19 +183,14 @@ export class AuthClient {
       throw new Error(data.error || `Failed to switch organization (${response.status})`);
     }
 
-    return {
-      success: true,
-      user: data.user,
-      organization: data.organization,
-      availableOrganizations: data.availableOrganizations || [],
-      expiresAt: data.expiresAt,
-    };
+    const session = this.parseSessionMetadata(data);
+    if (!session) {
+      throw new Error("Authentication server returned an invalid session contract");
+    }
+
+    return session;
   }
 
-  /**
-   * Log out the current session.
-   * Backend revokes session in store and clears the HttpOnly cookie.
-   */
   public async logout(): Promise<boolean> {
     try {
       const response = await fetch("/api/v1/auth/logout", {
@@ -157,11 +204,10 @@ export class AuthClient {
     }
   }
 
-  /**
-   * Change user password.
-   * Backend verifies current password, updates hash, and revokes other active sessions.
-   */
-  public async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+  public async changePassword(
+    currentPassword: string,
+    newPassword: string
+  ): Promise<{ success: boolean; message: string }> {
     const response = await fetch("/api/v1/auth/change-password", {
       method: "POST",
       headers: {

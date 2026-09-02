@@ -3,9 +3,17 @@
  */
 
 import { db, DatabaseStore } from "../../database/store";
-import { defaultAuthProvider, defaultSessionStore, IAuthenticationProvider, ISessionStore } from "./authProvider";
+import {
+  defaultAuthProvider,
+  defaultSessionStore,
+  IAuthenticationProvider,
+  ISessionStore,
+} from "./authProvider";
 import { defaultAuthRateLimiter, IRateLimiter } from "./rateLimiter";
-import { createSessionToken, revokeSession, AuthSession, ROLE_PERMISSIONS } from "../../core/security";
+import {
+  AuthSession,
+  getPermissionsForRole,
+} from "../../core/security";
 import { hashPassword, verifyPassword, validatePasswordPolicy } from "../../core/crypto";
 import {
   TenantContext,
@@ -18,6 +26,12 @@ import {
   IAuthIdentityRepository,
   TenantScopedAuthIdentityRepository,
 } from "./authIdentityRepository";
+import {
+  AuthSessionMetadataDto,
+  SafeAuthOrganization,
+  buildAuthSessionMetadata,
+  sanitizeAvailableOrganizations,
+} from "./authSessionContract";
 
 export interface LoginDto {
   email: string;
@@ -36,6 +50,11 @@ export interface LoginOptions {
   userAgent?: string;
 }
 
+export interface AuthenticatedSessionResult {
+  session: AuthSession;
+  availableOrganizations: SafeAuthOrganization[];
+}
+
 export class AuthService {
   private readonly authIdentityRepository: IAuthIdentityRepository;
 
@@ -50,15 +69,23 @@ export class AuthService {
       authIdentityRepository ?? new TenantScopedAuthIdentityRepository(database);
   }
 
-  /**
-   * Authenticate a user, verify organization membership, enforce rate limiting,
-   * and issue a tenant-scoped session token.
-   */
+  private getAvailableOrganizationsForUser(userId: string): SafeAuthOrganization[] {
+    const organizations = Array.from(this.database.memberships.values())
+      .filter((membership) => membership.userId === userId)
+      .flatMap((membership) => {
+        const organization = this.database.organizations.get(membership.organizationId);
+        if (!organization) return [];
+        return [{ id: organization.id, name: organization.name }];
+      });
+
+    return sanitizeAvailableOrganizations(organizations);
+  }
+
   public async login(
     dto: LoginDto,
     requestId: string,
     options?: LoginOptions
-  ): Promise<{ session: AuthSession; availableOrganizations: any[] }> {
+  ): Promise<AuthenticatedSessionResult> {
     if (!dto.email || typeof dto.email !== "string" || dto.email.trim().length === 0) {
       throw new ValidationError("Email address is required");
     }
@@ -70,7 +97,6 @@ export class AuthService {
     const normalizedEmail = dto.email.trim().toLowerCase();
     const rateLimitKey = options?.ipAddress ? `${options.ipAddress}:${normalizedEmail}` : normalizedEmail;
 
-    // 1. Enforce rate limiting to protect against brute-force attacks
     const rateLimitResult = await this.rateLimiter.isRateLimited(rateLimitKey);
     if (rateLimitResult.limited) {
       this.database.recordAuditLog({
@@ -101,7 +127,6 @@ export class AuthService {
         options
       );
 
-      // Reset rate limiter on successful authentication
       await this.rateLimiter.recordAttempt(rateLimitKey, true);
 
       this.database.recordAuditLog({
@@ -120,9 +145,11 @@ export class AuthService {
         },
       });
 
-      return authResult;
+      return {
+        session: authResult.session,
+        availableOrganizations: sanitizeAvailableOrganizations(authResult.availableOrganizations),
+      };
     } catch (err: any) {
-      // Record failed attempt for rate limiting
       await this.rateLimiter.recordAttempt(rateLimitKey, false);
 
       this.database.recordAuditLog({
@@ -140,32 +167,17 @@ export class AuthService {
     }
   }
 
-  /**
-   * Change a user password with cryptographic verification of the current password,
-   * enterprise policy validation, and complete invalidation of prior active sessions.
-   *
-   * SECURITY INVARIANT:
-   * The target identity is resolved and mutated exclusively through the tenant-scoped
-   * auth identity repository. org:admin permits changing another user only inside the
-   * caller's authenticated organization; it never grants cross-tenant identity access.
-   */
   public async changePassword(dto: ChangePasswordDto, ctx: TenantContext): Promise<boolean> {
     if (!dto.userId || !dto.currentPassword || !dto.newPassword) {
       throw new ValidationError("User ID, current password, and new password are required");
     }
 
-    // Only allow users to change their own password unless caller possesses org:admin.
-    // Tenant membership is enforced independently by the repository below.
     if (ctx.userId !== dto.userId && !ctx.permissions.includes("org:admin")) {
       throw new ForbiddenError("You are not authorized to change credentials for another user");
     }
 
-    // Tenant-scoped lookup occurs before any credential verification. Cross-tenant
-    // targets therefore fail as not-found without revealing whether the user exists
-    // or whether the supplied current password is correct.
     const user = await this.authIdentityRepository.findUserById(dto.userId, ctx);
 
-    // Verify current password against stored credentials
     if (!user.passwordHash || !user.passwordSalt) {
       throw new UnauthorizedError("Current credentials invalid");
     }
@@ -174,13 +186,11 @@ export class AuthService {
       throw new UnauthorizedError("Current password is incorrect");
     }
 
-    // Validate new password against policy
     const policyResult = validatePasswordPolicy(dto.newPassword);
     if (!policyResult.valid) {
       throw new ValidationError(policyResult.error || "Password does not meet enterprise policy requirements");
     }
 
-    // Generate new secure hash and salt
     const newCredentials = hashPassword(dto.newPassword);
     const updatedUser = await this.authIdentityRepository.updatePasswordCredentials(
       user.id,
@@ -191,7 +201,6 @@ export class AuthService {
       ctx
     );
 
-    // Invalidate all active sessions for the target user to force re-authentication across all devices
     await this.sessionStore.revokeUserSessions(updatedUser.id);
 
     this.database.recordAuditLog({
@@ -208,29 +217,60 @@ export class AuthService {
     return true;
   }
 
-  public async getCurrentSession(ctx: TenantContext): Promise<any> {
+  public async getCurrentSession(
+    ctx: TenantContext,
+    sessionToken?: string
+  ): Promise<AuthSessionMetadataDto> {
     const user = this.database.users.get(ctx.userId);
-    const org = this.database.organizations.get(ctx.organizationId);
+    const organization = this.database.organizations.get(ctx.organizationId);
+    const membership = this.database.getUserMembership(ctx.userId, ctx.organizationId);
+
+    if (!user || !organization || !membership) {
+      throw new UnauthorizedError("Authenticated session is no longer valid");
+    }
+
+    const availableOrganizations = this.getAvailableOrganizationsForUser(ctx.userId);
+
+    if (sessionToken) {
+      const session = await this.sessionStore.getSession(sessionToken);
+      if (
+        !session ||
+        session.userId !== ctx.userId ||
+        session.organizationId !== ctx.organizationId
+      ) {
+        throw new UnauthorizedError("Authenticated session is no longer valid");
+      }
+
+      return buildAuthSessionMetadata(session, availableOrganizations);
+    }
+
     return {
       user: {
         id: ctx.userId,
         email: ctx.userEmail,
-        name: user?.name || ctx.userEmail,
+        name: user.name || ctx.userEmail,
         role: ctx.userRole,
-        permissions: ctx.permissions,
+        permissions: [...ctx.permissions],
       },
       organization: {
-        id: ctx.organizationId,
-        name: org?.name || ctx.organizationId,
-        currency: org?.currency || "NGN",
-        currencySymbol: org?.currencySymbol || "₦",
+        id: organization.id,
+        name: organization.name,
       },
+      availableOrganizations,
+      expiresAt: null,
     };
   }
 
-  public async switchOrganization(targetOrgId: string, ctx: TenantContext): Promise<AuthSession> {
-    const memberships = Array.from(this.database.memberships.values()).filter((m) => m.userId === ctx.userId);
-    const match = memberships.find((m) => m.organizationId === targetOrgId);
+  public async switchOrganization(
+    targetOrgId: string,
+    ctx: TenantContext,
+    currentSessionToken?: string
+  ): Promise<AuthenticatedSessionResult> {
+    const memberships = Array.from(this.database.memberships.values()).filter(
+      (membership) => membership.userId === ctx.userId
+    );
+    const match = memberships.find((membership) => membership.organizationId === targetOrgId);
+
     if (!match) {
       this.database.recordAuditLog({
         organizationId: ctx.organizationId,
@@ -243,21 +283,32 @@ export class AuthService {
         status: "denied",
         metadata: { attemptedOrg: targetOrgId },
       });
-      throw new ForbiddenError(`Cannot switch to organization ${targetOrgId}: user is not an authorized member.`);
+      throw new ForbiddenError(
+        `Cannot switch to organization ${targetOrgId}: user is not an authorized member.`
+      );
     }
 
-    const org = this.database.organizations.get(targetOrgId);
-    if (!org) {
+    const organization = this.database.organizations.get(targetOrgId);
+    if (!organization) {
       throw new NotFoundError("Target organization");
     }
 
-    const user = this.database.users.get(ctx.userId)!;
+    const user = this.database.users.get(ctx.userId);
+    if (!user) {
+      throw new UnauthorizedError("Authenticated session is no longer valid");
+    }
+
+    const permissions = [...getPermissionsForRole(match.role)];
     const session = await this.sessionStore.createSession({
       user: { id: user.id, email: user.email, name: user.name },
-      org: { id: org.id, name: org.name },
+      org: { id: organization.id, name: organization.name },
       role: match.role,
-      permissions: ROLE_PERMISSIONS[match.role] || ROLE_PERMISSIONS["Operations"],
+      permissions,
     });
+
+    if (currentSessionToken && currentSessionToken !== session.token) {
+      await this.sessionStore.revokeSession(currentSessionToken);
+    }
 
     this.database.recordAuditLog({
       organizationId: targetOrgId,
@@ -271,7 +322,10 @@ export class AuthService {
       metadata: { previousOrg: ctx.organizationId, newRole: match.role },
     });
 
-    return session;
+    return {
+      session,
+      availableOrganizations: this.getAvailableOrganizationsForUser(user.id),
+    };
   }
 
   public async logout(token: string, ctx?: TenantContext): Promise<boolean> {
