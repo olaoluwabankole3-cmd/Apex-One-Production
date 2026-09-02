@@ -17,6 +17,13 @@ import {
 } from "../database/querySpecification";
 import { serializeApiError } from "../core/httpContract";
 import { ValidationError } from "../core/errors";
+import {
+  assertAllowedKeys,
+  assertAllowedQueryKeys,
+  parseCursorPagination,
+  requireJsonObject,
+} from "../core/requestValidation";
+import { parseCreateWorkflowRequest } from "../domains/workflows/workflowRequestValidation";
 
 export interface TestResult {
   suite: string;
@@ -217,6 +224,175 @@ export async function runHttpContractFoundationTestSuite(): Promise<TestSuiteSum
       sortRejected = error instanceof ValidationError;
     }
     if (!sortRejected) throw new Error("Cursor was reusable under a different sort order");
+  });
+
+  await test("7. HTTP query parser rejects legacy, duplicate, and malformed pagination inputs", () => {
+    const valid = new URLSearchParams("limit=25&cursor=cursor-token");
+    assertAllowedQueryKeys(valid, ["limit", "cursor"]);
+    const parsed = parseCursorPagination(valid);
+    if (parsed.limit !== 25 || parsed.cursor !== "cursor-token") {
+      throw new Error("Canonical cursor query did not parse deterministically");
+    }
+
+    const invalidCases = [
+      new URLSearchParams("offset=20"),
+      new URLSearchParams("page=2"),
+      new URLSearchParams("limit=10&limit=20"),
+    ];
+
+    for (const params of invalidCases) {
+      let rejected = false;
+      try {
+        assertAllowedQueryKeys(params, ["limit", "cursor"]);
+      } catch (error) {
+        rejected = error instanceof ValidationError;
+      }
+      if (!rejected) {
+        throw new Error(`Ambiguous/legacy query was accepted: ${params.toString()}`);
+      }
+    }
+
+    let malformedLimitRejected = false;
+    try {
+      parseCursorPagination(new URLSearchParams("limit=not-a-number"));
+    } catch (error) {
+      malformedLimitRejected = error instanceof ValidationError;
+    }
+    if (!malformedLimitRejected) {
+      throw new Error("Malformed query limit was silently coerced");
+    }
+  });
+
+  await test("8. Runtime body boundary rejects primitives, arrays, and unsupported fields", () => {
+    for (const invalidBody of [null, "text", 42, [], true]) {
+      let rejected = false;
+      try {
+        requireJsonObject(invalidBody);
+      } catch (error) {
+        rejected = error instanceof ValidationError;
+      }
+      if (!rejected) throw new Error("Non-object JSON body crossed the HTTP boundary");
+    }
+
+    let unsupportedFieldRejected = false;
+    try {
+      assertAllowedKeys(
+        { name: "Allowed", organizationId: "client-controlled-org" },
+        ["name"]
+      );
+    } catch (error) {
+      unsupportedFieldRejected = error instanceof ValidationError;
+    }
+    if (!unsupportedFieldRejected) {
+      throw new Error("Client-controlled persistence/tenant field was silently accepted");
+    }
+  });
+
+  await test("9. Business collection routes serialize the canonical collection envelope", () => {
+    const collectionRoutes = [
+      "app/api/v1/customers/route.ts",
+      "app/api/v1/documents/route.ts",
+      "app/api/v1/knowledge/route.ts",
+      "app/api/v1/memory/route.ts",
+      "app/api/v1/actions/route.ts",
+      "app/api/v1/audit/route.ts",
+      "app/api/v1/workflows/route.ts",
+      "app/api/v1/workflows/[id]/run/route.ts",
+      "app/api/v1/value/opportunities/route.ts",
+      "app/api/v1/value/captured/route.ts",
+    ];
+
+    for (const route of collectionRoutes) {
+      const routeSource = source(route);
+      if (!routeSource.includes("toCollectionResponse")) {
+        throw new Error(`${route} does not use the canonical collection serializer`);
+      }
+      if (/parseInt\s*\(|Number\s*\(\s*searchParams/.test(routeSource)) {
+        throw new Error(`${route} still performs ad-hoc pagination coercion`);
+      }
+      if (/\boffset\b/.test(routeSource)) {
+        throw new Error(`${route} still exposes offset pagination`);
+      }
+    }
+  });
+
+  await test("10. Business API routes preserve structured canonical error serialization", () => {
+    const routes = [
+      "app/api/v1/customers/route.ts",
+      "app/api/v1/customers/[id]/route.ts",
+      "app/api/v1/documents/route.ts",
+      "app/api/v1/documents/[id]/route.ts",
+      "app/api/v1/knowledge/route.ts",
+      "app/api/v1/knowledge/[id]/route.ts",
+      "app/api/v1/memory/route.ts",
+      "app/api/v1/actions/route.ts",
+      "app/api/v1/actions/[id]/advance/route.ts",
+      "app/api/v1/audit/route.ts",
+      "app/api/v1/workflows/route.ts",
+      "app/api/v1/workflows/[id]/route.ts",
+      "app/api/v1/workflows/[id]/run/route.ts",
+      "app/api/v1/value/opportunities/route.ts",
+      "app/api/v1/value/captured/route.ts",
+      "app/api/v1/value/simulate/route.ts",
+      "app/api/v1/value/summary/route.ts",
+      "app/api/v1/ai/chat/route.ts",
+    ];
+
+    for (const route of routes) {
+      const routeSource = source(route);
+      if (!routeSource.includes("serializeApiError")) {
+        throw new Error(`${route} still manufactures an incompatible error shape`);
+      }
+      if (/err\.message\s*\|\|\s*["']Internal server error/.test(routeSource)) {
+        throw new Error(`${route} can leak arbitrary internal error messages`);
+      }
+    }
+  });
+
+  await test("11. Workflow runtime schema validates nested graph payload shape", () => {
+    const valid = parseCreateWorkflowRequest({
+      name: "Validated workflow",
+      description: "HTTP boundary graph validation",
+      subsidiary: "Operations",
+      nodes: [
+        {
+          id: "node-trigger",
+          type: "trigger",
+          title: "Start",
+          configuration: { event: "manual", enabled: true, retries: 1 },
+        },
+      ],
+      connections: [],
+      status: "active",
+    });
+
+    if (valid.nodes.length !== 1 || valid.nodes[0].type !== "trigger") {
+      throw new Error("Valid workflow request did not preserve typed graph data");
+    }
+
+    let nestedConfigurationRejected = false;
+    try {
+      parseCreateWorkflowRequest({
+        name: "Invalid workflow",
+        description: "Invalid nested config",
+        subsidiary: "Operations",
+        nodes: [
+          {
+            id: "node-trigger",
+            type: "trigger",
+            title: "Start",
+            configuration: { nested: { arbitrary: "object" } },
+          },
+        ],
+        connections: [],
+      });
+    } catch (error) {
+      nestedConfigurationRejected = error instanceof ValidationError;
+    }
+
+    if (!nestedConfigurationRejected) {
+      throw new Error("Unsupported nested workflow configuration crossed the HTTP boundary");
+    }
   });
 
   const passedCount = results.filter((result) => result.passed).length;
