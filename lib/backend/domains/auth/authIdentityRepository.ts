@@ -24,7 +24,9 @@ export class TenantScopedAuthIdentityRepository implements IAuthIdentityReposito
   constructor(private readonly database: DatabaseStore) {}
 
   private async requireTenantUser(userId: string, ctx: TenantContext): Promise<UserRecord> {
-    const membership = await this.database.findUserMembership(userId, ctx.organizationId);
+    const membership = this.database.isPostgresBacked()
+      ? await this.database.findUserMembership(userId, ctx.organizationId)
+      : this.database.getUserMembership(userId, ctx.organizationId);
 
     if (!membership) {
       await this.database.recordAuditLog({
@@ -43,7 +45,9 @@ export class TenantScopedAuthIdentityRepository implements IAuthIdentityReposito
       throw new NotFoundError("User");
     }
 
-    const user = await this.database.findUserById(userId);
+    const user = this.database.isPostgresBacked()
+      ? await this.database.findUserById(userId)
+      : this.database.users.get(userId);
     if (!user) throw new NotFoundError("User");
     return user;
   }
@@ -57,9 +61,9 @@ export class TenantScopedAuthIdentityRepository implements IAuthIdentityReposito
     credentials: PasswordCredentialUpdate,
     ctx: TenantContext
   ): Promise<UserRecord> {
-    await this.requireTenantUser(userId, ctx);
+    const user = await this.requireTenantUser(userId, ctx);
     const updated = await this.database.updateUserPasswordCredentials(
-      userId,
+      user.id,
       ctx.organizationId,
       credentials
     );
