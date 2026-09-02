@@ -6,11 +6,12 @@
  * Zero hardcoded financial constants.
  */
 
-import { db, DatabaseStore } from "../../database/store";
+import { DatabaseStore } from "../../database/store";
+import { createApplicationInfrastructure } from "../../infrastructure/composition";
 import { ValueOpportunityRecord, ValueCapturedRecord } from "../../database/schema";
 import { PaginatedResult, MAX_PAGE_SIZE } from "../../database/querySpecification";
 import { collectAllPages } from "../../database/paginationTraversal";
-import { TenantContext, requirePermission, ValidationError } from "../../core/security";
+import { TenantContext, requirePermission } from "../../core/security";
 
 export interface ValueEvidenceChain {
   metricId: string;
@@ -79,15 +80,10 @@ export interface ValueCapturedListOptions {
 }
 
 export class ValueService {
-  constructor(private readonly database: DatabaseStore = db) {}
+  constructor(private readonly database: DatabaseStore = createApplicationInfrastructure().database) {}
 
-  /**
-   * Get consolidated Value Intelligence Command Center metrics for the tenant.
-   * Aggregations traverse the complete cursor-paginated tenant dataset.
-   */
   public async getSummary(ctx: TenantContext): Promise<ValueSummaryDto> {
     requirePermission(ctx, "value:read");
-
     const now = new Date().toISOString();
 
     const [opps, captured, customers, contracts, signals, txnTotals] = await Promise.all([
@@ -233,12 +229,7 @@ export class ValueService {
       .map((cat) => {
         const catOpps = opps.filter((o) => o.category === cat.key);
         const val = catOpps.reduce((sum, o) => sum + o.potentialValue, 0);
-        return {
-          label: cat.label,
-          value: val,
-          count: catOpps.length,
-          color: cat.color,
-        };
+        return { label: cat.label, value: val, count: catOpps.length, color: cat.color };
       })
       .filter((v) => v.value > 0 || opps.length === 0);
 
@@ -288,15 +279,11 @@ export class ValueService {
     };
   }
 
-  /**
-   * List value discovery opportunities with category filtering.
-   */
   public async getOpportunities(
     ctx: TenantContext,
     filters?: ValueOpportunityListOptions
   ): Promise<PaginatedResult<ValueOpportunityRecord>> {
     requirePermission(ctx, "value:read");
-
     return this.database.opportunitiesRepo.findMany(ctx, {
       where: {
         category:
@@ -313,17 +300,11 @@ export class ValueService {
     });
   }
 
-  /**
-   * Fetch single opportunity by ID.
-   */
   public async getOpportunityById(id: string, ctx: TenantContext): Promise<ValueOpportunityRecord> {
     requirePermission(ctx, "value:read");
     return this.database.opportunitiesRepo.findById(id, ctx, "ValueOpportunity");
   }
 
-  /**
-   * List captured value ledger records through the canonical cursor contract.
-   */
   public async getCapturedLedger(
     ctx: TenantContext,
     options?: ValueCapturedListOptions
@@ -335,9 +316,6 @@ export class ValueService {
     });
   }
 
-  /**
-   * Simulate strategic adjustments dynamically from the tenant's actual annualized baseline.
-   */
   public async simulateScenario(
     params: {
       pricingDeltaPct: number;

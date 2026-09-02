@@ -1,9 +1,5 @@
 /**
  * APEX ONE — Tenant-Scoped Authentication Identity Repository
- *
- * Password/credential operations are identity-sensitive and MUST prove that the
- * target user is a member of the authenticated organization before reading or
- * mutating credential material.
  */
 
 import type { DatabaseStore } from "../../database/store";
@@ -24,19 +20,13 @@ export interface IAuthIdentityRepository {
   ): Promise<UserRecord>;
 }
 
-/**
- * In-memory implementation of the auth identity repository.
- *
- * SECURITY INVARIANT:
- * Membership in ctx.organizationId is checked before the global user map is
- * consulted. A caller therefore cannot use this repository to discover whether
- * a user ID exists in another tenant.
- */
 export class TenantScopedAuthIdentityRepository implements IAuthIdentityRepository {
   constructor(private readonly database: DatabaseStore) {}
 
   private async requireTenantUser(userId: string, ctx: TenantContext): Promise<UserRecord> {
-    const membership = this.database.getUserMembership(userId, ctx.organizationId);
+    const membership = this.database.isPostgresBacked()
+      ? await this.database.findUserMembership(userId, ctx.organizationId)
+      : this.database.getUserMembership(userId, ctx.organizationId);
 
     if (!membership) {
       await this.database.recordAuditLog({
@@ -52,17 +42,13 @@ export class TenantScopedAuthIdentityRepository implements IAuthIdentityReposito
           reason: "Target user is not a member of the authenticated organization",
         },
       });
-
-      // Intentionally indistinguishable from a nonexistent user to avoid
-      // cross-tenant account enumeration.
       throw new NotFoundError("User");
     }
 
-    const user = this.database.users.get(userId);
-    if (!user) {
-      throw new NotFoundError("User");
-    }
-
+    const user = this.database.isPostgresBacked()
+      ? await this.database.findUserById(userId)
+      : this.database.users.get(userId);
+    if (!user) throw new NotFoundError("User");
     return user;
   }
 
@@ -75,13 +61,13 @@ export class TenantScopedAuthIdentityRepository implements IAuthIdentityReposito
     credentials: PasswordCredentialUpdate,
     ctx: TenantContext
   ): Promise<UserRecord> {
-    // Re-check membership at mutation time rather than trusting a prior read.
     const user = await this.requireTenantUser(userId, ctx);
-
-    user.passwordHash = credentials.passwordHash;
-    user.passwordSalt = credentials.passwordSalt;
-    this.database.users.set(user.id, user);
-
-    return user;
+    const updated = await this.database.updateUserPasswordCredentials(
+      user.id,
+      ctx.organizationId,
+      credentials
+    );
+    if (!updated) throw new NotFoundError("User");
+    return updated;
   }
 }

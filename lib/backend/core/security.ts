@@ -307,10 +307,19 @@ export function getPermissionsForRole(
 }
 
 /**
- * Create an authenticated session through the default session store.
- *
- * The authentication provider is dynamically imported so this core security
- * module does not participate in a runtime circular dependency.
+ * Resolve the session authority already composed for the default auth service.
+ * The dynamic import preserves the core-security/auth module boundary while
+ * ensuring local in-memory sessions are not replaced between requests. In
+ * production the service's session provider was created by the Stage 4F
+ * composition factory and therefore resolves to Redis.
+ */
+async function getAuthoritativeApplicationSessionStore(): Promise<ISessionStore> {
+  const { authService } = await import("../domains/auth/authService");
+  return authService.getAuthoritativeSessionStore();
+}
+
+/**
+ * Create an authenticated session through the authoritative application session store.
  */
 export async function createSessionToken(
   user: { id: string; email: string; name: string },
@@ -318,12 +327,9 @@ export async function createSessionToken(
   role: string
 ): Promise<AuthSession> {
   const permissions = getPermissionsForRole(role);
+  const sessionStore = await getAuthoritativeApplicationSessionStore();
 
-  const { defaultSessionStore } = await import(
-    "../domains/auth/authProvider"
-  );
-
-  return defaultSessionStore.createSession({
+  return sessionStore.createSession({
     user,
     org,
     role,
@@ -332,7 +338,7 @@ export async function createSessionToken(
 }
 
 /**
- * Retrieve a session through the default session store.
+ * Retrieve a session through the authoritative application session store.
  */
 export async function getSession(
   token: string
@@ -343,15 +349,12 @@ export async function getSession(
     return undefined;
   }
 
-  const { defaultSessionStore } = await import(
-    "../domains/auth/authProvider"
-  );
-
-  return defaultSessionStore.getSession(normalizedToken);
+  const sessionStore = await getAuthoritativeApplicationSessionStore();
+  return sessionStore.getSession(normalizedToken);
 }
 
 /**
- * Revoke a session through the default session store.
+ * Revoke a session through the authoritative application session store.
  */
 export async function revokeSession(token: string): Promise<boolean> {
   const normalizedToken = normalizeSessionToken(token);
@@ -360,11 +363,8 @@ export async function revokeSession(token: string): Promise<boolean> {
     return false;
   }
 
-  const { defaultSessionStore } = await import(
-    "../domains/auth/authProvider"
-  );
-
-  return defaultSessionStore.revokeSession(normalizedToken);
+  const sessionStore = await getAuthoritativeApplicationSessionStore();
+  return sessionStore.revokeSession(normalizedToken);
 }
 
 /**
@@ -557,10 +557,7 @@ export async function resolveTenantContext(
     );
   }
 
-  const store = sessionStore ?? (
-    await import("../domains/auth/authProvider")
-  ).defaultSessionStore;
-
+  const store = sessionStore ?? await getAuthoritativeApplicationSessionStore();
   const session = await store.getSession(token);
 
   if (!session) {

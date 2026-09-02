@@ -4,17 +4,15 @@
  * Provides immutable audit logging and retrieval for enterprise compliance.
  */
 
-import { db, DatabaseStore } from "../../database/store";
+import { DatabaseStore } from "../../database/store";
+import { createApplicationInfrastructure } from "../../infrastructure/composition";
 import { AuditLogRecord } from "../../database/schema";
 import { TenantContext, requirePermission } from "../../core/security";
 import { PaginatedResult, PaginationOptions } from "../../database/querySpecification";
 
 export class AuditService {
-  constructor(private readonly database: DatabaseStore = db) {}
+  constructor(private readonly database: DatabaseStore = createApplicationInfrastructure().database) {}
 
-  /**
-   * Fetch immutable audit logs for the authenticated tenant through the canonical cursor contract.
-   */
   public async getAuditLogs(
     ctx: TenantContext,
     options?: PaginationOptions

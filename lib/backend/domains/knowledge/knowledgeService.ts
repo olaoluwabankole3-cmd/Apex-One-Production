@@ -5,7 +5,8 @@
  * with strict organization-level scoping.
  */
 
-import { db, DatabaseStore } from "../../database/store";
+import { DatabaseStore } from "../../database/store";
+import { createApplicationInfrastructure } from "../../infrastructure/composition";
 import { KnowledgeItemRecord } from "../../database/schema";
 import { PaginatedResult } from "../../database/querySpecification";
 import { TenantContext, requirePermission, ValidationError } from "../../core/security";
@@ -17,17 +18,13 @@ export interface KnowledgeListOptions extends KnowledgeFilterDto {
 }
 
 export class KnowledgeService {
-  constructor(private readonly database: DatabaseStore = db) {}
+  constructor(private readonly database: DatabaseStore = createApplicationInfrastructure().database) {}
 
-  /**
-   * List knowledge items accessible in the tenant context.
-   */
   public async getKnowledgeItems(
     ctx: TenantContext,
     filters?: KnowledgeListOptions
   ): Promise<PaginatedResult<KnowledgeItemRecord>> {
     requirePermission(ctx, "knowledge:read");
-
     const query = filters?.query?.trim();
 
     return this.database.knowledgeRepo.findMany(ctx, {
@@ -41,38 +38,23 @@ export class KnowledgeService {
           : {}),
       },
       ...(query
-        ? {
-            search: {
-              fields: ["title", "content", "summary", "tags"],
-              term: query,
-            },
-          }
+        ? { search: { fields: ["title", "content", "summary", "tags"], term: query } }
         : {}),
       limit: filters?.limit,
       cursor: filters?.cursor,
     });
   }
 
-  /**
-   * Fetch single knowledge item by ID.
-   */
   public async getKnowledgeItemById(id: string, ctx: TenantContext): Promise<KnowledgeItemRecord> {
     requirePermission(ctx, "knowledge:read");
     return this.database.knowledgeRepo.findById(id, ctx, "KnowledgeItem");
   }
 
-  /**
-   * Create new knowledge item for the tenant.
-   */
   public async createKnowledgeItem(dto: CreateKnowledgeItemDto, ctx: TenantContext): Promise<KnowledgeItemRecord> {
     requirePermission(ctx, "knowledge:write");
 
-    if (!dto.title || dto.title.trim().length === 0) {
-      throw new ValidationError("Knowledge item title is required");
-    }
-    if (!dto.content || dto.content.trim().length === 0) {
-      throw new ValidationError("Knowledge item content is required");
-    }
+    if (!dto.title || dto.title.trim().length === 0) throw new ValidationError("Knowledge item title is required");
+    if (!dto.content || dto.content.trim().length === 0) throw new ValidationError("Knowledge item content is required");
 
     const id = `know-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const now = new Date().toISOString();
@@ -94,7 +76,6 @@ export class KnowledgeService {
 
     return this.database.runInTransaction(ctx, async (uow) => {
       const created = await uow.knowledge.create(newItem, uow.context);
-
       await uow.recordAuditLog({
         organizationId: uow.context.organizationId,
         actorId: uow.context.userId,
@@ -107,14 +88,10 @@ export class KnowledgeService {
         metadata: { title: dto.title, category: dto.category },
         timestamp: now,
       });
-
       return created;
     });
   }
 
-  /**
-   * Update an existing knowledge item.
-   */
   public async updateKnowledgeItem(
     id: string,
     dto: UpdateKnowledgeItemDto,
@@ -125,17 +102,12 @@ export class KnowledgeService {
     return this.database.runInTransaction(ctx, async (uow) => {
       const existing = await uow.knowledge.findById(id, uow.context, "KnowledgeItem");
       const nextVersion = existing.version + 1;
-
       const updated = await uow.knowledge.update(
         id,
-        {
-          ...dto,
-          version: nextVersion,
-        },
+        { ...dto, version: nextVersion },
         uow.context,
         "KnowledgeItem"
       );
-
       await uow.recordAuditLog({
         organizationId: uow.context.organizationId,
         actorId: uow.context.userId,
@@ -148,20 +120,15 @@ export class KnowledgeService {
         metadata: { version: nextVersion },
         timestamp: new Date().toISOString(),
       });
-
       return updated;
     });
   }
 
-  /**
-   * Delete knowledge item within tenant context.
-   */
   public async deleteKnowledgeItem(id: string, ctx: TenantContext): Promise<boolean> {
     requirePermission(ctx, "knowledge:write");
 
     return this.database.runInTransaction(ctx, async (uow) => {
       const result = await uow.knowledge.delete(id, uow.context, "KnowledgeItem");
-
       await uow.recordAuditLog({
         organizationId: uow.context.organizationId,
         actorId: uow.context.userId,
@@ -173,7 +140,6 @@ export class KnowledgeService {
         status: "success",
         timestamp: new Date().toISOString(),
       });
-
       return result;
     });
   }

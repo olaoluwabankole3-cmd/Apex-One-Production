@@ -2,7 +2,8 @@
  * APEX ONE — Customer Domain Service with Defense-in-Depth Tenant Isolation
  */
 
-import { db, DatabaseStore } from "../../database/store";
+import { DatabaseStore } from "../../database/store";
+import { createApplicationInfrastructure } from "../../infrastructure/composition";
 import { CustomerRecord } from "../../database/schema";
 import { PaginatedResult } from "../../database/querySpecification";
 import { TenantContext, requirePermission } from "../../core/security";
@@ -45,12 +46,8 @@ export interface CustomerListOptions {
 }
 
 export class CustomerService {
-  constructor(private readonly database: DatabaseStore = db) {}
+  constructor(private readonly database: DatabaseStore = createApplicationInfrastructure().database) {}
 
-  /**
-   * List customers belonging STRICTLY to the authenticated tenant.
-   * Cursor pagination is preserved through the service boundary.
-   */
   public async getCustomers(
     ctx: TenantContext,
     filters?: CustomerListOptions
@@ -62,35 +59,21 @@ export class CustomerService {
     const searchTerm = filters?.search?.trim();
 
     return this.database.customersRepo.findMany(ctx, {
-      where: {
-        tier: tier as any,
-        status: status as any,
-      },
+      where: { tier: tier as any, status: status as any },
       ...(searchTerm
-        ? {
-            search: {
-              fields: ["name", "contactName", "contactEmail", "industry", "subsidiary"],
-              term: searchTerm,
-            },
-          }
+        ? { search: { fields: ["name", "contactName", "contactEmail", "industry", "subsidiary"], term: searchTerm } }
         : {}),
       limit: filters?.limit,
       cursor: filters?.cursor,
     });
   }
 
-  /**
-   * Fetch a single customer by ID, rigorously verifying tenant ownership via repository.
-   */
   public async getCustomerById(id: string, ctx: TenantContext): Promise<CustomerRecord> {
     requirePermission(ctx, "customer:read");
     Validator.requireId(id, "customerId");
     return this.database.customersRepo.findById(id, ctx, "Customer");
   }
 
-  /**
-   * Create a new customer anchored irrevocably to the authenticated tenant.
-   */
   public async createCustomer(dto: CreateCustomerDto, ctx: TenantContext): Promise<CustomerRecord> {
     requirePermission(ctx, "customer:write");
 
@@ -124,7 +107,6 @@ export class CustomerService {
 
     return this.database.runInTransaction(ctx, async (uow) => {
       const record = await uow.customers.create(recordData, uow.context);
-
       await uow.recordAuditLog({
         organizationId: uow.context.organizationId,
         actorId: uow.context.userId,
@@ -137,14 +119,10 @@ export class CustomerService {
         metadata: { customerName: validatedName, arr: validatedArr },
         timestamp: now,
       });
-
       return record;
     });
   }
 
-  /**
-   * Update an existing customer with tenant isolation and audit trail.
-   */
   public async updateCustomer(
     id: string,
     updates: UpdateCustomerDto,
@@ -154,24 +132,12 @@ export class CustomerService {
     Validator.requireId(id, "customerId");
 
     const validatedUpdates: Partial<CustomerRecord> = {};
-    if (updates.name !== undefined) {
-      validatedUpdates.name = Validator.requireString(updates.name, "name", { minLength: 2, maxLength: 120 });
-    }
-    if (updates.contactEmail !== undefined) {
-      validatedUpdates.contactEmail = Validator.requireEmail(updates.contactEmail, "contactEmail");
-    }
-    if (updates.tier !== undefined) {
-      validatedUpdates.tier = Validator.requireEnum(updates.tier, ["Enterprise", "Mid-Market", "SMB"] as const, "tier");
-    }
-    if (updates.status !== undefined) {
-      validatedUpdates.status = Validator.requireEnum(updates.status, ["active", "at-risk", "onboarding", "dormant"] as const, "status");
-    }
-    if (updates.arr !== undefined) {
-      validatedUpdates.arr = Validator.requireNumber(updates.arr, "arr", { min: 0 });
-    }
-    if (updates.healthScore !== undefined) {
-      validatedUpdates.healthScore = Validator.requireNumber(updates.healthScore, "healthScore", { min: 0, max: 100 });
-    }
+    if (updates.name !== undefined) validatedUpdates.name = Validator.requireString(updates.name, "name", { minLength: 2, maxLength: 120 });
+    if (updates.contactEmail !== undefined) validatedUpdates.contactEmail = Validator.requireEmail(updates.contactEmail, "contactEmail");
+    if (updates.tier !== undefined) validatedUpdates.tier = Validator.requireEnum(updates.tier, ["Enterprise", "Mid-Market", "SMB"] as const, "tier");
+    if (updates.status !== undefined) validatedUpdates.status = Validator.requireEnum(updates.status, ["active", "at-risk", "onboarding", "dormant"] as const, "status");
+    if (updates.arr !== undefined) validatedUpdates.arr = Validator.requireNumber(updates.arr, "arr", { min: 0 });
+    if (updates.healthScore !== undefined) validatedUpdates.healthScore = Validator.requireNumber(updates.healthScore, "healthScore", { min: 0, max: 100 });
     if (updates.subsidiary !== undefined) validatedUpdates.subsidiary = updates.subsidiary.trim();
     if (updates.owner !== undefined) validatedUpdates.owner = updates.owner.trim();
     if (updates.contactName !== undefined) validatedUpdates.contactName = updates.contactName.trim();
@@ -180,7 +146,6 @@ export class CustomerService {
 
     return this.database.runInTransaction(ctx, async (uow) => {
       const updated = await uow.customers.update(id, validatedUpdates, uow.context, "Customer");
-
       await uow.recordAuditLog({
         organizationId: uow.context.organizationId,
         actorId: uow.context.userId,
@@ -193,21 +158,16 @@ export class CustomerService {
         metadata: { modifiedFields: Object.keys(validatedUpdates) },
         timestamp: new Date().toISOString(),
       });
-
       return updated;
     });
   }
 
-  /**
-   * Delete a customer.
-   */
   public async deleteCustomer(id: string, ctx: TenantContext): Promise<boolean> {
     requirePermission(ctx, "customer:delete");
     Validator.requireId(id, "customerId");
 
     return this.database.runInTransaction(ctx, async (uow) => {
       const deleted = await uow.customers.delete(id, uow.context, "Customer");
-
       await uow.recordAuditLog({
         organizationId: uow.context.organizationId,
         actorId: uow.context.userId,
@@ -219,7 +179,6 @@ export class CustomerService {
         status: "success",
         timestamp: new Date().toISOString(),
       });
-
       return deleted;
     });
   }
