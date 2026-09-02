@@ -1,9 +1,9 @@
 /**
  * APEX ONE — Value Intelligence Domain Service & Evidence Engine
  *
- * Computes live, evidence-backed value metrics from tenant data entities.
- * Strictly adheres to: Source -> Calculation -> Result -> Evidence -> Confidence.
- * Zero hardcoded financial constants.
+ * Computes live, source-backed value metrics from tenant data entities.
+ * Strictly adheres to: Source -> Calculation -> Result -> Provenance -> Decision State.
+ * Record presence, confidence, verification, and certification are distinct concepts.
  */
 
 import { DatabaseStore } from "../../database/store";
@@ -12,6 +12,7 @@ import { ValueOpportunityRecord, ValueCapturedRecord } from "../../database/sche
 import { PaginatedResult, MAX_PAGE_SIZE } from "../../database/querySpecification";
 import { collectAllPages } from "../../database/paginationTraversal";
 import { TenantContext, requirePermission } from "../../core/security";
+import { EvidenceService } from "../evidence/evidenceService";
 
 export interface ValueEvidenceChain {
   metricId: string;
@@ -28,7 +29,9 @@ export interface ValueSummaryDto {
   potentialValueIdentified: ValueEvidenceChain;
   revenueLeakageTotal: ValueEvidenceChain;
   unusedCapacityValue: ValueEvidenceChain;
+  recordedValueCaptured: ValueEvidenceChain;
   verifiedValueCaptured: ValueEvidenceChain;
+  certifiedValueCaptured: ValueEvidenceChain;
   realizationEfficiencyRate: number;
   vectors: { label: string; value: number; count: number; color?: string }[];
   journeyPipeline: {
@@ -80,7 +83,11 @@ export interface ValueCapturedListOptions {
 }
 
 export class ValueService {
-  constructor(private readonly database: DatabaseStore = createApplicationInfrastructure().database) {}
+  private readonly evidenceService: EvidenceService;
+
+  constructor(private readonly database: DatabaseStore = createApplicationInfrastructure().database) {
+    this.evidenceService = new EvidenceService(database);
+  }
 
   public async getSummary(ctx: TenantContext): Promise<ValueSummaryDto> {
     requirePermission(ctx, "value:read");
@@ -105,6 +112,19 @@ export class ValueService {
       this.database.transactionsRepo.calculateFinancialTotals(ctx),
     ]);
 
+    const capturedWithEvidence = await Promise.all(
+      captured.map(async (record) => ({
+        record,
+        state: await this.evidenceService.getStatus("ValueCaptured", record.id, ctx),
+      }))
+    );
+    const canonicallyVerifiedCaptured = capturedWithEvidence
+      .filter(({ state }) => state.verificationState === "verified")
+      .map(({ record }) => record);
+    const currentlyCertifiedCaptured = capturedWithEvidence
+      .filter(({ state }) => state.certificationState === "certified")
+      .map(({ record }) => record);
+
     const totalArr = customers.reduce((sum, c) => sum + (c.arr || 0), 0);
     const activeContractsValue = contracts
       .filter((c) => c.status === "active" || c.status === "expiring_soon")
@@ -127,8 +147,8 @@ export class ValueService {
       })),
       evidence:
         activeOpps.length > 0
-          ? `Aggregated ${activeOpps.length} active value discovery opportunities across monitored operational vectors.`
-          : "No active value discovery opportunities currently logged for this organization.",
+          ? `Aggregated ${activeOpps.length} recorded value discovery opportunities across monitored operational vectors.`
+          : "No active value discovery opportunities are currently recorded for this organization.",
       confidence:
         activeOpps.length > 0
           ? Math.round(activeOpps.reduce((s, o) => s + o.confidence, 0) / activeOpps.length)
@@ -169,8 +189,8 @@ export class ValueService {
       sourceRecords: leakageSources,
       evidence:
         leakageSources.length > 0
-          ? `Identified ${revenueSignals.length} active telemetry revenue signals and ${unindexedContracts.length} unindexed contract exposure risks.`
-          : "Zero active revenue leakage signals identified across telemetry feeds.",
+          ? `Derived from ${revenueSignals.length} active telemetry revenue signals and ${unindexedContracts.length} unindexed contract exposure records.`
+          : "Zero active revenue leakage source records were found across telemetry feeds.",
       confidence: leakageSources.length > 0 ? 91 : 100,
       timestamp: now,
     };
@@ -190,17 +210,20 @@ export class ValueService {
       })),
       evidence:
         capacitySignals.length > 0
-          ? `Computed from ${capacitySignals.length} active infrastructure & operational node underutilization signals.`
-          : "No capacity underutilization signals detected.",
+          ? `Computed from ${capacitySignals.length} active infrastructure and operational underutilization source records.`
+          : "No capacity underutilization source records were detected.",
       confidence: capacitySignals.length > 0 ? 88 : 100,
       timestamp: now,
     };
 
-    const totalCaptured = captured.reduce((sum, c) => sum + c.capturedValue, 0);
-    const verifiedValueCaptured: ValueEvidenceChain = {
-      metricId: "verified_value_captured",
-      label: "Verified Value Captured",
-      value: totalCaptured,
+    const totalRecordedCaptured = captured.reduce((sum, c) => sum + c.capturedValue, 0);
+    const totalVerifiedCaptured = canonicallyVerifiedCaptured.reduce((sum, c) => sum + c.capturedValue, 0);
+    const totalCertifiedCaptured = currentlyCertifiedCaptured.reduce((sum, c) => sum + c.capturedValue, 0);
+
+    const recordedValueCaptured: ValueEvidenceChain = {
+      metricId: "recorded_value_captured",
+      label: "Recorded Value Captured",
+      value: totalRecordedCaptured,
       calculationMethod: "SUM(ValueCaptured.capturedValue)",
       sourceRecords: captured.map((c) => ({
         type: "ValueCaptured",
@@ -210,8 +233,46 @@ export class ValueService {
       })),
       evidence:
         captured.length > 0
-          ? `Validated against ${captured.length} certified audit ledger entries with signed executive certifications.`
-          : "No certified value captures recorded yet for this organization.",
+          ? `Aggregated ${captured.length} recorded value-capture ledger entries. Record presence alone does not imply verification or certification.`
+          : "No value-capture ledger entries are currently recorded for this organization.",
+      confidence: 100,
+      timestamp: now,
+    };
+
+    const verifiedValueCaptured: ValueEvidenceChain = {
+      metricId: "verified_value_captured",
+      label: "Verified Value Captured",
+      value: totalVerifiedCaptured,
+      calculationMethod: "SUM(ValueCaptured.capturedValue WHERE canonical verificationState = 'verified')",
+      sourceRecords: canonicallyVerifiedCaptured.map((c) => ({
+        type: "ValueCaptured",
+        id: c.id,
+        name: c.opportunityTitle,
+        amount: c.capturedValue,
+      })),
+      evidence:
+        canonicallyVerifiedCaptured.length > 0
+          ? `${canonicallyVerifiedCaptured.length} of ${captured.length} recorded value captures currently have a canonical verified decision backed by provenance.`
+          : "No recorded value captures currently have canonical verified state.",
+      confidence: 100,
+      timestamp: now,
+    };
+
+    const certifiedValueCaptured: ValueEvidenceChain = {
+      metricId: "certified_value_captured",
+      label: "Certified Value Captured",
+      value: totalCertifiedCaptured,
+      calculationMethod: "SUM(ValueCaptured.capturedValue WHERE canonical certificationState = 'certified')",
+      sourceRecords: currentlyCertifiedCaptured.map((c) => ({
+        type: "ValueCaptured",
+        id: c.id,
+        name: c.opportunityTitle,
+        amount: c.capturedValue,
+      })),
+      evidence:
+        currentlyCertifiedCaptured.length > 0
+          ? `${currentlyCertifiedCaptured.length} of ${captured.length} recorded value captures currently have canonical certification based on the current verified decision.`
+          : "No recorded value captures currently have active canonical certification.",
       confidence: 100,
       timestamp: now,
     };
@@ -248,7 +309,7 @@ export class ValueService {
       validated: opps.filter((o) => o.status === "Validated").reduce((s, o) => s + o.potentialValue, 0),
       approved: opps.filter((o) => o.status === "Approved").reduce((s, o) => s + o.potentialValue, 0),
       executing: opps.filter((o) => o.status === "Executing").reduce((s, o) => s + o.potentialValue, 0),
-      captured: totalCaptured,
+      captured: totalRecordedCaptured,
     };
 
     const totalPipelineValue =
@@ -256,16 +317,18 @@ export class ValueService {
       journeyPipeline.validated +
       journeyPipeline.approved +
       journeyPipeline.executing +
-      totalCaptured;
+      totalRecordedCaptured;
 
     const realizationEfficiencyRate =
-      totalPipelineValue > 0 ? Math.round((totalCaptured / totalPipelineValue) * 100 * 10) / 10 : 0;
+      totalPipelineValue > 0 ? Math.round((totalRecordedCaptured / totalPipelineValue) * 100 * 10) / 10 : 0;
 
     return {
       potentialValueIdentified,
       revenueLeakageTotal,
       unusedCapacityValue,
+      recordedValueCaptured,
       verifiedValueCaptured,
+      certifiedValueCaptured,
       realizationEfficiencyRate,
       vectors: finalVectors,
       journeyPipeline,
@@ -339,7 +402,7 @@ export class ValueService {
       this.database.transactionsRepo.calculateFinancialTotals(ctx),
     ]);
 
-    const org = this.database.organizations.get(ctx.organizationId);
+    const org = await this.database.findOrganizationById(ctx.organizationId);
     const currency = org?.currency || txnTotals.currency || "NGN";
     const currencySymbol = org?.currencySymbol || (currency === "USD" ? "$" : "₦");
 
@@ -375,7 +438,7 @@ export class ValueService {
     const calculatedCosts = Math.round(baseCosts * (params.headcountPct / 100) * (1 - params.automationPct / 400));
     const projectedGain = calculatedRevenue - calculatedCosts - (baseRevenue - baseCosts);
 
-    const evidence = `Computed simulation using tenant dynamic baseline of ${customers.length} customer accounts (ARR: ${currencySymbol}${baseRevenue.toLocaleString()}) and operating baseline (Costs: ${currencySymbol}${baseCosts.toLocaleString()}).`;
+    const evidence = `Computed simulation using tenant dynamic baseline of ${customers.length} customer accounts (ARR: ${currencySymbol}${baseRevenue.toLocaleString()}) and operating baseline (Costs: ${currencySymbol}${baseCosts.toLocaleString()}). This is a modeled scenario, not a verification or certification decision.`;
 
     return {
       baselineRevenue: baseRevenue,
