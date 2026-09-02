@@ -114,7 +114,7 @@ function typedMessage(type: string, body: Buffer): Buffer {
 }
 
 class BufferedSocketReader {
-  private buffer = Buffer.alloc(0);
+  private buffer: Buffer<ArrayBufferLike> = Buffer.alloc(0);
   private waiters: Array<() => void> = [];
   private failure: Error | null = null;
 
