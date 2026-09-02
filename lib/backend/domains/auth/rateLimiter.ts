@@ -7,6 +7,7 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import {
+  isProductionInfrastructureEnvironment,
   resolveInfrastructureConfiguration,
   type InfrastructureEnvironment,
 } from "../../infrastructure/runtime";
@@ -274,13 +275,20 @@ export function createRateLimiterFromEnvironment(
   env: InfrastructureEnvironment = process.env
 ): IRateLimiter {
   const configuration = resolveInfrastructureConfiguration(env);
+  const production = isProductionInfrastructureEnvironment(env);
+
+  if (production && configuration.rateLimit !== "redis") {
+    throw new Error("Production rate-limit provider must be Redis; in-memory rate limiting is local/test only");
+  }
+
   if (configuration.rateLimit === "redis") {
     const redisUrl = env.REDIS_URL?.trim();
+    if (!redisUrl && production) {
+      throw new Error("REDIS_URL is required for the production Redis rate-limit provider");
+    }
     return redisUrl
       ? new RedisRateLimiter(redisUrl)
       : new UnavailableRateLimiter("Redis rate-limit adapter selected but REDIS_URL is not configured");
   }
   return new InMemoryRateLimiter();
 }
-
-export const defaultAuthRateLimiter: IRateLimiter = createRateLimiterFromEnvironment();

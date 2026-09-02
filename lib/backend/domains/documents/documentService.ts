@@ -7,7 +7,8 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { db, DatabaseStore } from "../../database/store";
+import { DatabaseStore } from "../../database/store";
+import { createApplicationInfrastructure } from "../../infrastructure/composition";
 import { AuditLogRecord, DocumentRecord } from "../../database/schema";
 import { PaginatedResult, MAX_PAGE_SIZE } from "../../database/querySpecification";
 import { collectAllPages } from "../../database/paginationTraversal";
@@ -19,11 +20,10 @@ import {
   IObjectStorageService,
   MAX_DOCUMENT_BYTES,
   ObjectStorageWriteResult,
-  objectStorageService,
   resolveDocumentMimeType,
 } from "./documentStorage";
 import { documentExtractor } from "./documentExtractor";
-import { documentSearchIndex, IDocumentSearchIndex } from "./documentSearchIndex";
+import { IDocumentSearchIndex } from "./documentSearchIndex";
 
 export interface DocumentListOptions extends DocumentFilterDto {
   limit?: number;
@@ -82,11 +82,21 @@ function storageOperationMetadata(log: AuditLogRecord): StorageOperationMetadata
 }
 
 export class DocumentService {
+  private readonly database: DatabaseStore;
+  private readonly storage: IObjectStorageService;
+  private readonly searchIndex: IDocumentSearchIndex;
+
   constructor(
-    private readonly database: DatabaseStore = db,
-    private readonly storage: IObjectStorageService = objectStorageService,
-    private readonly searchIndex: IDocumentSearchIndex = documentSearchIndex
-  ) {}
+    database?: DatabaseStore,
+    storage?: IObjectStorageService,
+    searchIndex?: IDocumentSearchIndex
+  ) {
+    const infrastructure =
+      database && storage && searchIndex ? undefined : createApplicationInfrastructure();
+    this.database = database ?? infrastructure!.database;
+    this.storage = storage ?? infrastructure!.objectStorage;
+    this.searchIndex = searchIndex ?? infrastructure!.searchIndex;
+  }
 
   public async getDocuments(
     ctx: TenantContext,
@@ -210,16 +220,6 @@ export class DocumentService {
     }
   }
 
-  /**
-   * Upload choreography:
-   * 1. Durable PostgreSQL audit/outbox reservation.
-   * 2. Encrypted S3-compatible object write.
-   * 3. PostgreSQL document metadata + audit + outbox completion in one transaction.
-   *
-   * Any crash after step 1 leaves a recoverable pending operation. If step 3
-   * fails after the blob exists, compensation deletes the blob; if compensation
-   * cannot complete, the durable pending operation remains retryable.
-   */
   public async uploadDocument(dto: UploadDocumentDto, ctx: TenantContext): Promise<DocumentRecord> {
     requirePermission(ctx, "document:write");
 
@@ -375,11 +375,6 @@ export class DocumentService {
     );
   }
 
-  /**
-   * PostgreSQL metadata deletion and the pending blob-delete event commit in the
-   * same transaction. The subsequent S3 DELETE is idempotent. If it fails or
-   * the process crashes, the pending operation remains durably retryable.
-   */
   public async deleteDocument(id: string, ctx: TenantContext): Promise<boolean> {
     requirePermission(ctx, "document:delete");
 
@@ -444,11 +439,6 @@ export class DocumentService {
     return deleted;
   }
 
-  /**
-   * Drain durable pending storage operations for one authenticated tenant.
-   * Repeated invocation is safe because object deletion is idempotent and an
-   * operation is complete only when a completion audit event exists.
-   */
   public async retryPendingStorageOperations(
     ctx: TenantContext,
     limit: number = 20

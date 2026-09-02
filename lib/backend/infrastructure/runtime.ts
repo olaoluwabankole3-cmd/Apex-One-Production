@@ -2,7 +2,8 @@
  * APEX ONE — Stage 4 production infrastructure boundary.
  *
  * Environment variables may select providers, but readiness is granted only
- * when the corresponding durable adapter is actually implemented and wired.
+ * when the corresponding durable adapter is actually implemented, composed,
+ * and protected from production memory fallback.
  */
 
 export type InfrastructureAuthority =
@@ -66,8 +67,8 @@ const DURABLE_PROVIDER_REQUIREMENTS: Readonly<InfrastructureConfiguration> = Obj
 
 /**
  * Code-owned implementation truth. Configuration cannot override these flags.
- * Stage 4D adds encrypted S3-compatible document object storage to the durable
- * PostgreSQL and Redis authorities delivered in 4B/4C.
+ * Stage 4F promotes the final search authority only after all six providers are
+ * composed through the production root and the no-memory-fallback gate exists.
  */
 export const DURABLE_IMPLEMENTATION_STATUS: Readonly<Record<InfrastructureAuthority, boolean>> =
   Object.freeze({
@@ -76,7 +77,7 @@ export const DURABLE_IMPLEMENTATION_STATUS: Readonly<Record<InfrastructureAuthor
     rateLimit: true,
     audit: true,
     objectStorage: true,
-    searchIndex: false,
+    searchIndex: true,
   });
 
 function normalize(value: string | undefined): string | undefined {
@@ -142,6 +143,18 @@ function requireProductionPostgresTls(databaseUrl: string | undefined, issues: s
   }
 }
 
+function requireProductionRedisTls(redisUrl: string | undefined, issues: string[]): void {
+  if (!redisUrl?.trim()) return;
+  try {
+    const url = new URL(redisUrl);
+    if (url.protocol !== "rediss:") {
+      issues.push("REDIS_URL must use rediss:// in production");
+    }
+  } catch {
+    issues.push("REDIS_URL must be a valid Redis URL");
+  }
+}
+
 function requireProductionS3Tls(endpoint: string | undefined, issues: string[]): void {
   if (!endpoint?.trim()) return;
   try {
@@ -200,6 +213,7 @@ export function getInfrastructureReadiness(
 
   if (configuration.session === "redis" || configuration.rateLimit === "redis") {
     requireValue(env, "REDIS_URL", issues);
+    requireProductionRedisTls(env.REDIS_URL, issues);
   }
 
   if (configuration.objectStorage === "s3") {
@@ -226,7 +240,7 @@ export function assertProductionInfrastructureReady(
   const readiness = getInfrastructureReadiness(env);
   if (readiness.production && !readiness.ready) {
     throw new Error(
-      "Production infrastructure is not ready. Durable database, session, rate-limit, audit, object-storage, and search-index adapters must be configured and wired before serving production traffic."
+      `Production infrastructure is not ready: ${readiness.issues.join("; ")}`
     );
   }
   return readiness;

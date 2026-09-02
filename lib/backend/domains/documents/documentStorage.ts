@@ -9,7 +9,10 @@ import {
   randomBytes,
 } from "node:crypto";
 import type { InfrastructureEnvironment } from "../../infrastructure/runtime";
-import { resolveInfrastructureConfiguration } from "../../infrastructure/runtime";
+import {
+  isProductionInfrastructureEnvironment,
+  resolveInfrastructureConfiguration,
+} from "../../infrastructure/runtime";
 import { S3WireClient } from "../../infrastructure/s3/S3WireClient";
 
 export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
@@ -349,6 +352,11 @@ export function createObjectStorageFromEnvironment(
   env: InfrastructureEnvironment = process.env
 ): IObjectStorageService {
   const configuration = resolveInfrastructureConfiguration(env);
+  const production = isProductionInfrastructureEnvironment(env);
+
+  if (production && configuration.objectStorage !== "s3") {
+    throw new Error("Production object-storage provider must be S3-compatible; in-memory blobs are local/test only");
+  }
   if (configuration.objectStorage !== "s3") return new InMemoryObjectStorageAdapter();
 
   const bucket = env.S3_BUCKET?.trim();
@@ -357,6 +365,9 @@ export function createObjectStorageFromEnvironment(
   const secretAccessKey = env.S3_SECRET_ACCESS_KEY?.trim();
   const encryptionKey = env.DOCUMENT_STORAGE_ENCRYPTION_KEY?.trim();
   if (!bucket || !region || !accessKeyId || !secretAccessKey || !encryptionKey) {
+    if (production) {
+      throw new Error("Production S3 object-storage provider requires complete S3 and encryption configuration");
+    }
     return new UnavailableObjectStorageService(
       "S3 object-storage adapter selected but required S3/encryption configuration is incomplete"
     );
@@ -371,5 +382,3 @@ export function createObjectStorageFromEnvironment(
     endpoint: env.S3_ENDPOINT?.trim() || undefined,
   });
 }
-
-export const objectStorageService: IObjectStorageService = createObjectStorageFromEnvironment();

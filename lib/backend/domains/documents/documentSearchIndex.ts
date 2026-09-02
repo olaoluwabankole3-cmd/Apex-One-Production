@@ -11,6 +11,7 @@
 import { createHash } from "node:crypto";
 import { PostgresConnectionManager } from "../../database/adapters/postgres/PostgresPersistence";
 import { quotePostgresLiteral } from "../../database/adapters/postgres/PostgresWireClient";
+import { isProductionInfrastructureEnvironment } from "../../infrastructure/runtime";
 
 export interface IDocumentSearchIndex {
   indexDocument(organizationId: string, documentId: string, textContent: string): Promise<string>;
@@ -19,6 +20,7 @@ export interface IDocumentSearchIndex {
 }
 
 export interface DocumentSearchEnvironment {
+  APP_ENV?: string;
   APEX_SEARCH_INDEX_ADAPTER?: string;
   DATABASE_URL?: string;
 }
@@ -196,11 +198,17 @@ export class PostgresDocumentSearchIndex implements IDocumentSearchIndex {
 
 export function createDocumentSearchIndexFromEnvironment(
   env: DocumentSearchEnvironment = {
+    APP_ENV: process.env.APP_ENV,
     APEX_SEARCH_INDEX_ADAPTER: process.env.APEX_SEARCH_INDEX_ADAPTER,
     DATABASE_URL: process.env.DATABASE_URL,
   }
 ): IDocumentSearchIndex {
   const adapter = (env.APEX_SEARCH_INDEX_ADAPTER || "memory").trim().toLowerCase();
+  const production = isProductionInfrastructureEnvironment(env);
+
+  if (production && adapter !== "postgres") {
+    throw new Error("Production search provider must be PostgreSQL; in-memory search is local/test only");
+  }
 
   if (adapter === "postgres") {
     const databaseUrl = env.DATABASE_URL?.trim();
@@ -216,5 +224,3 @@ export function createDocumentSearchIndexFromEnvironment(
 
   throw new Error(`Unsupported APEX_SEARCH_INDEX_ADAPTER: ${adapter}`);
 }
-
-export const documentSearchIndex: IDocumentSearchIndex = createDocumentSearchIndexFromEnvironment();

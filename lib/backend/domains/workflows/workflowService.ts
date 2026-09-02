@@ -4,7 +4,8 @@
  * Manages workflow graph definitions, validation, versioning, and execution engine runs.
  */
 
-import { db, DatabaseStore } from "../../database/store";
+import { DatabaseStore } from "../../database/store";
+import { createApplicationInfrastructure } from "../../infrastructure/composition";
 import { WorkflowRecord, WorkflowRunRecord, WorkflowRunStepRecord } from "../../database/schema";
 import { PaginatedResult } from "../../database/querySpecification";
 import { TenantContext, requirePermission, ValidationError } from "../../core/security";
@@ -28,11 +29,8 @@ export interface WorkflowRunListOptions {
 }
 
 export class WorkflowService {
-  constructor(private readonly database: DatabaseStore = db) {}
+  constructor(private readonly database: DatabaseStore = createApplicationInfrastructure().database) {}
 
-  /**
-   * List workflows for the tenant while preserving cursor metadata.
-   */
   public async getWorkflows(
     ctx: TenantContext,
     filter?: WorkflowListOptions
@@ -51,24 +49,14 @@ export class WorkflowService {
     });
   }
 
-  /**
-   * Fetch single workflow by ID within tenant context.
-   */
   public async getWorkflowById(id: string, ctx: TenantContext): Promise<WorkflowRecord> {
     requirePermission(ctx, "workflow:read");
     return this.database.workflowsRepo.findById(id, ctx, "Workflow");
   }
 
-  /**
-   * Create a new workflow with DAG validation.
-   */
   public async createWorkflow(dto: CreateWorkflowDto, ctx: TenantContext): Promise<WorkflowRecord> {
     requirePermission(ctx, "workflow:write");
-
-    if (!dto.name || dto.name.trim().length === 0) {
-      throw new ValidationError("Workflow name is required");
-    }
-
+    if (!dto.name || dto.name.trim().length === 0) throw new ValidationError("Workflow name is required");
     WorkflowValidator.validateWorkflowGraph(dto.nodes, dto.connections);
 
     const id = `wf-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
@@ -91,7 +79,6 @@ export class WorkflowService {
 
     return this.database.runInTransaction(ctx, async (uow) => {
       const created = await uow.workflows.create(newWf, uow.context);
-
       await uow.recordAuditLog({
         organizationId: uow.context.organizationId,
         actorId: uow.context.userId,
@@ -104,14 +91,10 @@ export class WorkflowService {
         metadata: { workflowName: dto.name, nodeCount: dto.nodes.length },
         timestamp: now,
       });
-
       return created;
     });
   }
 
-  /**
-   * Update workflow with graph validation.
-   */
   public async updateWorkflow(
     id: string,
     dto: UpdateWorkflowDto,
@@ -121,24 +104,16 @@ export class WorkflowService {
 
     return this.database.runInTransaction(ctx, async (uow) => {
       const existing = await uow.workflows.findById(id, uow.context, "Workflow");
-
       const nextNodes = dto.nodes || existing.nodes;
       const nextConnections = dto.connections || existing.connections;
-
-      if (dto.nodes || dto.connections) {
-        WorkflowValidator.validateWorkflowGraph(nextNodes, nextConnections);
-      }
+      if (dto.nodes || dto.connections) WorkflowValidator.validateWorkflowGraph(nextNodes, nextConnections);
 
       const updated = await uow.workflows.update(
         id,
-        {
-          ...dto,
-          version: existing.version + 1,
-        },
+        { ...dto, version: existing.version + 1 },
         uow.context,
         "Workflow"
       );
-
       await uow.recordAuditLog({
         organizationId: uow.context.organizationId,
         actorId: uow.context.userId,
@@ -151,22 +126,16 @@ export class WorkflowService {
         metadata: { version: existing.version + 1 },
         timestamp: new Date().toISOString(),
       });
-
       return updated;
     });
   }
 
-  /**
-   * Trigger a new workflow execution run.
-   */
   public async triggerWorkflowRun(dto: TriggerWorkflowRunDto, ctx: TenantContext): Promise<WorkflowRunRecord> {
     requirePermission(ctx, "workflow:execute");
 
     return this.database.runInTransaction(ctx, async (uow) => {
       const wf = await uow.workflows.findById(dto.workflowId, uow.context, "Workflow");
-      if (wf.status !== "active") {
-        throw new ValidationError(`Cannot execute workflow in status '${wf.status}'`);
-      }
+      if (wf.status !== "active") throw new ValidationError(`Cannot execute workflow in status '${wf.status}'`);
 
       const steps: WorkflowRunStepRecord[] = wf.nodes.map((node, index) => ({
         stepId: `step-${index + 1}-${node.id}`,
@@ -191,15 +160,8 @@ export class WorkflowService {
         startedAt: new Date().toISOString(),
       };
 
-      await uow.workflows.update(
-        wf.id,
-        { runsCount: wf.runsCount + 1 },
-        uow.context,
-        "Workflow"
-      );
-
+      await uow.workflows.update(wf.id, { runsCount: wf.runsCount + 1 }, uow.context, "Workflow");
       const createdRun = await uow.workflowRuns.create(runRecord, uow.context);
-
       await uow.recordAuditLog({
         organizationId: uow.context.organizationId,
         actorId: uow.context.userId,
@@ -212,20 +174,15 @@ export class WorkflowService {
         metadata: { workflowId: wf.id, runId },
         timestamp: new Date().toISOString(),
       });
-
       return createdRun;
     });
   }
 
-  /**
-   * Advance a workflow run step (e.g., human approval or async integration callback).
-   */
   public async advanceWorkflowStep(dto: AdvanceWorkflowStepDto, ctx: TenantContext): Promise<WorkflowRunRecord> {
     requirePermission(ctx, "workflow:execute");
 
     return this.database.runInTransaction(ctx, async (uow) => {
       const run = await uow.workflowRuns.findById(dto.runId, uow.context, "WorkflowRun");
-
       const updatedSteps = run.steps.map((step) => {
         if (step.stepId === dto.stepId) {
           return {
@@ -268,14 +225,10 @@ export class WorkflowService {
         metadata: { stepId: dto.stepId, decision: dto.decision, nextStatus },
         timestamp: new Date().toISOString(),
       });
-
       return updated;
     });
   }
 
-  /**
-   * Get workflow runs through the same canonical cursor contract.
-   */
   public async getWorkflowRuns(
     workflowId: string,
     ctx: TenantContext,

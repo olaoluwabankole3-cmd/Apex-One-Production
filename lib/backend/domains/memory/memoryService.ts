@@ -2,7 +2,8 @@
  * APEX ONE — Organizational Memory Domain Service
  */
 
-import { db, DatabaseStore } from "../../database/store";
+import { DatabaseStore } from "../../database/store";
+import { createApplicationInfrastructure } from "../../infrastructure/composition";
 import { OrganizationalMemoryRecord } from "../../database/schema";
 import { PaginatedResult } from "../../database/querySpecification";
 import { TenantContext, requirePermission } from "../../core/security";
@@ -27,17 +28,13 @@ export interface MemoryListOptions {
 }
 
 export class MemoryService {
-  constructor(private readonly database: DatabaseStore = db) {}
+  constructor(private readonly database: DatabaseStore = createApplicationInfrastructure().database) {}
 
-  /**
-   * List organizational memory items for the tenant.
-   */
   public async getMemoryItems(
     ctx: TenantContext,
     filters?: MemoryListOptions
   ): Promise<PaginatedResult<OrganizationalMemoryRecord>> {
     requirePermission(ctx, "org:read");
-
     const searchTerm = filters?.search?.trim();
 
     return this.database.memoryRepo.findMany(ctx, {
@@ -48,30 +45,19 @@ export class MemoryService {
             : undefined,
       },
       ...(searchTerm
-        ? {
-            search: {
-              fields: ["title", "content", "source", "sourceReference"],
-              term: searchTerm,
-            },
-          }
+        ? { search: { fields: ["title", "content", "source", "sourceReference"], term: searchTerm } }
         : {}),
       limit: filters?.limit,
       cursor: filters?.cursor,
     });
   }
 
-  /**
-   * Retrieve a specific memory record, enforcing repository tenant isolation.
-   */
   public async getMemoryById(id: string, ctx: TenantContext): Promise<OrganizationalMemoryRecord> {
     requirePermission(ctx, "org:read");
     Validator.requireId(id, "memoryId");
     return this.database.memoryRepo.findById(id, ctx, "OrganizationalMemory");
   }
 
-  /**
-   * Ingest a new verified memory record with provenance.
-   */
   public async addMemory(dto: CreateMemoryDto, ctx: TenantContext): Promise<OrganizationalMemoryRecord> {
     requirePermission(ctx, "org:write");
 
@@ -102,7 +88,6 @@ export class MemoryService {
 
     return this.database.runInTransaction(ctx, async (uow) => {
       const record = await uow.memory.create(recordData, uow.context);
-
       await uow.recordAuditLog({
         organizationId: uow.context.organizationId,
         actorId: uow.context.userId,
@@ -115,7 +100,6 @@ export class MemoryService {
         metadata: { title: record.title, source: record.source },
         timestamp: now,
       });
-
       return record;
     });
   }

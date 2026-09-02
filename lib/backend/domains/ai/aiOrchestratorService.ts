@@ -12,7 +12,8 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { TenantContext, requirePermission } from "../../core/security";
-import { db, DatabaseStore } from "../../database/store";
+import { DatabaseStore } from "../../database/store";
+import { createApplicationInfrastructure } from "../../infrastructure/composition";
 import { MAX_PAGE_SIZE } from "../../database/querySpecification";
 import { collectAllPages } from "../../database/paginationTraversal";
 
@@ -59,7 +60,9 @@ export interface AiToolDefinition {
   handler: (args: Record<string, unknown>, ctx: TenantContext) => Promise<unknown>;
 }
 
-export function createAuthorizedAiTools(database: DatabaseStore = db): Record<string, AiToolDefinition> {
+export function createAuthorizedAiTools(
+  database: DatabaseStore = createApplicationInfrastructure().database
+): Record<string, AiToolDefinition> {
   return {
     get_tenant_customers: {
       name: "get_tenant_customers",
@@ -68,20 +71,12 @@ export function createAuthorizedAiTools(database: DatabaseStore = db): Record<st
       handler: async (args, ctx) => {
         const customers = await collectAllPages((cursor) =>
           database.customersRepo.findMany(ctx, {
-            where: {
-              status: args.status ? (args.status as any) : undefined,
-            },
+            where: { status: args.status ? (args.status as any) : undefined },
             limit: MAX_PAGE_SIZE,
             cursor,
           })
         );
-        return customers.map((c) => ({
-          id: c.id,
-          name: c.name,
-          arr: c.arr,
-          status: c.status,
-          health: c.healthScore,
-        }));
+        return customers.map((c) => ({ id: c.id, name: c.name, arr: c.arr, status: c.status, health: c.healthScore }));
       },
     },
     get_value_opportunities: {
@@ -92,13 +87,7 @@ export function createAuthorizedAiTools(database: DatabaseStore = db): Record<st
         const opps = await collectAllPages((cursor) =>
           database.opportunitiesRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
         );
-        return opps.map((o) => ({
-          id: o.id,
-          title: o.title,
-          value: o.potentialValue,
-          category: o.category,
-          status: o.status,
-        }));
+        return opps.map((o) => ({ id: o.id, title: o.title, value: o.potentialValue, category: o.category, status: o.status }));
       },
     },
     get_organizational_memory: {
@@ -109,24 +98,12 @@ export function createAuthorizedAiTools(database: DatabaseStore = db): Record<st
         const q = typeof args.query === "string" ? args.query.trim() : undefined;
         const memories = await collectAllPages((cursor) =>
           database.memoryRepo.findMany(ctx, {
-            ...(q
-              ? {
-                  search: {
-                    fields: ["title", "content", "source", "sourceReference"],
-                    term: q,
-                  },
-                }
-              : {}),
+            ...(q ? { search: { fields: ["title", "content", "source", "sourceReference"], term: q } } : {}),
             limit: MAX_PAGE_SIZE,
             cursor,
           })
         );
-        return memories.map((m) => ({
-          title: m.title,
-          content: m.content,
-          source: m.source,
-          confidence: m.confidence,
-        }));
+        return memories.map((m) => ({ title: m.title, content: m.content, source: m.source, confidence: m.confidence }));
       },
     },
     get_tenant_documents: {
@@ -136,20 +113,12 @@ export function createAuthorizedAiTools(database: DatabaseStore = db): Record<st
       handler: async (args, ctx) => {
         const docs = await collectAllPages((cursor) =>
           database.documentsRepo.findMany(ctx, {
-            where: {
-              category: args.category ? (args.category as any) : undefined,
-            },
+            where: { category: args.category ? (args.category as any) : undefined },
             limit: MAX_PAGE_SIZE,
             cursor,
           })
         );
-        return docs.map((d) => ({
-          id: d.id,
-          name: d.name,
-          category: d.category,
-          summary: d.aiSummary,
-          fields: d.extractedFields,
-        }));
+        return docs.map((d) => ({ id: d.id, name: d.name, category: d.category, summary: d.aiSummary, fields: d.extractedFields }));
       },
     },
     get_tenant_contracts: {
@@ -173,14 +142,11 @@ export function createAuthorizedAiTools(database: DatabaseStore = db): Record<st
   };
 }
 
-export const authorizedAiTools: Record<string, AiToolDefinition> = createAuthorizedAiTools(db);
+export const authorizedAiTools: Record<string, AiToolDefinition> = createAuthorizedAiTools();
 
 export class AiOrchestratorService {
-  constructor(private readonly database: DatabaseStore = db) {}
+  constructor(private readonly database: DatabaseStore = createApplicationInfrastructure().database) {}
 
-  /**
-   * Execute an AI intelligence analysis with contextual grounding, authorized tools, and strict non-fabrication guarantees.
-   */
   public async processIntelligencePrompt(dto: AiChatRequestDto, ctx: TenantContext): Promise<AiIntelligenceResponse> {
     requirePermission(ctx, "ai:execute");
 
@@ -189,29 +155,15 @@ export class AiOrchestratorService {
     const currency = org?.currencySymbol || "₦";
 
     const [tenantCustomers, tenantOpps, tenantMemories, tenantContracts, tenantSignals] = await Promise.all([
-      collectAllPages((cursor) =>
-        this.database.customersRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
-      ),
-      collectAllPages((cursor) =>
-        this.database.opportunitiesRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
-      ),
-      collectAllPages((cursor) =>
-        this.database.memoryRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
-      ),
-      collectAllPages((cursor) =>
-        this.database.contractsRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
-      ),
-      collectAllPages((cursor) =>
-        this.database.signalsRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
-      ),
+      collectAllPages((cursor) => this.database.customersRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })),
+      collectAllPages((cursor) => this.database.opportunitiesRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })),
+      collectAllPages((cursor) => this.database.memoryRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })),
+      collectAllPages((cursor) => this.database.contractsRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })),
+      collectAllPages((cursor) => this.database.signalsRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })),
     ]);
 
     const totalRecordsGrounded =
-      tenantCustomers.length +
-      tenantOpps.length +
-      tenantMemories.length +
-      tenantContracts.length +
-      tenantSignals.length;
+      tenantCustomers.length + tenantOpps.length + tenantMemories.length + tenantContracts.length + tenantSignals.length;
 
     if (totalRecordsGrounded === 0) {
       return {

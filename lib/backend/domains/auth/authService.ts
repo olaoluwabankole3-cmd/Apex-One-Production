@@ -3,14 +3,14 @@
  */
 
 import { createHash } from "node:crypto";
-import { db, DatabaseStore } from "../../database/store";
+import { DatabaseStore } from "../../database/store";
 import {
-  defaultAuthProvider,
-  defaultSessionStore,
+  LocalAuthenticationProvider,
   IAuthenticationProvider,
   ISessionStore,
 } from "./authProvider";
-import { defaultAuthRateLimiter, IRateLimiter } from "./rateLimiter";
+import { IRateLimiter } from "./rateLimiter";
+import { createApplicationInfrastructure } from "../../infrastructure/composition";
 import { AuthSession, getPermissionsForRole } from "../../core/security";
 import { hashPassword, verifyPassword, validatePasswordPolicy } from "../../core/crypto";
 import {
@@ -58,16 +58,28 @@ function sessionAuditFingerprint(token: string): string {
 }
 
 export class AuthService {
+  private readonly database: DatabaseStore;
+  private readonly authProvider: IAuthenticationProvider;
+  private readonly sessionStore: ISessionStore;
+  private readonly rateLimiter: IRateLimiter;
   private readonly authIdentityRepository: IAuthIdentityRepository;
 
   constructor(
-    private readonly database: DatabaseStore = db,
-    private readonly authProvider: IAuthenticationProvider = defaultAuthProvider,
-    private readonly sessionStore: ISessionStore = defaultSessionStore,
-    private readonly rateLimiter: IRateLimiter = defaultAuthRateLimiter,
+    database?: DatabaseStore,
+    authProvider?: IAuthenticationProvider,
+    sessionStore?: ISessionStore,
+    rateLimiter?: IRateLimiter,
     authIdentityRepository?: IAuthIdentityRepository
   ) {
-    this.authIdentityRepository = authIdentityRepository ?? new TenantScopedAuthIdentityRepository(database);
+    const infrastructure =
+      database && sessionStore && rateLimiter ? undefined : createApplicationInfrastructure();
+    this.database = database ?? infrastructure!.database;
+    this.sessionStore = sessionStore ?? infrastructure!.sessionStore;
+    this.rateLimiter = rateLimiter ?? infrastructure!.rateLimiter;
+    this.authProvider =
+      authProvider ?? new LocalAuthenticationProvider(this.sessionStore, this.database);
+    this.authIdentityRepository =
+      authIdentityRepository ?? new TenantScopedAuthIdentityRepository(this.database);
   }
 
   private async getAvailableOrganizationsForUser(userId: string): Promise<SafeAuthOrganization[]> {

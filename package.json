@@ -14,6 +14,7 @@
     "test:redis": "tsx scripts/runRedisAuthStateTests.ts",
     "test:s3": "tsx scripts/runS3DocumentStorageTests.ts",
     "test:search": "tsx scripts/runPostgresSearchIndexTests.ts",
+    "test:composition": "tsx scripts/runProductionCompositionTests.ts",
     "test:infrastructure": "tsx scripts/checkInfrastructureBoundary.ts",
     "test:security": "bun run test:infrastructure && tsx scripts/runSecurityTests.ts"
   },

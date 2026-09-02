@@ -4,7 +4,8 @@
  * First-class action entities, human-approval gating, execution state transitions, and audit logs.
  */
 
-import { db, DatabaseStore } from "../../database/store";
+import { DatabaseStore } from "../../database/store";
+import { createApplicationInfrastructure } from "../../infrastructure/composition";
 import { ActionRecord } from "../../database/schema";
 import { PaginatedResult } from "../../database/querySpecification";
 import { TenantContext, requirePermission } from "../../core/security";
@@ -30,11 +31,8 @@ export interface ActionListOptions {
 }
 
 export class ActionService {
-  constructor(private readonly database: DatabaseStore = db) {}
+  constructor(private readonly database: DatabaseStore = createApplicationInfrastructure().database) {}
 
-  /**
-   * List execution actions for the tenant through the canonical cursor contract.
-   */
   public async getActions(
     ctx: TenantContext,
     options?: ActionListOptions
@@ -52,18 +50,12 @@ export class ActionService {
     });
   }
 
-  /**
-   * Fetch a single action, checking tenant ownership via repository.
-   */
   public async getActionById(id: string, ctx: TenantContext): Promise<ActionRecord> {
     requirePermission(ctx, "value:read");
     Validator.requireId(id, "actionId");
     return this.database.actionsRepo.findById(id, ctx, "Action");
   }
 
-  /**
-   * Create an execution action.
-   */
   public async createAction(dto: CreateActionDto, ctx: TenantContext): Promise<ActionRecord> {
     requirePermission(ctx, "action:create");
 
@@ -78,7 +70,6 @@ export class ActionService {
 
     const id = `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const now = new Date().toISOString();
-
     const recordData: Omit<ActionRecord, "organizationId"> = {
       id,
       recommendation: validatedRec,
@@ -117,9 +108,6 @@ export class ActionService {
     });
   }
 
-  /**
-   * Approve or execute an action through its lifecycle: Ready -> Approved -> In Progress -> Completed -> Measured.
-   */
   public async advanceAction(id: string, ctx: TenantContext): Promise<ActionRecord> {
     Validator.requireId(id, "actionId");
 
@@ -128,12 +116,9 @@ export class ActionService {
 
       const pipelineOrder: ActionRecord["status"][] = ["Ready", "Approved", "In Progress", "Completed", "Measured"];
       const currentIndex = pipelineOrder.indexOf(action.status);
-      if (currentIndex >= pipelineOrder.length - 1) {
-        return action;
-      }
+      if (currentIndex >= pipelineOrder.length - 1) return action;
 
       const nextStatus = pipelineOrder[currentIndex + 1];
-
       Validator.validateStateTransition(
         action.status,
         nextStatus,
@@ -147,13 +132,9 @@ export class ActionService {
         "Action"
       );
 
-      if (nextStatus === "Approved") {
-        requirePermission(uow.context, "action:approve");
-      } else if (nextStatus === "In Progress" || nextStatus === "Completed") {
-        requirePermission(uow.context, "action:execute");
-      } else if (nextStatus === "Measured") {
-        requirePermission(uow.context, "value:approve");
-      }
+      if (nextStatus === "Approved") requirePermission(uow.context, "action:approve");
+      else if (nextStatus === "In Progress" || nextStatus === "Completed") requirePermission(uow.context, "action:execute");
+      else if (nextStatus === "Measured") requirePermission(uow.context, "value:approve");
 
       const updatedLogs = [...action.logs];
       let approvedBy = action.approvedBy;
@@ -161,21 +142,13 @@ export class ActionService {
       if (nextStatus === "Approved") {
         updatedLogs.push(`Approved by ${uow.context.userEmail} (${uow.context.userRole})`);
         approvedBy = uow.context.userEmail;
-      } else if (nextStatus === "In Progress") {
-        updatedLogs.push("Execution engine initiated automated workflows");
-      } else if (nextStatus === "Completed") {
-        updatedLogs.push("Execution tasks verified and completed successfully");
-      } else if (nextStatus === "Measured") {
-        updatedLogs.push("Certified yield logged in organizational ledger");
-      }
+      } else if (nextStatus === "In Progress") updatedLogs.push("Execution engine initiated automated workflows");
+      else if (nextStatus === "Completed") updatedLogs.push("Execution tasks verified and completed successfully");
+      else if (nextStatus === "Measured") updatedLogs.push("Certified yield logged in organizational ledger");
 
       const updated = await uow.actions.update(
         id,
-        {
-          status: nextStatus,
-          logs: updatedLogs,
-          approvedBy,
-        },
+        { status: nextStatus, logs: updatedLogs, approvedBy },
         uow.context,
         "Action"
       );

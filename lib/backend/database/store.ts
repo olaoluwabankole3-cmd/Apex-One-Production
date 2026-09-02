@@ -1,9 +1,9 @@
 /**
  * APEX ONE — Multi-Tenant Backend Database Store
  *
- * Development/tests use the deterministic in-memory adapter. Production may
- * select the PostgreSQL adapter, which becomes the authoritative state for all
- * repositories, identity records, transactions, and audit logs.
+ * Development/tests use the deterministic in-memory adapter. Production is
+ * composed explicitly through the Stage 4F infrastructure root and must select
+ * PostgreSQL; DatabaseStore itself no longer owns a process-global default.
  */
 
 import {
@@ -59,6 +59,7 @@ import { PostgresPersistence } from "./adapters/postgres/PostgresPersistence";
 import { IDataProvider, ProductionDataProvider } from "./demoDataProvider";
 import { TenantContext, CrossTenantViolationError, ValidationError } from "../core/errors";
 import { IUnitOfWork, IUnitOfWorkProvider, InMemoryUnitOfWork } from "./unitOfWork";
+import { isProductionInfrastructureEnvironment } from "../infrastructure/runtime";
 
 export interface DatabaseStateSnapshot {
   organizations: Map<string, OrganizationRecord>;
@@ -83,15 +84,6 @@ export interface DatabaseStateSnapshot {
 export interface DatabaseStoreOptions {
   adapter?: "memory" | "postgres";
   databaseUrl?: string;
-}
-
-function shouldUsePostgresByDefault(): boolean {
-  return (
-    process.env.TEST_ENV !== "true" &&
-    process.env.APP_ENV === "production" &&
-    process.env.APEX_DATABASE_ADAPTER === "postgres" &&
-    process.env.APEX_AUDIT_ADAPTER === "postgres"
-  );
 }
 
 export class DatabaseStore implements IUnitOfWorkProvider {
@@ -135,7 +127,15 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     dataProvider: IDataProvider = new ProductionDataProvider(),
     options: DatabaseStoreOptions = {}
   ) {
-    const adapter = options.adapter || (shouldUsePostgresByDefault() ? "postgres" : "memory");
+    const adapter = options.adapter || "memory";
+    const productionRuntime =
+      process.env.TEST_ENV !== "true" && isProductionInfrastructureEnvironment(process.env);
+
+    if (productionRuntime && adapter !== "postgres") {
+      throw new ValidationError(
+        "Production DatabaseStore must be created through the explicit PostgreSQL provider factory"
+      );
+    }
 
     if (adapter === "postgres") {
       const databaseUrl = options.databaseUrl || process.env.DATABASE_URL;
@@ -403,5 +403,3 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     }
   }
 }
-
-export const db = new DatabaseStore();

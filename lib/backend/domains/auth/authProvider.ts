@@ -9,9 +9,10 @@ import {
   getPermissionsForRole,
 } from "../../core/security";
 import { generateSecureToken, verifyPassword, dummyPasswordVerification } from "../../core/crypto";
-import { db, DatabaseStore } from "../../database/store";
+import { DatabaseStore } from "../../database/store";
 import { UnauthorizedError, ForbiddenError, NotFoundError } from "../../core/errors";
 import {
+  isProductionInfrastructureEnvironment,
   resolveInfrastructureConfiguration,
   type InfrastructureEnvironment,
 } from "../../infrastructure/runtime";
@@ -542,8 +543,17 @@ export function createSessionStoreFromEnvironment(
   env: InfrastructureEnvironment = process.env
 ): ISessionStore {
   const configuration = resolveInfrastructureConfiguration(env);
+  const production = isProductionInfrastructureEnvironment(env);
+
+  if (production && configuration.session !== "redis") {
+    throw new Error("Production session provider must be Redis; in-memory sessions are local/test only");
+  }
+
   if (configuration.session === "redis") {
     const redisUrl = env.REDIS_URL?.trim();
+    if (!redisUrl && production) {
+      throw new Error("REDIS_URL is required for the production Redis session provider");
+    }
     return redisUrl
       ? new RedisSessionStore(redisUrl)
       : new UnavailableSessionStore("Redis session adapter selected but REDIS_URL is not configured");
@@ -571,7 +581,7 @@ export interface IAuthenticationProvider {
 export class LocalAuthenticationProvider implements IAuthenticationProvider {
   constructor(
     private readonly sessionStore: ISessionStore,
-    private readonly database: DatabaseStore = db
+    private readonly database: DatabaseStore
   ) {}
 
   public async authenticateCredentials(
@@ -657,6 +667,3 @@ export class LocalAuthenticationProvider implements IAuthenticationProvider {
     return { session, availableOrganizations };
   }
 }
-
-export const defaultSessionStore: ISessionStore = createSessionStoreFromEnvironment();
-export const defaultAuthProvider = new LocalAuthenticationProvider(defaultSessionStore);
