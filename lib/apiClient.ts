@@ -19,6 +19,7 @@ import type {
   ApiSuccessResponse,
   PaginationMetadata,
 } from "./contracts/http";
+import { publishFrontendApiFailure } from "./frontendApiFailure";
 
 type UnauthorizedListener = () => void;
 
@@ -173,6 +174,24 @@ export class ApiClient {
     }
   }
 
+  private publishFailure(error: ApiClientError | ApiClientContractError): void {
+    if (
+      error instanceof ApiClientError &&
+      (error.status === 401 || (error.status === 404 && error.method === "GET"))
+    ) {
+      return;
+    }
+
+    publishFrontendApiFailure({
+      code: error.code,
+      message: error.message,
+      ...(error instanceof ApiClientError ? { status: error.status } : {}),
+      ...(error.requestId ? { requestId: error.requestId } : {}),
+      endpoint: error.endpoint,
+      method: error.method,
+    });
+  }
+
   private async readResponseBody(response: Response): Promise<unknown> {
     const contentType = response.headers.get("content-type") || "";
 
@@ -244,7 +263,9 @@ export class ApiClient {
     }
 
     if (!response.ok) {
-      throw this.buildHttpError(response, body, endpoint, method);
+      const error = this.buildHttpError(response, body, endpoint, method);
+      this.publishFailure(error);
+      throw error;
     }
 
     return body as TResponse;
@@ -265,12 +286,14 @@ export class ApiClient {
         isRecord(payload) && typeof payload.requestId === "string"
           ? payload.requestId
           : undefined;
-      throw new ApiClientContractError(
+      const error = new ApiClientContractError(
         "API server returned an invalid canonical success response",
         endpoint,
         method,
         requestId
       );
+      this.publishFailure(error);
+      throw error;
     }
 
     return payload.data;
@@ -291,12 +314,14 @@ export class ApiClient {
         isRecord(payload) && typeof payload.requestId === "string"
           ? payload.requestId
           : undefined;
-      throw new ApiClientContractError(
+      const error = new ApiClientContractError(
         "API server returned an invalid canonical collection response",
         endpoint,
         method,
         requestId
       );
+      this.publishFailure(error);
+      throw error;
     }
 
     return payload;
