@@ -7,6 +7,7 @@ import { ValueEngineProvider } from "@/components/value-engine/ValueEngineContex
 import { AuthProvider } from "@/components/auth/AuthContext";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
+import ApiFailureBanner from "@/components/layout/ApiFailureBanner";
 import { ClientErrorBoundary } from "@/components/layout/ClientErrorBoundary";
 
 const syne = Syne({
@@ -84,6 +85,7 @@ export default function RootLayout({
                     <Sidebar />
                     <div className="flex-1 flex flex-col min-w-0">
                       <Topbar />
+                      <ApiFailureBanner />
                       <main className="flex-1 px-4 sm:px-6 pb-12 pt-6 lg:px-10 ml-0 -mt-[8px]">{children}</main>
                     </div>
                   </div>
