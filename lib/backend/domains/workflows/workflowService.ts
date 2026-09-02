@@ -1,12 +1,13 @@
 /**
  * APEX ONE — Workflow Domain Service
- * 
+ *
  * Manages workflow graph definitions, validation, versioning, and execution engine runs.
  */
 
 import { db, DatabaseStore } from "../../database/store";
 import { WorkflowRecord, WorkflowRunRecord, WorkflowRunStepRecord } from "../../database/schema";
-import { TenantContext, requirePermission, ValidationError, NotFoundError } from "../../core/security";
+import { PaginatedResult } from "../../database/querySpecification";
+import { TenantContext, requirePermission, ValidationError } from "../../core/security";
 import {
   CreateWorkflowDto,
   UpdateWorkflowDto,
@@ -15,19 +16,38 @@ import {
 } from "./workflowTypes";
 import { WorkflowValidator } from "./workflowValidator";
 
+export interface WorkflowListOptions {
+  status?: string;
+  limit?: number;
+  cursor?: string | null;
+}
+
+export interface WorkflowRunListOptions {
+  limit?: number;
+  cursor?: string | null;
+}
+
 export class WorkflowService {
   constructor(private readonly database: DatabaseStore = db) {}
 
   /**
-   * List all workflows for the tenant.
+   * List workflows for the tenant while preserving cursor metadata.
    */
-  public async getWorkflows(ctx: TenantContext, filter?: { status?: string }): Promise<WorkflowRecord[]> {
+  public async getWorkflows(
+    ctx: TenantContext,
+    filter?: WorkflowListOptions
+  ): Promise<PaginatedResult<WorkflowRecord>> {
     requirePermission(ctx, "workflow:read");
 
     return this.database.workflowsRepo.findMany(ctx, {
-      filter: {
-        status: filter?.status && filter.status !== "all" ? (filter.status as any) : undefined,
+      where: {
+        status:
+          filter?.status && filter.status !== "all"
+            ? (filter.status as any)
+            : undefined,
       },
+      limit: filter?.limit,
+      cursor: filter?.cursor,
     });
   }
 
@@ -148,7 +168,6 @@ export class WorkflowService {
         throw new ValidationError(`Cannot execute workflow in status '${wf.status}'`);
       }
 
-      // Build execution step queue starting from triggers
       const steps: WorkflowRunStepRecord[] = wf.nodes.map((node, index) => ({
         stepId: `step-${index + 1}-${node.id}`,
         nodeId: node.id,
@@ -172,17 +191,13 @@ export class WorkflowService {
         startedAt: new Date().toISOString(),
       };
 
-      // Increment runs count on workflow repository
       await uow.workflows.update(
         wf.id,
-        {
-          runsCount: wf.runsCount + 1,
-        },
+        { runsCount: wf.runsCount + 1 },
         uow.context,
         "Workflow"
       );
 
-      // Create workflow run record on runs repository
       const createdRun = await uow.workflowRuns.create(runRecord, uow.context);
 
       await uow.recordAuditLog({
@@ -225,7 +240,6 @@ export class WorkflowService {
 
       const isAllCompleted = updatedSteps.every((s) => s.status === "completed");
       const hasFailed = updatedSteps.some((s) => s.status === "failed");
-
       const nextStatus = hasFailed ? "failed" : isAllCompleted ? "completed" : "running";
 
       const updated = await uow.workflowRuns.update(
@@ -233,7 +247,10 @@ export class WorkflowService {
         {
           steps: updatedSteps,
           status: nextStatus,
-          completedAt: nextStatus === "completed" || nextStatus === "failed" ? new Date().toISOString() : undefined,
+          completedAt:
+            nextStatus === "completed" || nextStatus === "failed"
+              ? new Date().toISOString()
+              : undefined,
         },
         uow.context,
         "WorkflowRun"
@@ -257,11 +274,19 @@ export class WorkflowService {
   }
 
   /**
-   * Get all runs for a workflow.
+   * Get workflow runs through the same canonical cursor contract.
    */
-  public async getWorkflowRuns(workflowId: string, ctx: TenantContext): Promise<WorkflowRunRecord[]> {
+  public async getWorkflowRuns(
+    workflowId: string,
+    ctx: TenantContext,
+    options?: WorkflowRunListOptions
+  ): Promise<PaginatedResult<WorkflowRunRecord>> {
     requirePermission(ctx, "workflow:read");
-    return this.database.workflowRunsRepo.findByWorkflow(workflowId, ctx);
+    return this.database.workflowRunsRepo.findMany(ctx, {
+      where: { workflowId },
+      limit: options?.limit,
+      cursor: options?.cursor,
+    });
   }
 }
 
