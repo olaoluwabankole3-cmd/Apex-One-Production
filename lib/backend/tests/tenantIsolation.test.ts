@@ -1193,7 +1193,8 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
         name: "Test Spoof Doc.pdf",
         fileType: "pdf",
         category: "Contract",
-        content: "Sample contract content with indexation rules",
+        size: "1.0 MB",
+        contentBuffer: "Sample contract content with indexation rules",
         ...({ organizationId: "org-titan-corp" } as any),
       },
       tenantAContext
@@ -1749,7 +1750,8 @@ export async function runTenantIsolationTestSuite(isolatedDb?: DatabaseStore): P
         name: "Enterprise Audit Policy Verification.pdf",
         fileType: "pdf",
         category: "Compliance Document",
-        content: "Enterprise governance and multi-tenant authorization guidelines.",
+        size: "1.0 MB",
+        contentBuffer: "Enterprise governance and multi-tenant authorization guidelines.",
       },
       tenantAContext
     );
