@@ -16,6 +16,7 @@
     "test:search": "tsx scripts/runPostgresSearchIndexTests.ts",
     "test:composition": "tsx scripts/runProductionCompositionTests.ts",
     "test:recovery": "tsx scripts/runDurabilityRecoveryTests.ts",
+    "test:integrity": "tsx scripts/runRepositoryIntegrityTests.ts",
     "test:infrastructure": "tsx scripts/checkInfrastructureBoundary.ts",
     "test:security": "bun run test:infrastructure && tsx scripts/runSecurityTests.ts"
   },
@@ -35,7 +36,7 @@
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.19",
-    "eslint": "^8.57.0",
+    "eslint": "^8.57.1",
     "eslint-config-next": "14.2.35",
     "postcss": "^8.4.40",
     "tailwindcss": "^3.4.7",

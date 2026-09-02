@@ -23,6 +23,11 @@ import {
   applyQuerySpecificationPaginated,
   matchesSpecification,
 } from "../../querySpecification";
+import {
+  assertNoImmutableFieldMutation,
+  IMMUTABLE_PERSISTENCE_FIELDS,
+  throwUniquenessConflict,
+} from "../../repositoryIntegrity";
 
 export class InMemoryTenantRepository<
   T extends { id: string; organizationId: string },
@@ -37,6 +42,11 @@ export class InMemoryTenantRepository<
       attemptedOrg: string
     ) => void
   ) {}
+
+  protected async beforeCreate(_data: Omit<T, "organizationId">, _ctx: TenantContext): Promise<void> {}
+  protected async beforeUpdate(_existing: T, _updates: TUpdate, _ctx: TenantContext): Promise<void> {}
+  protected async beforeDelete(_existing: T, _ctx: TenantContext): Promise<void> {}
+  protected immutableUpdateFields(): readonly string[] { return []; }
 
   public async findById(
     id: string,
@@ -109,11 +119,17 @@ export class InMemoryTenantRepository<
     data: Omit<T, "organizationId">,
     ctx: TenantContext
   ): Promise<T> {
+    await this.beforeCreate(data, ctx);
+
     const id =
       (data as any).id ||
       (typeof crypto !== "undefined" && crypto.randomUUID
         ? crypto.randomUUID()
         : `id-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
+    if (this.store.has(id)) {
+      throwUniquenessConflict(this.collectionName, `${this.collectionName}:id`);
+    }
 
     const item = {
       ...data,
@@ -132,14 +148,16 @@ export class InMemoryTenantRepository<
     resourceName: string = this.collectionName
   ): Promise<T> {
     const existing = await this.findById(id, ctx, resourceName);
+    await this.beforeUpdate(existing, updates, ctx);
 
     const safeUpdates = { ...(updates as Record<string, unknown>) };
-    delete safeUpdates.organizationId;
-    delete safeUpdates.id;
-    delete safeUpdates.createdAt;
-    delete safeUpdates.detectedAt;
-    delete safeUpdates.startedAt;
-    delete safeUpdates.updatedAt;
+    assertNoImmutableFieldMutation(
+      safeUpdates,
+      resourceName,
+      this.immutableUpdateFields()
+    );
+    for (const field of IMMUTABLE_PERSISTENCE_FIELDS) delete safeUpdates[field];
+    for (const field of this.immutableUpdateFields()) delete safeUpdates[field];
 
     const updated = {
       ...existing,
@@ -158,7 +176,8 @@ export class InMemoryTenantRepository<
     ctx: TenantContext,
     resourceName: string = this.collectionName
   ): Promise<boolean> {
-    await this.findById(id, ctx, resourceName);
+    const existing = await this.findById(id, ctx, resourceName);
+    await this.beforeDelete(existing, ctx);
     return this.store.delete(id);
   }
 }

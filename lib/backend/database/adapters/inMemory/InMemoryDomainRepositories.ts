@@ -59,12 +59,59 @@ import {
   applyQuerySpecificationPaginated,
   matchesSpecification,
 } from "../../querySpecification";
-import { TenantContext } from "../../../core/errors";
+import { ConflictError, TenantContext, ValidationError } from "../../../core/errors";
 import { Validator } from "../../../core/validation";
 import {
   RelationshipValidator,
   IEntityLookupStore,
 } from "../../relationshipValidator";
+import {
+  assertForwardStateTransition,
+  assertNextIntegerValue,
+} from "../../repositoryIntegrity";
+
+const ACTION_STATUS_TRANSITIONS: Record<ActionRecord["status"], ActionRecord["status"][]> = {
+  Ready: ["Approved"],
+  Approved: ["In Progress"],
+  "In Progress": ["Completed"],
+  Completed: ["Measured"],
+  Measured: [],
+};
+
+const DOCUMENT_STATUS_TRANSITIONS: Record<DocumentRecord["status"], DocumentRecord["status"][]> = {
+  uploading: ["processing", "failed", "archived"],
+  processing: ["indexed", "failed", "archived"],
+  indexed: ["archived"],
+  failed: ["processing", "archived"],
+  archived: [],
+};
+
+const OPPORTUNITY_STATUS_TRANSITIONS: Record<ValueOpportunityRecord["status"], ValueOpportunityRecord["status"][]> = {
+  Identified: ["Validated"],
+  Validated: ["Approved"],
+  Approved: ["Executing"],
+  Executing: ["Captured"],
+  Captured: [],
+};
+
+const WORKFLOW_RUN_STATUS_TRANSITIONS: Record<WorkflowRunRecord["status"], WorkflowRunRecord["status"][]> = {
+  pending: ["running", "failed", "cancelled"],
+  running: ["waiting_approval", "completed", "failed", "cancelled"],
+  waiting_approval: ["running", "completed", "failed", "cancelled"],
+  completed: [],
+  failed: [],
+  cancelled: [],
+};
+
+const TERMINAL_WORKFLOW_RUN_STATUSES = new Set<WorkflowRunRecord["status"]>([
+  "completed",
+  "failed",
+  "cancelled",
+]);
+
+function hasDefinedUpdate(updates: Record<string, unknown>): boolean {
+  return Object.values(updates).some((value) => value !== undefined);
+}
 
 function recordDeleteAudit(
   entityLookupStore: IEntityLookupStore | undefined,
@@ -372,6 +419,21 @@ export class InMemoryValueOpportunityRepository
     super(collectionName, store, onAuditViolation);
   }
 
+  protected override async beforeUpdate(
+    existing: ValueOpportunityRecord,
+    updates: UpdateValueOpportunityInput
+  ): Promise<void> {
+    if (existing.status === "Captured" && hasDefinedUpdate(updates as Record<string, unknown>)) {
+      throw new ConflictError("Captured ValueOpportunity records are terminal and immutable");
+    }
+    assertForwardStateTransition(
+      "ValueOpportunity",
+      existing.status,
+      updates.status,
+      OPPORTUNITY_STATUS_TRANSITIONS
+    );
+  }
+
   public override async create(
     data: Omit<ValueOpportunityRecord, "organizationId">,
     ctx: TenantContext
@@ -516,6 +578,16 @@ export class InMemoryActionRepository
   extends InMemoryTenantRepository<ActionRecord, UpdateActionInput>
   implements IActionRepository
 {
+  protected override async beforeUpdate(
+    existing: ActionRecord,
+    updates: UpdateActionInput
+  ): Promise<void> {
+    if (existing.status === "Measured" && hasDefinedUpdate(updates as Record<string, unknown>)) {
+      throw new ConflictError("Measured Action records are terminal and immutable");
+    }
+    assertForwardStateTransition("Action", existing.status, updates.status, ACTION_STATUS_TRANSITIONS);
+  }
+
   public async findByStatus(
     status: string,
     ctx: TenantContext
@@ -537,6 +609,20 @@ export class InMemoryDocumentRepository
     protected readonly entityLookupStore?: IEntityLookupStore
   ) {
     super(collectionName, store, onAuditViolation);
+  }
+
+  protected override immutableUpdateFields(): readonly string[] {
+    return ["fileType", "size", "uploadedBy", "storageKey"];
+  }
+
+  protected override async beforeUpdate(
+    existing: DocumentRecord,
+    updates: UpdateDocumentInput
+  ): Promise<void> {
+    if (existing.status === "archived" && hasDefinedUpdate(updates as Record<string, unknown>)) {
+      throw new ConflictError("Archived Document records are terminal and immutable");
+    }
+    assertForwardStateTransition("Document", existing.status, updates.status, DOCUMENT_STATUS_TRANSITIONS);
   }
 
   public override async create(
@@ -644,6 +730,17 @@ export class InMemoryKnowledgeRepository
     super("KnowledgeItem", store, onAuditViolation);
   }
 
+  protected override immutableUpdateFields(): readonly string[] {
+    return ["author"];
+  }
+
+  protected override async beforeUpdate(
+    existing: KnowledgeItemRecord,
+    updates: UpdateKnowledgeItemInput
+  ): Promise<void> {
+    assertNextIntegerValue("KnowledgeItem", "version", existing.version, updates.version);
+  }
+
   public override async create(
     data: Omit<KnowledgeItemRecord, "organizationId">,
     ctx: TenantContext
@@ -722,6 +819,14 @@ export class InMemoryWorkflowRepository
     super(collectionName, store, onAuditViolation);
   }
 
+  protected override async beforeUpdate(
+    existing: WorkflowRecord,
+    updates: UpdateWorkflowInput
+  ): Promise<void> {
+    assertNextIntegerValue("Workflow", "version", existing.version, updates.version);
+    assertNextIntegerValue("Workflow", "runsCount", existing.runsCount, updates.runsCount);
+  }
+
   public override async delete(
     id: string,
     ctx: TenantContext,
@@ -752,6 +857,42 @@ export class InMemoryWorkflowRunRepository
     super(collectionName, store, onAuditViolation);
   }
 
+  protected override immutableUpdateFields(): readonly string[] {
+    return ["workflowId", "workflowVersion", "triggeredBy", "triggerType"];
+  }
+
+  protected override async beforeUpdate(
+    existing: WorkflowRunRecord,
+    updates: UpdateWorkflowRunInput
+  ): Promise<void> {
+    if (
+      TERMINAL_WORKFLOW_RUN_STATUSES.has(existing.status) &&
+      hasDefinedUpdate(updates as Record<string, unknown>)
+    ) {
+      throw new ConflictError("Terminal WorkflowRun records are immutable");
+    }
+
+    assertForwardStateTransition(
+      "WorkflowRun",
+      existing.status,
+      updates.status,
+      WORKFLOW_RUN_STATUS_TRANSITIONS
+    );
+
+    const nextStatus = updates.status ?? existing.status;
+    if (updates.completedAt !== undefined && !TERMINAL_WORKFLOW_RUN_STATUSES.has(nextStatus)) {
+      throw new ValidationError("WorkflowRun completedAt can only be set for a terminal status");
+    }
+    if (
+      updates.status !== undefined &&
+      TERMINAL_WORKFLOW_RUN_STATUSES.has(updates.status) &&
+      !existing.completedAt &&
+      updates.completedAt === undefined
+    ) {
+      throw new ValidationError("Terminal WorkflowRun transitions must set completedAt");
+    }
+  }
+
   public override async create(
     data: Omit<WorkflowRunRecord, "organizationId">,
     ctx: TenantContext
@@ -779,22 +920,6 @@ export class InMemoryWorkflowRunRepository
     ctx: TenantContext,
     resourceName: string = this.collectionName
   ): Promise<WorkflowRunRecord> {
-    if (updates.workflowId !== undefined) {
-      RelationshipValidator.validateWorkflowBelongsToTenant(
-        updates.workflowId,
-        ctx,
-        this.entityLookupStore,
-        { optional: false, resourceContext: "WorkflowRun" }
-      );
-    }
-    if (updates.triggeredBy !== undefined) {
-      RelationshipValidator.validateUserMembershipBelongsToTenant(
-        updates.triggeredBy,
-        ctx,
-        this.entityLookupStore,
-        { optional: false, resourceContext: "WorkflowRun.triggeredBy" }
-      );
-    }
     return super.update(id, updates, ctx, resourceName);
   }
 
