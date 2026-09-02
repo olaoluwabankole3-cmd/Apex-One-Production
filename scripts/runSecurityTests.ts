@@ -10,6 +10,7 @@ process.env.TEST_ENV = "true";
 import { runTenantIsolationTestSuite } from "../lib/backend/tests/tenantIsolation.test";
 import { runFrontendAuthCompatibilityTestSuite } from "../lib/backend/tests/frontendAuthCompatibility.test";
 import { runFrontendRoleAuthorityTestSuite } from "../lib/backend/tests/frontendRoleAuthority.test";
+import { runFrontendPrivilegedUiAuthorizationTestSuite } from "../lib/backend/tests/frontendPrivilegedUiAuthorization.test";
 import { runCustomerDataTruthfulnessTestSuite } from "../lib/backend/tests/customerDataTruthfulness.test";
 import { runFinancialIntegrityTestSuite } from "../lib/backend/tests/financialIntegrity.test";
 import { runRelationshipIntegrityTestSuite } from "../lib/backend/tests/relationshipIntegrity.test";
@@ -58,6 +59,11 @@ const REGISTERED_SUITES: RegisteredSuite[] = [
     fileName: "frontendRoleAuthority.test.ts",
     suiteIdentity: "Frontend Role Authority Boundary Suite",
     run: runFrontendRoleAuthorityTestSuite as () => Promise<GenericSuiteSummary>,
+  },
+  {
+    fileName: "frontendPrivilegedUiAuthorization.test.ts",
+    suiteIdentity: "Frontend Privileged UI Authorization Suite",
+    run: runFrontendPrivilegedUiAuthorizationTestSuite as () => Promise<GenericSuiteSummary>,
   },
   {
     fileName: "customerDataTruthfulness.test.ts",

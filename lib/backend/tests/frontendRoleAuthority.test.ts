@@ -31,7 +31,6 @@ const ROLE_CONTEXT_PATH = "components/layout/RoleContext.tsx";
 const AUDITED_ROLE_CONTEXT_CONSUMERS = [
   "app/analytics/page.tsx",
   "app/operations/page.tsx",
-  "app/page.tsx",
   "components/ai-workspace/AiWorkspace.tsx",
   "components/ai-workspace/SuggestedPrompts.tsx",
   "components/ai-workspace/WorkspaceHeader.tsx",

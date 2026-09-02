@@ -6,19 +6,48 @@ import { useAuth } from "@/components/auth/AuthContext";
 
 interface InternalOnlyShieldProps {
   children: React.ReactNode;
+  /**
+   * Optional additional capability required for this internal UI surface.
+   * `org:read` is always required first so external/customer sessions cannot
+   * enter APEX ONE merely because they hold a domain read capability.
+   */
+  requiredPermission?: string;
 }
 
-export default function InternalOnlyShield({ children }: InternalOnlyShieldProps) {
-  const { user, isAuthenticated, isLoading } = useAuth();
+/**
+ * UX-only privileged UI boundary derived from authenticated session metadata.
+ *
+ * SECURITY NOTE:
+ * This component is not the authoritative security boundary. It only prevents
+ * the normal frontend from rendering privileged surfaces when the authenticated
+ * server session does not advertise the required capabilities. Every protected
+ * backend operation must continue to enforce authorization independently.
+ */
+export default function InternalOnlyShield({
+  children,
+  requiredPermission,
+}: InternalOnlyShieldProps) {
+  const { isAuthenticated, isLoading, hasPermission } = useAuth();
 
-  // Deny by default while the server-backed session is still being resolved.
+  // Fail closed while the server-backed HttpOnly-cookie session is unresolved.
   if (isLoading) {
     return null;
   }
 
-  const isExternalOrUnauthenticated = !isAuthenticated || user?.role === "Customer / Investor";
+  const hasInternalSessionCapability =
+    isAuthenticated && hasPermission("org:read");
+  const hasRequiredCapability = requiredPermission
+    ? hasPermission(requiredPermission)
+    : true;
+  const hasAccess = hasInternalSessionCapability && hasRequiredCapability;
 
-  if (isExternalOrUnauthenticated) {
+  if (!hasAccess) {
+    const denialMessage = !isAuthenticated
+      ? "A valid authenticated session is required to access this internal APEX ONE section."
+      : !hasInternalSessionCapability
+        ? "Your authenticated session is assigned to the APEX CONNECT customer environment and does not include internal APEX ONE access."
+        : "Your authenticated session does not include the capability required for this privileged APEX ONE section.";
+
     return (
       <div className="mx-auto max-w-[680px] py-12 px-4">
         <GlassCard className="p-6 sm:p-8 border-gold/25 bg-gold/[0.02] text-center space-y-6 shadow-gold-glow">
@@ -34,21 +63,14 @@ export default function InternalOnlyShield({ children }: InternalOnlyShieldProps
               Enterprise Back-Office Shield
             </h2>
             <p className="text-[13px] text-ivory/60 leading-relaxed max-w-md mx-auto font-sans">
-              {isAuthenticated ? (
-                <>
-                  Your authenticated session is assigned to the <span className="font-semibold text-gold">APEX CONNECT</span> customer environment.
-                  This section is restricted to authorized employees on the <span className="font-semibold text-gold">APEX ONE</span> internal operating system.
-                </>
-              ) : (
-                <>
-                  A valid authenticated session is required to access this internal <span className="font-semibold text-gold">APEX ONE</span> section.
-                </>
-              )}
+              {denialMessage}
             </p>
           </div>
 
           <div className="rounded-xl border border-white/[0.05] bg-white/[0.01] p-4 text-left text-[12px] space-y-2">
-            <p className="font-bold text-white uppercase tracking-wider text-[10.5px] font-mono">Connected Worlds Blueprint:</p>
+            <p className="font-bold text-white uppercase tracking-wider text-[10.5px] font-mono">
+              Connected Worlds Blueprint:
+            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 text-ivory/60">
               <div>
                 <span className="font-semibold text-gold">APEX CONNECT:</span> Used by clients to apply for products, view private portfolios, upload KYC, and book RM video calls.

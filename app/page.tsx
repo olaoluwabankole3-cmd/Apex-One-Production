@@ -1,6 +1,6 @@
 "use client";
 
-import { useRole } from "@/components/layout/RoleContext";
+import { useAuth } from "@/components/auth/AuthContext";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import ExecutiveSummary from "@/components/dashboard/ExecutiveSummary";
 import KpiGrid from "@/components/dashboard/KpiGrid";
@@ -11,9 +11,16 @@ import QuickActions from "@/components/dashboard/QuickActions";
 import ApexConnectDashboard from "@/components/dashboard/ApexConnectDashboard";
 
 export default function DashboardPage() {
-  const { role } = useRole();
+  const { isLoading, hasPermission } = useAuth();
 
-  if (role === "Customer / Investor") {
+  // Do not render either environment until the server-backed session is resolved.
+  if (isLoading) {
+    return null;
+  }
+
+  // APEX ONE staff experience is selected from authenticated session capabilities,
+  // never from RoleContext or client-selectable role state.
+  if (!hasPermission("org:read")) {
     return <ApexConnectDashboard />;
   }
 
