@@ -31,6 +31,7 @@ export async function POST(req: NextRequest) {
 
     const targetUserId =
       typeof body.userId === "string" ? body.userId.trim() : ctx.userId;
+    const isSelfServicePasswordChange = targetUserId === ctx.userId;
 
     await authService.changePassword(
       {
@@ -43,11 +44,18 @@ export async function POST(req: NextRequest) {
 
     const response = NextResponse.json({
       success: true,
-      message: "Password changed successfully. Please log in with your new credentials.",
+      currentSessionInvalidated: isSelfServicePasswordChange,
+      message: isSelfServicePasswordChange
+        ? "Password changed successfully. Please log in with your new credentials."
+        : "Password changed successfully for the selected organization member.",
     });
 
-    // Clear session cookie since user sessions were invalidated
-    response.cookies.set(getClearSessionCookieOptions());
+    // AuthService revokes sessions for the TARGET user. Clear this browser's
+    // cookie only when the authenticated caller changed their own password.
+    // An administrator changing another same-tenant member must stay signed in.
+    if (isSelfServicePasswordChange) {
+      response.cookies.set(getClearSessionCookieOptions());
+    }
 
     return response;
   } catch (err: any) {
