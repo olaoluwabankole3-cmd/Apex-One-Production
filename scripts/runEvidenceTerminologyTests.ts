@@ -61,8 +61,8 @@ const checks: Check[] = [
   {
     name: "Value verification and certification totals use canonical evidence states",
     run: () => {
-      requireIncludes(value, 'snapshot.verificationState === "verified"', "Verified value must depend on canonical verification state");
-      requireIncludes(value, 'snapshot.certificationState === "certified"', "Certified value must depend on canonical certification state");
+      requireIncludes(value, 'state.verificationState === "verified"', "Verified value must depend on canonical verification state");
+      requireIncludes(value, 'state.certificationState === "certified"', "Certified value must depend on canonical certification state");
     },
   },
   {
