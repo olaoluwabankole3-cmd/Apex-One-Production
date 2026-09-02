@@ -1,32 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTenantContext } from "@/lib/backend/core/security";
 import { documentService } from "@/lib/backend/domains/documents/documentService";
-import { BackendError } from "@/lib/backend/core/errors";
+import { Validator } from "@/lib/backend/core/validation";
+import {
+  serializeApiError,
+  toApiSuccessResponse,
+} from "@/lib/backend/core/httpContract";
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  let requestId: string | undefined;
+
   try {
     const ctx = await resolveTenantContext(req.headers);
+    requestId = ctx.requestId;
     const { id } = await params;
-    const doc = await documentService.getDocumentById(id, ctx);
-    return NextResponse.json({ success: true, data: doc });
-  } catch (err: any) {
-    if (err instanceof BackendError) {
-      return NextResponse.json({ error: err.message, code: err.code }, { status: err.statusCode });
-    }
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+    const documentId = Validator.requireId(id, "documentId");
+    const doc = await documentService.getDocumentById(documentId, ctx);
+
+    return NextResponse.json(toApiSuccessResponse(doc, requestId));
+  } catch (error: unknown) {
+    const serialized = serializeApiError(error, requestId);
+    return NextResponse.json(serialized.body, { status: serialized.status });
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  let requestId: string | undefined;
+
   try {
     const ctx = await resolveTenantContext(req.headers);
+    requestId = ctx.requestId;
     const { id } = await params;
-    await documentService.deleteDocument(id, ctx);
-    return NextResponse.json({ success: true, message: "Document deleted successfully" });
-  } catch (err: any) {
-    if (err instanceof BackendError) {
-      return NextResponse.json({ error: err.message, code: err.code }, { status: err.statusCode });
-    }
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+    const documentId = Validator.requireId(id, "documentId");
+    await documentService.deleteDocument(documentId, ctx);
+
+    return NextResponse.json(
+      toApiSuccessResponse({ deleted: true, id: documentId }, requestId)
+    );
+  } catch (error: unknown) {
+    const serialized = serializeApiError(error, requestId);
+    return NextResponse.json(serialized.body, { status: serialized.status });
   }
 }
