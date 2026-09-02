@@ -2,6 +2,7 @@ import { DocumentItem } from "@/lib/types";
 import { IntelDocument } from "@/lib/data/demo";
 import { apiClient } from "@/lib/apiClient";
 import { DocumentRecord } from "@/lib/backend/database/schema";
+import { collectAllCollectionData, isApiNotFound } from "./httpCollection";
 
 export interface DocumentRepository {
   getDocuments(organizationId?: string): Promise<DocumentItem[]>;
@@ -53,13 +54,13 @@ function mapRecordToIntelDocument(d: DocumentRecord): IntelDocument {
       datesDetail: [
         { event: "Record Created", date: new Date(d.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) }
       ],
-      financialExposure: d.extractedFields?.find(f => f.label.toLowerCase().includes("exposure") || f.label.toLowerCase().includes("amount"))?.value || "Not available",
-      recommendedAction: d.extractedFields?.find(f => f.label.toLowerCase().includes("action"))?.value || "Not available"
+      financialExposure: d.extractedFields?.find((f) => f.label.toLowerCase().includes("exposure") || f.label.toLowerCase().includes("amount"))?.value || "Not available",
+      recommendedAction: d.extractedFields?.find((f) => f.label.toLowerCase().includes("action"))?.value || "Not available"
     },
     entities: {
       customers: d.tags || [],
       contracts: [],
-      financialValues: d.extractedFields?.map(f => f.value) || [],
+      financialValues: d.extractedFields?.map((f) => f.value) || [],
       risks: [],
       importantDates: [new Date(d.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })],
       actions: [],
@@ -106,43 +107,23 @@ function mapRecordToDocumentItem(d: DocumentRecord): DocumentItem {
 }
 
 export class ApiDocumentRepository implements DocumentRepository {
-  async getDocuments(organizationId?: string): Promise<DocumentItem[]> {
-    try {
-      const res = await apiClient.get<{ success: boolean; data: DocumentRecord[] }>("/api/v1/documents");
-      if (res && Array.isArray(res.data)) {
-        return res.data.map(mapRecordToDocumentItem);
-      }
-      return [];
-    } catch (err) {
-      console.error("Failed to fetch documents from API:", err);
-      return [];
-    }
+  async getDocuments(_organizationId?: string): Promise<DocumentItem[]> {
+    const records = await collectAllCollectionData<DocumentRecord>("/api/v1/documents");
+    return records.map(mapRecordToDocumentItem);
   }
 
-  async getIntelDocuments(organizationId?: string): Promise<IntelDocument[]> {
-    try {
-      const res = await apiClient.get<{ success: boolean; data: DocumentRecord[] }>("/api/v1/documents");
-      if (res && Array.isArray(res.data)) {
-        return res.data.map(mapRecordToIntelDocument);
-      }
-      return [];
-    } catch (err) {
-      console.error("Failed to fetch intel documents from API:", err);
-      return [];
-    }
+  async getIntelDocuments(_organizationId?: string): Promise<IntelDocument[]> {
+    const records = await collectAllCollectionData<DocumentRecord>("/api/v1/documents");
+    return records.map(mapRecordToIntelDocument);
   }
 
   async getDocument(id: string): Promise<IntelDocument | undefined> {
     try {
-      const res = await apiClient.get<{ success: boolean; data: DocumentRecord }>(`/api/v1/documents/${id}`);
-      if (res && res.data) {
-        return mapRecordToIntelDocument(res.data);
-      }
-      return undefined;
-    } catch (err) {
-      console.error(`Failed to fetch document ${id} from API:`, err);
-      const list = await this.getIntelDocuments();
-      return list.find(d => d.id === id);
+      const record = await apiClient.getData<DocumentRecord>(`/api/v1/documents/${id}`);
+      return mapRecordToIntelDocument(record);
+    } catch (error: unknown) {
+      if (isApiNotFound(error)) return undefined;
+      throw error;
     }
   }
 
@@ -174,15 +155,14 @@ export class ApiDocumentRepository implements DocumentRepository {
   }
 
   async createDocument(data: Partial<DocumentRecord>): Promise<DocumentItem> {
-    const res = await apiClient.post<{ success: boolean; data: DocumentRecord }>("/api/v1/documents", data);
-    return mapRecordToDocumentItem(res.data);
+    const record = await apiClient.postData<DocumentRecord>("/api/v1/documents", data);
+    return mapRecordToDocumentItem(record);
   }
 
   async deleteDocument(id: string): Promise<boolean> {
-    const res = await apiClient.delete<{ success: boolean }>(`/api/v1/documents/${id}`);
-    return !!res?.success;
+    const result = await apiClient.deleteData<{ deleted: boolean; id: string }>(`/api/v1/documents/${id}`);
+    return result.deleted === true && result.id === id;
   }
 }
 
 export const documentRepository = new ApiDocumentRepository();
-
