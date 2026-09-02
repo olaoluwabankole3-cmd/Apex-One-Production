@@ -1,44 +1,69 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTenantContext } from "@/lib/backend/core/security";
 import { workflowService } from "@/lib/backend/domains/workflows/workflowService";
-import { BackendError } from "@/lib/backend/core/errors";
+import {
+  parseCreateWorkflowRequest,
+  WORKFLOW_STATUSES,
+} from "@/lib/backend/domains/workflows/workflowRequestValidation";
+import { Validator } from "@/lib/backend/core/validation";
+import {
+  assertAllowedQueryKeys,
+  optionalQueryString,
+  parseCursorPagination,
+  readJsonObject,
+} from "@/lib/backend/core/requestValidation";
+import {
+  serializeApiError,
+  toApiSuccessResponse,
+} from "@/lib/backend/core/httpContract";
+import { toCollectionResponse } from "@/lib/contracts/http";
+
+const WORKFLOW_FILTER_STATUSES = [...WORKFLOW_STATUSES, "all"] as const;
 
 export async function GET(req: NextRequest) {
+  let requestId: string | undefined;
+
   try {
     const ctx = await resolveTenantContext(req.headers);
-    const { searchParams } = new URL(req.url);
-    const status = searchParams.get("status") || undefined;
-    const limitParam = searchParams.get("limit");
-    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
-    const cursor = searchParams.get("cursor") || undefined;
+    requestId = ctx.requestId;
+    const { searchParams } = req.nextUrl;
 
-    const result = await workflowService.getWorkflows(ctx, { status, limit, cursor });
-    return NextResponse.json({
-      success: true,
-      data: result.items,
-      cursor: result.nextCursor,
-      hasMore: result.hasMore,
-      count: result.count,
-      organizationId: ctx.organizationId,
+    assertAllowedQueryKeys(searchParams, ["status", "limit", "cursor"]);
+
+    const status = Validator.optionalEnum(
+      optionalQueryString(searchParams, "status"),
+      WORKFLOW_FILTER_STATUSES,
+      "status"
+    );
+    const pagination = parseCursorPagination(searchParams);
+
+    const result = await workflowService.getWorkflows(ctx, {
+      status,
+      ...pagination,
     });
-  } catch (err: any) {
-    if (err instanceof BackendError) {
-      return NextResponse.json({ error: err.message, code: err.code }, { status: err.statusCode });
-    }
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+
+    return NextResponse.json(toCollectionResponse(result, requestId));
+  } catch (error: unknown) {
+    const serialized = serializeApiError(error, requestId);
+    return NextResponse.json(serialized.body, { status: serialized.status });
   }
 }
 
 export async function POST(req: NextRequest) {
+  let requestId: string | undefined;
+
   try {
     const ctx = await resolveTenantContext(req.headers);
-    const body = await req.json();
-    const wf = await workflowService.createWorkflow(body, ctx);
-    return NextResponse.json({ success: true, data: wf }, { status: 201 });
-  } catch (err: any) {
-    if (err instanceof BackendError) {
-      return NextResponse.json({ error: err.message, code: err.code }, { status: err.statusCode });
-    }
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+    requestId = ctx.requestId;
+    const body = await readJsonObject(req);
+    const dto = parseCreateWorkflowRequest(body);
+    const workflow = await workflowService.createWorkflow(dto, ctx);
+
+    return NextResponse.json(toApiSuccessResponse(workflow, requestId), {
+      status: 201,
+    });
+  } catch (error: unknown) {
+    const serialized = serializeApiError(error, requestId);
+    return NextResponse.json(serialized.body, { status: serialized.status });
   }
 }
