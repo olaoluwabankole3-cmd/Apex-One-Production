@@ -13,7 +13,6 @@ import {
 import GlassCard from "@/components/ui/GlassCard";
 import { revenueRepository } from "@/lib/data/repositories";
 import { useOrganization } from "@/components/layout/OrganizationContext";
-import { useAuth } from "@/components/auth/AuthContext";
 import { RevenuePoint } from "@/lib/types";
 
 function CustomTooltip({ active, payload, label, currencySymbol }: any) {
@@ -33,17 +32,15 @@ function CustomTooltip({ active, payload, label, currencySymbol }: any) {
 
 export default function RevenueChart() {
   const { organization } = useOrganization();
-  const { user, isLoading: authLoading } = useAuth();
   const [series, setSeries] = useState<RevenuePoint[]>([]);
 
   useEffect(() => {
-    if (authLoading || !user) return;
     async function loadChartData() {
       const data = await revenueRepository.getRevenueSeries();
       setSeries(data);
     }
     loadChartData();
-  }, [user, organization.id, authLoading]);
+  }, []);
 
   return (
     <GlassCard delay={0.1} className="p-5 lg:p-6">

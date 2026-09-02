@@ -9,13 +9,17 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const category = searchParams.get("category") || undefined;
     const status = searchParams.get("status") || undefined;
+    const limitParam = searchParams.get("limit");
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+    const cursor = searchParams.get("cursor") || undefined;
 
-    const items = await valueService.getOpportunities(ctx, { category, status });
+    const result = await valueService.getOpportunities(ctx, { category, status, limit, cursor });
     return NextResponse.json({
       success: true,
-      data: items,
-      count: items.length,
-      organizationId: ctx.organizationId,
+      data: result.items,
+      cursor: result.nextCursor,
+      hasMore: result.hasMore,
+      count: result.count,
     });
   } catch (err: any) {
     if (err instanceof BackendError) {

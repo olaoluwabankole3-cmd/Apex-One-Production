@@ -3,7 +3,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { Search, Loader2 } from "lucide-react";
 import clsx from "clsx";
-import { useAuth } from "@/components/auth/AuthContext";
 import { customerRepository } from "@/lib/data/repositories";
 import { Customer, CustomerStatus } from "@/lib/types";
 
@@ -32,16 +31,13 @@ const filters: Array<{ id: "all" | CustomerStatus; label: string }> = [
 ];
 
 export default function CustomerList({ selectedId, onSelect }: CustomerListProps) {
-  const { user, organization, isLoading: authLoading } = useAuth();
   const [data, setData] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | CustomerStatus>("all");
 
   useEffect(() => {
-    if (authLoading || !user) return;
     let isMounted = true;
-    setLoading(true);
     customerRepository.getCustomers()
       .then((res) => {
         if (isMounted) {
@@ -60,7 +56,7 @@ export default function CustomerList({ selectedId, onSelect }: CustomerListProps
     return () => {
       isMounted = false;
     };
-  }, [user, organization?.id, authLoading]);
+  }, []);
 
   const filtered = useMemo(() => {
     return data.filter((c) => {

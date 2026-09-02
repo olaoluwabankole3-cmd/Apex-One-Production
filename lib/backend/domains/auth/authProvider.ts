@@ -59,10 +59,7 @@ export class InMemorySessionStore implements ISessionStore {
         user: paramsOrUser as { id: string; email: string; name: string },
         org: org || { id: "apex-demo", name: "Apex Demo" },
         role: role || "Operations",
-        permissions:
-          permissions ||
-          ((ROLE_PERMISSIONS[role as keyof typeof ROLE_PERMISSIONS] ||
-            ROLE_PERMISSIONS["Operations"]) as unknown as PermissionCapability[]),
+        permissions: permissions || (ROLE_PERMISSIONS[role || "Operations"] || ROLE_PERMISSIONS["Operations"]),
         ttlSeconds: ttlSecondsParam,
       };
     }
@@ -282,7 +279,7 @@ export class LocalAuthenticationProvider implements IAuthenticationProvider {
     }
 
     // 9. Derive authoritative permissions strictly from database-backed role
-    const permissions = (ROLE_PERMISSIONS[chosenMembership.role as keyof typeof ROLE_PERMISSIONS] || ROLE_PERMISSIONS["Operations"]) as unknown as PermissionCapability[];
+    const permissions = ROLE_PERMISSIONS[chosenMembership.role] || ROLE_PERMISSIONS["Operations"];
 
     // 10. Issue secure authenticated session only after all checks have passed (Session Fixation Prevention)
     const session = await this.sessionStore.createSession({

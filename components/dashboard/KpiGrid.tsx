@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useRole } from "@/components/layout/RoleContext";
-import { useAuth } from "@/components/auth/AuthContext";
 import { useValueEngine } from "@/components/value-engine/ValueEngineContext";
 import { revenueRepository } from "@/lib/data/repositories";
 import { KpiDatum } from "@/lib/types";
@@ -13,18 +12,16 @@ import GlassCard from "@/components/ui/GlassCard";
 
 export default function KpiGrid() {
   const { role } = useRole();
-  const { user, organization, isLoading: authLoading } = useAuth();
   const { totalIdentified, totalCaptured, captureRate, opportunities } = useValueEngine();
   const [kpisList, setKpisList] = useState<KpiDatum[]>([]);
 
   useEffect(() => {
-    if (authLoading || !user) return;
     async function fetchKpis() {
       const data = await revenueRepository.getKpis();
       setKpisList(data);
     }
     fetchKpis();
-  }, [user, organization?.id, authLoading]);
+  }, []);
 
   const filtered = kpisList.filter((k) => k.roles.includes(role));
   const items = (filtered.length >= 3 ? filtered : kpisList).slice(0, 4);

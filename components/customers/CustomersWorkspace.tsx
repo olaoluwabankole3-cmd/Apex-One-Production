@@ -29,20 +29,16 @@ import {
 } from "lucide-react";
 import HealthRing from "./HealthRing";
 import CustomersHeader from "./CustomersHeader";
-import { useAuth } from "@/components/auth/AuthContext";
 import { customerRepository, aiRepository } from "@/lib/data/repositories";
 import { UnifiedCustomer, RelationshipEvent } from "@/lib/types";
 
 export default function CustomersWorkspace() {
-  const { user, organization, isLoading: authLoading } = useAuth();
   const [currentCustomers, setCurrentCustomers] = useState<UnifiedCustomer[]>([]);
   const [relationshipHistory, setRelationshipHistory] = useState<Record<string, RelationshipEvent[]>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (authLoading || !user) return;
     let isMounted = true;
-    setLoading(true);
     Promise.all([
       customerRepository.getUnifiedCustomers(),
       customerRepository.getRelationshipHistory()
@@ -64,7 +60,7 @@ export default function CustomersWorkspace() {
     return () => {
       isMounted = false;
     };
-  }, [user, organization?.id, authLoading]);
+  }, []);
 
   const [selectedId, setSelectedId] = useState<string>("cust-1");
   const [searchQuery, setSearchQuery] = useState<string>("");

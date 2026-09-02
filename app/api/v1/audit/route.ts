@@ -10,12 +10,15 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const rawLimit = searchParams.get("limit");
     const limit = rawLimit ? parseInt(rawLimit, 10) : undefined;
+    const cursor = searchParams.get("cursor") || undefined;
 
-    const items = await auditService.getAuditLogs(ctx, limit);
+    const result = await auditService.getAuditLogs(ctx, { limit, cursor });
     return NextResponse.json({
       success: true,
-      data: items,
-      count: items.length,
+      data: result.items,
+      cursor: result.nextCursor,
+      hasMore: result.hasMore,
+      count: result.count,
     });
   } catch (err: any) {
     if (err instanceof BackendError) {

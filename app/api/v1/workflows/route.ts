@@ -8,12 +8,17 @@ export async function GET(req: NextRequest) {
     const ctx = await resolveTenantContext(req.headers);
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status") || undefined;
+    const limitParam = searchParams.get("limit");
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+    const cursor = searchParams.get("cursor") || undefined;
 
-    const items = await workflowService.getWorkflows(ctx, { status });
+    const result = await workflowService.getWorkflows(ctx, { status, limit, cursor });
     return NextResponse.json({
       success: true,
-      data: items,
-      count: items.length,
+      data: result.items,
+      cursor: result.nextCursor,
+      hasMore: result.hasMore,
+      count: result.count,
       organizationId: ctx.organizationId,
     });
   } catch (err: any) {
