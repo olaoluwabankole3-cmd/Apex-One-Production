@@ -2,6 +2,7 @@
  * APEX ONE — Workflow Domain Service
  *
  * Manages workflow graph definitions, validation, versioning, and execution engine runs.
+ * Workflow-run step advancement is explicit and ordered: only the executing step may advance.
  */
 
 import { DatabaseStore } from "../../database/store";
@@ -9,6 +10,7 @@ import { createApplicationInfrastructure } from "../../infrastructure/compositio
 import { WorkflowRecord, WorkflowRunRecord, WorkflowRunStepRecord } from "../../database/schema";
 import { PaginatedResult } from "../../database/querySpecification";
 import { TenantContext, requirePermission, ValidationError } from "../../core/security";
+import { ConflictError } from "../../core/errors";
 import {
   CreateWorkflowDto,
   UpdateWorkflowDto,
@@ -136,15 +138,24 @@ export class WorkflowService {
     return this.database.runInTransaction(ctx, async (uow) => {
       const wf = await uow.workflows.findById(dto.workflowId, uow.context, "Workflow");
       if (wf.status !== "active") throw new ValidationError(`Cannot execute workflow in status '${wf.status}'`);
+      if (wf.nodes.length === 0) throw new ValidationError("Cannot execute a workflow with no nodes");
 
+      const startedAt = new Date().toISOString();
+      const firstExecutableIndex = wf.nodes[0]?.type === "trigger" ? 1 : 0;
       const steps: WorkflowRunStepRecord[] = wf.nodes.map((node, index) => ({
         stepId: `step-${index + 1}-${node.id}`,
         nodeId: node.id,
         nodeTitle: node.title,
-        status: index === 0 ? "completed" : index === 1 ? "executing" : "pending",
-        startedAt: new Date().toISOString(),
-        completedAt: index === 0 ? new Date().toISOString() : undefined,
+        status:
+          index < firstExecutableIndex
+            ? "completed"
+            : index === firstExecutableIndex
+              ? "executing"
+              : "pending",
+        startedAt,
+        completedAt: index < firstExecutableIndex ? startedAt : undefined,
       }));
+      const immediatelyCompleted = steps.every((step) => step.status === "completed");
 
       const runId = `run-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       const runRecord: WorkflowRunRecord = {
@@ -154,10 +165,11 @@ export class WorkflowService {
         workflowVersion: wf.version,
         triggeredBy: uow.context.userEmail,
         triggerType: dto.triggerType || "manual",
-        status: "running",
+        status: immediatelyCompleted ? "completed" : "running",
         steps,
         contextData: dto.contextData || {},
-        startedAt: new Date().toISOString(),
+        startedAt,
+        completedAt: immediatelyCompleted ? startedAt : undefined,
       };
 
       await uow.workflows.update(wf.id, { runsCount: wf.runsCount + 1 }, uow.context, "Workflow");
@@ -172,7 +184,7 @@ export class WorkflowService {
         requestId: uow.context.requestId,
         status: "success",
         metadata: { workflowId: wf.id, runId },
-        timestamp: new Date().toISOString(),
+        timestamp: startedAt,
       });
       return createdRun;
     });
@@ -183,31 +195,58 @@ export class WorkflowService {
 
     return this.database.runInTransaction(ctx, async (uow) => {
       const run = await uow.workflowRuns.findById(dto.runId, uow.context, "WorkflowRun");
-      const updatedSteps = run.steps.map((step) => {
-        if (step.stepId === dto.stepId) {
-          return {
-            ...step,
-            status: dto.decision === "rejected" ? ("failed" as const) : ("completed" as const),
-            output: dto.output || { decision: dto.decision, comments: dto.comments },
-            completedAt: new Date().toISOString(),
+      if (run.status !== "running" && run.status !== "waiting_approval") {
+        throw new ConflictError(`WorkflowRun '${run.id}' cannot advance from terminal status '${run.status}'`);
+      }
+
+      const targetIndex = run.steps.findIndex((step) => step.stepId === dto.stepId);
+      if (targetIndex < 0) throw new ValidationError(`Workflow step '${dto.stepId}' was not found`);
+      const target = run.steps[targetIndex];
+      if (target.status !== "executing") {
+        throw new ConflictError(
+          `Workflow step '${target.stepId}' cannot advance from status '${target.status}'; only the executing step may advance`
+        );
+      }
+
+      const completedAt = new Date().toISOString();
+      const updatedSteps = run.steps.map((step) => ({ ...step }));
+      if (dto.decision === "rejected") {
+        updatedSteps[targetIndex] = {
+          ...target,
+          status: "failed",
+          output: dto.output || { decision: dto.decision, comments: dto.comments },
+          completedAt,
+        };
+      } else {
+        updatedSteps[targetIndex] = {
+          ...target,
+          status: "completed",
+          output: dto.output || { decision: dto.decision || "completed", comments: dto.comments },
+          completedAt,
+        };
+        const nextPendingIndex = updatedSteps.findIndex(
+          (step, index) => index > targetIndex && step.status === "pending"
+        );
+        if (nextPendingIndex >= 0) {
+          updatedSteps[nextPendingIndex] = {
+            ...updatedSteps[nextPendingIndex],
+            status: "executing",
+            startedAt: completedAt,
           };
         }
-        return step;
-      });
+      }
 
-      const isAllCompleted = updatedSteps.every((s) => s.status === "completed");
-      const hasFailed = updatedSteps.some((s) => s.status === "failed");
+      const hasFailed = updatedSteps.some((step) => step.status === "failed");
+      const isAllCompleted = updatedSteps.every((step) => step.status === "completed");
       const nextStatus = hasFailed ? "failed" : isAllCompleted ? "completed" : "running";
+      const promotedStep = updatedSteps.find((step, index) => index > targetIndex && step.status === "executing");
 
       const updated = await uow.workflowRuns.update(
         run.id,
         {
           steps: updatedSteps,
           status: nextStatus,
-          completedAt:
-            nextStatus === "completed" || nextStatus === "failed"
-              ? new Date().toISOString()
-              : undefined,
+          completedAt: nextStatus === "completed" || nextStatus === "failed" ? completedAt : undefined,
         },
         uow.context,
         "WorkflowRun"
@@ -222,8 +261,13 @@ export class WorkflowService {
         resourceId: run.id,
         requestId: uow.context.requestId,
         status: "success",
-        metadata: { stepId: dto.stepId, decision: dto.decision, nextStatus },
-        timestamp: new Date().toISOString(),
+        metadata: {
+          stepId: dto.stepId,
+          decision: dto.decision || "completed",
+          nextStatus,
+          promotedStepId: promotedStep?.stepId,
+        },
+        timestamp: completedAt,
       });
       return updated;
     });

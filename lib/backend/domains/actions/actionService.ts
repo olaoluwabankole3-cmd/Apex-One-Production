@@ -2,14 +2,18 @@
  * APEX ONE — Execution Engine & Actions Domain Service
  *
  * First-class action entities, human-approval gating, execution state transitions, and audit logs.
+ * Stage 7 lifecycle-linked Actions are intentionally excluded from the legacy generic advance path.
  */
 
 import { DatabaseStore } from "../../database/store";
 import { createApplicationInfrastructure } from "../../infrastructure/composition";
 import { ActionRecord } from "../../database/schema";
-import { PaginatedResult } from "../../database/querySpecification";
+import { PaginatedResult, MAX_PAGE_SIZE } from "../../database/querySpecification";
+import { collectAllPages } from "../../database/paginationTraversal";
 import { TenantContext, requirePermission } from "../../core/security";
+import { ConflictError } from "../../core/errors";
 import { Validator } from "../../core/validation";
+import { STAGE7_ACTION_PROVENANCE_METHOD } from "../value/valueExecutionLifecycleModel";
 
 export interface CreateActionDto {
   recommendation: string;
@@ -113,6 +117,7 @@ export class ActionService {
 
     return this.database.runInTransaction(ctx, async (uow) => {
       const action = await uow.actions.findById(id, uow.context, "Action");
+      await this.assertNotLifecycleLinkedAction(action.id, uow.context);
 
       const pipelineOrder: ActionRecord["status"][] = ["Ready", "Approved", "In Progress", "Completed", "Measured"];
       const currentIndex = pipelineOrder.indexOf(action.status);
@@ -142,9 +147,13 @@ export class ActionService {
       if (nextStatus === "Approved") {
         updatedLogs.push(`Approved by ${uow.context.userEmail} (${uow.context.userRole})`);
         approvedBy = uow.context.userEmail;
-      } else if (nextStatus === "In Progress") updatedLogs.push("Execution engine initiated automated workflows");
-      else if (nextStatus === "Completed") updatedLogs.push("Execution tasks verified and completed successfully");
-      else if (nextStatus === "Measured") updatedLogs.push("Certified yield logged in organizational ledger");
+      } else if (nextStatus === "In Progress") {
+        updatedLogs.push("Execution engine initiated action processing");
+      } else if (nextStatus === "Completed") {
+        updatedLogs.push("Execution tasks completed successfully");
+      } else if (nextStatus === "Measured") {
+        updatedLogs.push("Legacy measurement status recorded; verification and certification remain separate evidence decisions");
+      }
 
       const updated = await uow.actions.update(
         id,
@@ -168,6 +177,20 @@ export class ActionService {
 
       return updated;
     });
+  }
+
+  private async assertNotLifecycleLinkedAction(id: string, ctx: TenantContext): Promise<void> {
+    const provenance = await collectAllPages((cursor) =>
+      this.database.provenanceRepo.findBySubject(
+        { subjectType: "Action", subjectId: id, limit: MAX_PAGE_SIZE, cursor },
+        ctx
+      )
+    );
+    if (provenance.some((record) => record.method === STAGE7_ACTION_PROVENANCE_METHOD)) {
+      throw new ConflictError(
+        `Action '${id}' belongs to the Stage 7 value-execution lifecycle and must use explicit lifecycle commands`
+      );
+    }
   }
 }
 

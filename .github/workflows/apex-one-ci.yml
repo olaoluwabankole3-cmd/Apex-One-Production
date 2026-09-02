@@ -169,6 +169,43 @@ jobs:
       - name: Run Stage 6 evidence and provenance model/integration tests
         run: bun run test:evidence
 
+  value-execution-lifecycle:
+    name: Value & Execution Lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: apex
+          POSTGRES_PASSWORD: apex-ci-password
+          POSTGRES_DB: apex_lifecycle_test
+        ports:
+          - 9543:5432
+        options: >-
+          --health-cmd "pg_isready -U apex -d apex_lifecycle_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://apex:apex-ci-password@127.0.0.1:9543/apex_lifecycle_test?sslmode=disable
+      TEST_ENV: "true"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20.x"
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Install dependencies (frozen lockfile)
+        run: bun install --frozen-lockfile
+      - name: Run Stage 7 value and execution lifecycle tests
+        run: bun run test:lifecycle
+
   redis-auth-state:
     name: Redis Authentication State Integration
     runs-on: ubuntu-latest
@@ -373,6 +410,7 @@ jobs:
       - postgres-persistence
       - transaction-repository-integrity
       - evidence-provenance-integrity
+      - value-execution-lifecycle
       - redis-auth-state
       - s3-document-storage
       - postgres-search-index
@@ -403,6 +441,7 @@ jobs:
       - postgres-persistence
       - transaction-repository-integrity
       - evidence-provenance-integrity
+      - value-execution-lifecycle
       - redis-auth-state
       - s3-document-storage
       - postgres-search-index
