@@ -385,6 +385,52 @@ export async function runPasswordChangeTenantBoundaryTestSuite(): Promise<TestSu
     }
   });
 
+  await testCase("8. Password-change caller session lifecycle distinguishes self-service from admin-target changes", () => {
+    const routeSource = readSource("app/api/v1/auth/change-password/route.ts");
+    const authContextSource = readSource("components/auth/AuthContext.tsx");
+
+    if (!routeSource.includes("const isSelfServicePasswordChange = targetUserId === ctx.userId")) {
+      throw new Error("Password-change route does not distinguish caller from target user");
+    }
+    if (!routeSource.includes("currentSessionInvalidated: isSelfServicePasswordChange")) {
+      throw new Error("Password-change response does not report whether the caller session was invalidated");
+    }
+
+    const conditionalCookieClear = routeSource.match(
+      /if \(isSelfServicePasswordChange\) \{([\s\S]*?)\n    \}/
+    )?.[1];
+    if (!conditionalCookieClear?.includes("response.cookies.set(getClearSessionCookieOptions())")) {
+      throw new Error("Self-service password change does not clear the caller session cookie conditionally");
+    }
+
+    const clearCallCount = (
+      routeSource.match(/response\.cookies\.set\(getClearSessionCookieOptions\(\)\)/g) || []
+    ).length;
+    if (clearCallCount !== 1) {
+      throw new Error("Password-change route contains an unconditional or duplicate caller-cookie clear path");
+    }
+
+    if (!authContextSource.includes("changePassword: (currentPassword: string, newPassword: string) => Promise<string>")) {
+      throw new Error("AuthContext does not expose the self-service password-change lifecycle");
+    }
+
+    const authContextChangeBlock = authContextSource.match(
+      /const changePassword = async \([\s\S]*?\n  const switchOrganization/
+    )?.[0];
+    if (!authContextChangeBlock) {
+      throw new Error("Unable to audit AuthContext.changePassword lifecycle");
+    }
+    if (!authContextChangeBlock.includes("authClient.changePassword")) {
+      throw new Error("AuthContext password change bypasses authClient");
+    }
+    if (!authContextChangeBlock.includes("clearSessionState()")) {
+      throw new Error("Successful self-service password change does not clear frontend identity state");
+    }
+    if (!authContextChangeBlock.includes("authClient.getCurrentSession()")) {
+      throw new Error("Ambiguous password-change failures do not re-converge on backend session state");
+    }
+  });
+
   const passedCount = results.filter((result) => result.passed).length;
   const failedCount = results.filter((result) => !result.passed).length;
 

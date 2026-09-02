@@ -9,7 +9,7 @@
  * - NO raw session tokens stored or manipulated in JavaScript.
  * - Authenticated state hydrated via server /api/v1/auth/me using HttpOnly cookies.
  * - Automatic state reset on 401 Unauthorized responses.
- * - Login, refresh, organization switch, logout, and expiry converge on one session shape.
+ * - Login, refresh, organization switch, logout, password change, and expiry converge on one session shape.
  * - Permissions are UX rendering hints only; backend remains the security boundary.
  */
 
@@ -39,6 +39,7 @@ interface AuthContextValue {
   error: string | null;
   login: (credentials: LoginCredentials) => Promise<void>;
   logout: () => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<string>;
   switchOrganization: (targetOrgId: string) => Promise<void>;
   refreshSession: () => Promise<void>;
   hasPermission: (permission: string) => boolean;
@@ -132,6 +133,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const changePassword = async (
+    currentPassword: string,
+    newPassword: string
+  ): Promise<string> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const result = await authClient.changePassword(currentPassword, newPassword);
+
+      // This context exposes the self-service password-change flow only. A
+      // successful change revokes this user's backend sessions and clears the
+      // HttpOnly cookie, so frontend identity must be cleared immediately too.
+      clearSessionState();
+      return result.message;
+    } catch (err: any) {
+      // A request can fail ambiguously after the server has already committed
+      // the password change. Re-read /auth/me so the UI converges on the actual
+      // browser cookie/session state rather than keeping stale authenticated data.
+      try {
+        const currentSession = await authClient.getCurrentSession();
+        if (currentSession) {
+          applySessionState(currentSession);
+        } else {
+          clearSessionState();
+        }
+      } catch {
+        clearSessionState();
+      }
+
+      setError(err?.message || "Failed to change password");
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const switchOrganization = async (targetOrgId: string) => {
     setIsLoading(true);
     setError(null);
@@ -175,6 +213,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error,
         login,
         logout,
+        changePassword,
         switchOrganization,
         refreshSession,
         hasPermission,

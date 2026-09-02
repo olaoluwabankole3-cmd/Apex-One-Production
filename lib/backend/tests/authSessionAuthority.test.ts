@@ -424,6 +424,46 @@ export async function runAuthSessionAuthorityTestSuite(): Promise<TestSuiteSumma
     }
   );
 
+  await testCase(
+    "11. Self-service password changes clear frontend identity while admin-target changes preserve the caller session",
+    () => {
+      const passwordRoute = fs.readFileSync(
+        path.join(process.cwd(), "app/api/v1/auth/change-password/route.ts"),
+        "utf-8"
+      );
+      const authContext = fs.readFileSync(
+        path.join(process.cwd(), "components/auth/AuthContext.tsx"),
+        "utf-8"
+      );
+
+      if (!passwordRoute.includes("const isSelfServicePasswordChange = targetUserId === ctx.userId")) {
+        throw new Error("Password route does not distinguish caller identity from target identity");
+      }
+      if (!passwordRoute.includes("currentSessionInvalidated: isSelfServicePasswordChange")) {
+        throw new Error("Password route does not expose caller-session invalidation semantics");
+      }
+      if (!/if \(isSelfServicePasswordChange\) \{[\s\S]*?response\.cookies\.set\(getClearSessionCookieOptions\(\)\)/.test(passwordRoute)) {
+        throw new Error("Password route does not limit cookie clearing to self-service changes");
+      }
+
+      const changePasswordBlock = authContext.match(
+        /const changePassword = async \([\s\S]*?\n  const switchOrganization/
+      )?.[0];
+      if (!changePasswordBlock) {
+        throw new Error("AuthContext does not expose a self-service password-change lifecycle");
+      }
+      if (!changePasswordBlock.includes("authClient.changePassword")) {
+        throw new Error("AuthContext password change bypasses authClient");
+      }
+      if (!changePasswordBlock.includes("clearSessionState()")) {
+        throw new Error("Successful self-service password change leaves stale frontend identity");
+      }
+      if (!changePasswordBlock.includes("authClient.getCurrentSession()")) {
+        throw new Error("Ambiguous password-change failure does not revalidate backend session state");
+      }
+    }
+  );
+
   const passedCount = results.filter((result) => result.passed).length;
   const failedCount = results.length - passedCount;
 
