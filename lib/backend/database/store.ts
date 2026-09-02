@@ -56,7 +56,7 @@ import {
   InMemoryWorkflowRunRepository,
   InMemoryAuditLogRepository,
 } from "./adapters/inMemory/InMemoryDomainRepositories";
-import { PostgresPersistence } from "./adapters/postgres/PostgresPersistence";
+import { PostgresIntegrityPersistence } from "./adapters/postgres/PostgresIntegrityPersistence";
 import { IDataProvider, ProductionDataProvider } from "./demoDataProvider";
 import {
   TenantContext,
@@ -131,7 +131,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
   public workflowRunsRepo: IWorkflowRunRepository;
   public auditLogsRepo: IAuditLogRepository;
 
-  private readonly postgresPersistence?: PostgresPersistence;
+  private readonly postgresPersistence?: PostgresIntegrityPersistence;
   private readonly inMemoryTransactionState = new AsyncLocalStorage<InMemoryTransactionState>();
   private inMemoryTransactionTail: Promise<void> = Promise.resolve();
 
@@ -154,7 +154,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
       if (!databaseUrl) {
         throw new ValidationError("DATABASE_URL is required when the PostgreSQL database adapter is selected");
       }
-      const pg = new PostgresPersistence(databaseUrl);
+      const pg = new PostgresIntegrityPersistence(databaseUrl);
       this.postgresPersistence = pg;
       this.customersRepo = pg.customersRepo;
       this.contractsRepo = pg.contractsRepo;
