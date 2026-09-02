@@ -24,6 +24,7 @@ import { runFinalRepositoryAuditTestSuite } from "../lib/backend/tests/finalRepo
 import { runRepositoryQuerySpecificationTestSuite } from "../lib/backend/tests/repositoryQuerySpecification.test";
 import { runHttpContractFoundationTestSuite } from "../lib/backend/tests/httpContractFoundation.test";
 import { runApiClientContractTestSuite } from "../lib/backend/tests/apiClientContract.test";
+import { runFrontendCanonicalConsumersTestSuite } from "../lib/backend/tests/frontendCanonicalConsumers.test";
 
 interface TestResult {
   suite: string;
@@ -66,6 +67,7 @@ const REGISTERED_SUITES: RegisteredSuite[] = [
   { fileName: "repositoryQuerySpecification.test.ts", suiteIdentity: "Repository Query Specification & Pagination Suite", run: runRepositoryQuerySpecificationTestSuite as () => Promise<GenericSuiteSummary> },
   { fileName: "httpContractFoundation.test.ts", suiteIdentity: "Canonical HTTP Contract Foundation Suite", run: runHttpContractFoundationTestSuite as () => Promise<GenericSuiteSummary> },
   { fileName: "apiClientContract.test.ts", suiteIdentity: "Frontend API Client Canonical Contract Suite", run: runApiClientContractTestSuite as () => Promise<GenericSuiteSummary> },
+  { fileName: "frontendCanonicalConsumers.test.ts", suiteIdentity: "Frontend Canonical HTTP Consumers Suite", run: runFrontendCanonicalConsumersTestSuite as () => Promise<GenericSuiteSummary> },
 ];
 
 function verifySuiteCompleteness(testsDir: string): void {
