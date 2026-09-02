@@ -8,7 +8,11 @@
  * 4. Authoritative tenant membership and RBAC capability derivation
  */
 
-import { AuthSession, PermissionCapability, ROLE_PERMISSIONS } from "../../core/security";
+import {
+  AuthSession,
+  PermissionCapability,
+  getPermissionsForRole,
+} from "../../core/security";
 import { generateSecureToken, verifyPassword, dummyPasswordVerification } from "../../core/crypto";
 import { db, DatabaseStore } from "../../database/store";
 import { UnauthorizedError, ForbiddenError, NotFoundError } from "../../core/errors";
@@ -55,11 +59,12 @@ export class InMemorySessionStore implements ISessionStore {
     if ("user" in paramsOrUser && "org" in paramsOrUser) {
       params = paramsOrUser as CreateSessionParams;
     } else {
+      const resolvedRole = role || "Operations";
       params = {
         user: paramsOrUser as { id: string; email: string; name: string },
         org: org || { id: "apex-demo", name: "Apex Demo" },
-        role: role || "Operations",
-        permissions: permissions || (ROLE_PERMISSIONS[role || "Operations"] || ROLE_PERMISSIONS["Operations"]),
+        role: resolvedRole,
+        permissions: permissions || [...getPermissionsForRole(resolvedRole)],
         ttlSeconds: ttlSecondsParam,
       };
     }
@@ -278,8 +283,9 @@ export class LocalAuthenticationProvider implements IAuthenticationProvider {
       throw new NotFoundError("Organization");
     }
 
-    // 9. Derive authoritative permissions strictly from database-backed role
-    const permissions = ROLE_PERMISSIONS[chosenMembership.role] || ROLE_PERMISSIONS["Operations"];
+    // 9. Derive authoritative permissions strictly from database-backed role.
+    // Unknown roles fail closed in getPermissionsForRole rather than inheriting a default role.
+    const permissions = [...getPermissionsForRole(chosenMembership.role)];
 
     // 10. Issue secure authenticated session only after all checks have passed (Session Fixation Prevention)
     const session = await this.sessionStore.createSession({
