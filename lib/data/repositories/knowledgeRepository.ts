@@ -1,6 +1,6 @@
 import { KnowledgeSynapse, GraphNode, HistoricalEvent } from "@/lib/data/demo";
 import { apiClient } from "@/lib/apiClient";
-import { KnowledgeItemRecord, MemoryRecord } from "@/lib/backend/database/schema";
+import { KnowledgeItemRecord, OrganizationalMemoryRecord } from "@/lib/backend/database/schema";
 import { collectAllCollectionData } from "./httpCollection";
 
 export interface KnowledgeRepository {
@@ -58,7 +58,7 @@ export class ApiKnowledgeRepository implements KnowledgeRepository {
   }
 
   async getHistoricalEvents(_organizationId?: string): Promise<HistoricalEvent[]> {
-    const records = await collectAllCollectionData<MemoryRecord>("/api/v1/memory");
+    const records = await collectAllCollectionData<OrganizationalMemoryRecord>("/api/v1/memory");
     return records.map((m) => ({
       year: new Date(m.createdAt || Date.now()).getFullYear().toString(),
       title: m.title || "Organizational Memory Record",
