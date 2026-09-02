@@ -6,7 +6,7 @@
  * - JSON bodies must be valid plain objects.
  * - Unexpected body fields are rejected rather than silently ignored.
  * - Public collection pagination accepts cursor + limit only.
- * - Query strings are bounded before reaching domain services.
+ * - Query strings are bounded and unambiguous before reaching domain services.
  * - Nested records/arrays are type-checked before domain-specific validation.
  */
 
@@ -71,6 +71,47 @@ export function assertAllowedKeys(
       `${fieldName} contains unsupported field${unexpectedFields.length === 1 ? "" : "s"}: ${unexpectedFields.join(", ")}`,
       { unexpectedFields }
     );
+  }
+}
+
+/**
+ * Require at least one explicitly supplied field for mutation payloads.
+ */
+export function assertNonEmptyObject(
+  value: JsonObject,
+  fieldName: string = "request body"
+): void {
+  if (Object.keys(value).length === 0) {
+    throw new ValidationError(`${fieldName} must contain at least one field`);
+  }
+}
+
+/**
+ * Reject unsupported or repeated query-string parameters.
+ * This prevents legacy offset/page parameters and ambiguous duplicate keys
+ * from coexisting with the canonical cursor contract.
+ */
+export function assertAllowedQueryKeys(
+  searchParams: URLSearchParams,
+  allowedKeys: readonly string[]
+): void {
+  const allowed = new Set(allowedKeys);
+  const seen = new Set<string>();
+
+  for (const [key] of searchParams) {
+    if (!allowed.has(key)) {
+      throw new ValidationError(`Unsupported query parameter '${key}'`, {
+        unsupportedQueryParameter: key,
+      });
+    }
+
+    if (seen.has(key)) {
+      throw new ValidationError(`Query parameter '${key}' must not be repeated`, {
+        repeatedQueryParameter: key,
+      });
+    }
+
+    seen.add(key);
   }
 }
 
