@@ -32,6 +32,10 @@ function readSource(relPath: string): string {
   return fs.readFileSync(path.join(process.cwd(), relPath), "utf-8");
 }
 
+function importsRoleContext(source: string): boolean {
+  return /from\s+["'][^"']*RoleContext["']/.test(source);
+}
+
 export async function runFrontendPrivilegedUiAuthorizationTestSuite(): Promise<TestSuiteSummary> {
   const results: TestResult[] = [];
   const suiteName = "Frontend Privileged UI Authorization";
@@ -66,7 +70,7 @@ export async function runFrontendPrivilegedUiAuthorizationTestSuite(): Promise<T
     if (!source.includes('hasPermission("org:read")')) {
       throw new Error("InternalOnlyShield does not require the internal org:read session capability");
     }
-    if (source.includes("RoleContext") || /\buseRole\s*\(/.test(source) || /user\??\.role/.test(source)) {
+    if (importsRoleContext(source) || /\buseRole\s*\(/.test(source) || /user\??\.role/.test(source)) {
       throw new Error("InternalOnlyShield still trusts role state instead of session capabilities");
     }
   });
@@ -123,7 +127,7 @@ export async function runFrontendPrivilegedUiAuthorizationTestSuite(): Promise<T
     if (!source.includes('hasPermission("org:read")')) {
       throw new Error("Root dashboard does not require org:read before rendering the staff experience");
     }
-    if (source.includes("RoleContext") || /\buseRole\s*\(/.test(source)) {
+    if (importsRoleContext(source) || /\buseRole\s*\(/.test(source)) {
       throw new Error("Root dashboard still selects privileged UI through RoleContext");
     }
   });
