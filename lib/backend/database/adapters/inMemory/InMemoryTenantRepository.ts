@@ -23,6 +23,11 @@ import {
   applyQuerySpecificationPaginated,
   matchesSpecification,
 } from "../../querySpecification";
+import {
+  assertNoImmutableFieldMutation,
+  IMMUTABLE_PERSISTENCE_FIELDS,
+  throwUniquenessConflict,
+} from "../../repositoryIntegrity";
 
 export class InMemoryTenantRepository<
   T extends { id: string; organizationId: string },
@@ -115,6 +120,10 @@ export class InMemoryTenantRepository<
         ? crypto.randomUUID()
         : `id-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
+    if (this.store.has(id)) {
+      throwUniquenessConflict(this.collectionName, `${this.collectionName}:id`);
+    }
+
     const item = {
       ...data,
       id,
@@ -132,14 +141,10 @@ export class InMemoryTenantRepository<
     resourceName: string = this.collectionName
   ): Promise<T> {
     const existing = await this.findById(id, ctx, resourceName);
-
     const safeUpdates = { ...(updates as Record<string, unknown>) };
-    delete safeUpdates.organizationId;
-    delete safeUpdates.id;
-    delete safeUpdates.createdAt;
-    delete safeUpdates.detectedAt;
-    delete safeUpdates.startedAt;
-    delete safeUpdates.updatedAt;
+
+    assertNoImmutableFieldMutation(safeUpdates, resourceName);
+    for (const field of IMMUTABLE_PERSISTENCE_FIELDS) delete safeUpdates[field];
 
     const updated = {
       ...existing,
