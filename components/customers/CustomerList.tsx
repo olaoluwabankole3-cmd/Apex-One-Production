@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
-import { Search, Loader2 } from "lucide-react";
+import { AlertTriangle, Search, Loader2 } from "lucide-react";
 import clsx from "clsx";
 import { customerRepository } from "@/lib/data/repositories";
 import { Customer, CustomerStatus } from "@/lib/types";
@@ -33,22 +33,26 @@ const filters: Array<{ id: "all" | CustomerStatus; label: string }> = [
 export default function CustomerList({ selectedId, onSelect }: CustomerListProps) {
   const [data, setData] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | CustomerStatus>("all");
 
   useEffect(() => {
     let isMounted = true;
+    setLoadError(null);
+
     customerRepository.getCustomers()
       .then((res) => {
         if (isMounted) {
           setData(res);
+          setLoadError(null);
           setLoading(false);
         }
       })
-      .catch((err) => {
-        console.error("Failed to load customers:", err);
+      .catch((error: unknown) => {
+        console.error("Failed to load customers:", error);
         if (isMounted) {
-          setData([]);
+          setLoadError(error instanceof Error ? error.message : "Unable to load customers.");
           setLoading(false);
         }
       });
@@ -105,6 +109,12 @@ export default function CustomerList({ selectedId, onSelect }: CustomerListProps
             <Loader2 className="animate-spin" size={16} />
             <span>Loading accounts...</span>
           </div>
+        ) : loadError ? (
+          <div className="mx-2 mt-2 rounded-xl border border-crimson/25 bg-crimson/10 px-4 py-5 text-center">
+            <AlertTriangle size={18} className="mx-auto text-crimson" />
+            <p className="mt-2 text-[12.5px] font-semibold text-ivory">Customer data unavailable</p>
+            <p className="mt-1 text-[11px] text-ivory/55">{loadError}</p>
+          </div>
         ) : filtered.length === 0 ? (
           <p className="px-3 py-6 text-center text-[12.5px] text-ivory/35">No customers match.</p>
         ) : (
@@ -141,4 +151,3 @@ export default function CustomerList({ selectedId, onSelect }: CustomerListProps
     </div>
   );
 }
-
