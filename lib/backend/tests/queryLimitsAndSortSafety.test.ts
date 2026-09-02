@@ -40,6 +40,7 @@ const tenantA: TenantContext = {
   userRole: "Administrator",
   permissions: ["*"],
   requestId: "req-query-a",
+  timestamp: "2026-09-02T00:00:00.000Z",
 };
 
 const tenantB: TenantContext = {
@@ -49,6 +50,7 @@ const tenantB: TenantContext = {
   userRole: "Administrator",
   permissions: ["*"],
   requestId: "req-query-b",
+  timestamp: "2026-09-02T00:00:00.000Z",
 };
 
 function makeCustomer(id: string, name: string, tier: string = "Enterprise") {
@@ -194,15 +196,13 @@ export async function runQueryLimitsAndSortSafetyTestSuite(): Promise<TestSuiteS
       customerId: "customer-a",
       title: "Active Contract",
       contractValue: 1000,
-      annualRecurringRevenue: 1000,
-      currency: "USD",
       startDate: "2026-01-01",
       endDate: "2027-01-01",
       renewalDaysRemaining: 120,
       status: "active",
-      billingCadence: "annual",
       slaCompliance: 100,
       volatilityIndexationClause: false,
+      createdAt: "2026-01-01T00:00:00.000Z",
     }, tenantA);
     const contracts = await db.contractsRepo.findMany(tenantA, { where: { status: { eq: "active" } } });
     if (contracts.items.length !== 1 || contracts.items[0].status !== "active") throw new Error("contract filter failed");
