@@ -31,7 +31,10 @@ interface CheckResult {
 }
 
 const results: CheckResult[] = [];
-const EMPTY_PROVIDER: IDataProvider = { seedInitialTenants: () => undefined };
+const EMPTY_PROVIDER: IDataProvider = {
+  isDemoProvider: () => false,
+  seedInitialTenants: () => undefined,
+};
 
 function databaseUrl(): string {
   const value = process.env.DATABASE_URL;
