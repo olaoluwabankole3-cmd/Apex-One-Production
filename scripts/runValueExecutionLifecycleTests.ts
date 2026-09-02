@@ -98,8 +98,6 @@ function opportunity(id: string): Omit<ValueOpportunityRecord, "organizationId">
     potentialValue: 125_000,
     confidence: 94,
     evidence: `Recorded source evidence for ${id}`,
-    sourceEntityId: `txn-${id}`,
-    sourceEntityType: "Transaction",
     recommendedAction: `Execute recovery workflow for ${id}`,
     expectedOutcome: "Recover recorded revenue leakage",
     realizationSpeed: "Fastest",
@@ -165,17 +163,6 @@ async function expectRejects(fn: () => Promise<unknown>, ctor?: new (...args: an
   if (ctor && !(caught instanceof ctor)) {
     throw new Error(`Expected ${ctor.name}, received ${caught instanceof Error ? caught.constructor.name : String(caught)}`);
   }
-}
-
-async function completeWorkflow(workflowService: WorkflowService, runId: string, context: TenantContext) {
-  let run = await workflowService.getWorkflowRuns("wf-unused", context).catch(() => undefined as never);
-  void run;
-  const storeRun = async () => undefined;
-  void storeRun;
-
-  // The Stage 7 run begins with the trigger completed and the first business step executing.
-  // Advance exactly the executing step, then the engine promotes the next pending step.
-  return runId;
 }
 
 async function driveRunToCompletion(
@@ -470,7 +457,7 @@ async function main() {
   await pg.clearPersistentStateForTesting();
   const pgCtx = await seedIdentity(pg, "org-stage7-pg", "user-stage7-pg", "stage7-pg@example.test");
 
-  let pgChain: Awaited<ReturnType<typeof runFullLifecycle>>;
+  let pgChain!: Awaited<ReturnType<typeof runFullLifecycle>>;
   await check("16. Full Stage 7 lifecycle executes against PostgreSQL authority", async () => {
     pgChain = await runFullLifecycle(pg, pgCtx, "pg-main");
     const capture = await pg.valueCapturedRepo.findById(pgChain.valueCapturedId, pgCtx, "ValueCaptured");
