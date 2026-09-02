@@ -124,7 +124,7 @@ jobs:
           POSTGRES_PASSWORD: apex-ci-password
           POSTGRES_DB: apex_integrity_test
         ports:
-          - 75432:5432
+          - 7543:5432
         options: >-
           --health-cmd "pg_isready -U apex -d apex_integrity_test"
           --health-interval 5s
@@ -132,7 +132,7 @@ jobs:
           --health-retries 10
 
     env:
-      DATABASE_URL: postgres://apex:apex-ci-password@127.0.0.1:75432/apex_integrity_test?sslmode=disable
+      DATABASE_URL: postgres://apex:apex-ci-password@127.0.0.1:7543/apex_integrity_test?sslmode=disable
       TEST_ENV: "true"
 
     steps:
