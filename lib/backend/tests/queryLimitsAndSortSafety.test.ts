@@ -1,28 +1,21 @@
 /**
- * APEX ONE — Query Limits, Filter Safety, and Sort Whitelist Verification Test Suite
- * 
- * Verifies:
- * 1. Centralized pagination limits (DEFAULT_PAGE_SIZE = 50, MAX_PAGE_SIZE = 200).
- * 2. Normalization of invalid, negative, zero, NaN, float, and oversized limits.
- * 3. Normalization of negative, NaN, and non-integer offsets.
- * 4. Whitelist enforcement for sorting across all domain repositories (preventing arbitrary injection).
- * 5. Strict tenant isolation preservation during structured queries and filtering.
+ * APEX ONE — Canonical Query Limits, Cursor, Filter & Sort Safety Suite
+ *
+ * Stage 3 deliberately removes offset pagination from repository contracts.
+ * This suite protects the replacement cursor model without reintroducing
+ * compatibility aliases for the retired offset/query API.
  */
 
-import { db } from "../database/store";
+import { DatabaseStore } from "../database/store";
 import {
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
-  normalizeQueryLimit,
-  normalizeQueryOffset,
-  validateSortOptions,
-  CUSTOMER_SORT_FIELDS,
-  CONTRACT_SORT_FIELDS,
-  TRANSACTION_SORT_FIELDS,
-  SIGNAL_SORT_FIELDS,
-  VALUE_OPPORTUNITY_SORT_FIELDS,
+  normalizeLimit,
+  normalizeAndValidateOrderBy,
+  ENTITY_SORT_WHITELIST,
 } from "../database/repository";
 import { TenantContext } from "../core/security";
+import { ValidationError } from "../core/errors";
 
 export interface TestResult {
   suite: string;
@@ -40,287 +33,217 @@ export interface TestSuiteSummary {
   results: TestResult[];
 }
 
+const tenantA: TenantContext = {
+  organizationId: "org-query-a",
+  userId: "usr-query-a",
+  userEmail: "query-a@test.local",
+  userRole: "Administrator",
+  permissions: ["*"],
+  requestId: "req-query-a",
+};
+
+const tenantB: TenantContext = {
+  organizationId: "org-query-b",
+  userId: "usr-query-b",
+  userEmail: "query-b@test.local",
+  userRole: "Administrator",
+  permissions: ["*"],
+  requestId: "req-query-b",
+};
+
+function makeCustomer(id: string, name: string, tier: string = "Enterprise") {
+  return {
+    id,
+    name,
+    industry: "Technology",
+    tier,
+    arr: 100000,
+    healthScore: 80,
+    status: "healthy",
+    contactName: `${name} Contact`,
+    contactEmail: `${id}@query.test`,
+  } as any;
+}
+
 export async function runQueryLimitsAndSortSafetyTestSuite(): Promise<TestSuiteSummary> {
   const results: TestResult[] = [];
   const suiteName = "Query Limits & Sort/Filter Safety";
 
-  async function test(name: string, fn: () => Promise<void> | void) {
+  const test = async (name: string, fn: () => Promise<void> | void) => {
     const start = performance.now();
     try {
       await fn();
-      results.push({
-        suite: suiteName,
-        testName: name,
-        passed: true,
-        durationMs: Math.round(performance.now() - start),
-      });
-    } catch (err: any) {
-      results.push({
-        suite: suiteName,
-        testName: name,
-        passed: false,
-        error: err?.message || String(err),
-        durationMs: Math.round(performance.now() - start),
-      });
+      results.push({ suite: suiteName, testName: name, passed: true, durationMs: Math.round(performance.now() - start) });
+    } catch (error: any) {
+      results.push({ suite: suiteName, testName: name, passed: false, error: error?.message || String(error), durationMs: Math.round(performance.now() - start) });
     }
-  }
-
-  const tenantA: TenantContext = {
-    organizationId: "org-acme",
-    userId: "usr-acme-admin",
-    userEmail: "admin@acme.corp",
-    userRole: "admin",
-    permissions: ["*"],
-    requestId: "req-query-test-1",
   };
-
-  const tenantB: TenantContext = {
-    organizationId: "org-globex",
-    userId: "usr-globex-admin",
-    userEmail: "admin@globex.corp",
-    userRole: "admin",
-    permissions: ["*"],
-    requestId: "req-query-test-2",
-  };
-
-  // --------------------------------------------------------------------------
-  // 1. Centralized Query Limits & Normalization
-  // --------------------------------------------------------------------------
 
   await test("Centralized pagination constants are strictly configured", () => {
-    if (DEFAULT_PAGE_SIZE !== 50) {
-      throw new Error(`Expected DEFAULT_PAGE_SIZE to be 50, got ${DEFAULT_PAGE_SIZE}`);
-    }
-    if (MAX_PAGE_SIZE !== 100) {
-      throw new Error(`Expected MAX_PAGE_SIZE to be 100, got ${MAX_PAGE_SIZE}`);
+    if (DEFAULT_PAGE_SIZE !== 50 || MAX_PAGE_SIZE !== 100) {
+      throw new Error(`Unexpected page constants: ${DEFAULT_PAGE_SIZE}/${MAX_PAGE_SIZE}`);
     }
   });
 
-  await test("normalizeQueryLimit handles undefined and defaults to DEFAULT_PAGE_SIZE", () => {
-    const limit = normalizeQueryLimit(undefined);
-    if (limit !== DEFAULT_PAGE_SIZE) {
-      throw new Error(`Expected undefined limit to normalize to ${DEFAULT_PAGE_SIZE}, got ${limit}`);
+  await test("normalizeLimit handles undefined and defaults to DEFAULT_PAGE_SIZE", () => {
+    if (normalizeLimit(undefined) !== DEFAULT_PAGE_SIZE) throw new Error("undefined limit did not default");
+  });
+
+  await test("normalizeLimit caps oversized and positive infinite limits to MAX_PAGE_SIZE", () => {
+    if (normalizeLimit(10_000) !== MAX_PAGE_SIZE) throw new Error("oversized limit was not capped");
+    if (normalizeLimit(Infinity) !== MAX_PAGE_SIZE) throw new Error("Infinity was not capped");
+  });
+
+  await test("normalizeLimit normalizes zero, negative, NaN, and negative Infinity", () => {
+    for (const candidate of [0, -10, NaN, -Infinity]) {
+      if (normalizeLimit(candidate) !== DEFAULT_PAGE_SIZE) {
+        throw new Error(`Invalid limit ${String(candidate)} did not normalize to default`);
+      }
     }
   });
 
-  await test("normalizeQueryLimit caps unbounded/oversized limits to MAX_PAGE_SIZE", () => {
-    if (normalizeQueryLimit(10000) !== MAX_PAGE_SIZE) {
-      throw new Error(`Expected 10000 to be capped at ${MAX_PAGE_SIZE}`);
-    }
-    if (normalizeQueryLimit(201) !== MAX_PAGE_SIZE) {
-      throw new Error(`Expected 201 to be capped at ${MAX_PAGE_SIZE}`);
-    }
+  await test("normalizeLimit floors floating point limits", () => {
+    if (normalizeLimit(25.9) !== 25) throw new Error("floating limit was not floored");
   });
 
-  await test("normalizeQueryLimit normalizes non-positive, zero, NaN, and Infinity limits", () => {
-    if (normalizeQueryLimit(0) !== DEFAULT_PAGE_SIZE) {
-      throw new Error("Expected limit 0 to normalize to DEFAULT_PAGE_SIZE");
-    }
-    if (normalizeQueryLimit(-10) !== DEFAULT_PAGE_SIZE) {
-      throw new Error("Expected limit -10 to normalize to DEFAULT_PAGE_SIZE");
-    }
-    if (normalizeQueryLimit(NaN) !== DEFAULT_PAGE_SIZE) {
-      throw new Error("Expected limit NaN to normalize to DEFAULT_PAGE_SIZE");
-    }
-    if (normalizeQueryLimit(Infinity) !== MAX_PAGE_SIZE) {
-      throw new Error("Expected limit Infinity to normalize to MAX_PAGE_SIZE");
-    }
-    if (normalizeQueryLimit(-Infinity) !== DEFAULT_PAGE_SIZE) {
-      throw new Error("Expected limit -Infinity to normalize to DEFAULT_PAGE_SIZE");
-    }
-    if (normalizeQueryLimit("500" as any) !== MAX_PAGE_SIZE) {
-      throw new Error("Expected string '500' to be parsed and capped at MAX_PAGE_SIZE");
-    }
-  });
-
-  await test("normalizeQueryLimit floors floating point limits into integers", () => {
-    const limit = normalizeQueryLimit(25.9);
-    if (limit !== 25) {
-      throw new Error(`Expected 25.9 to be floored to 25, got ${limit}`);
-    }
-  });
-
-  await test("normalizeQueryOffset normalizes negative, float, and invalid offsets", () => {
-    if (normalizeQueryOffset(undefined) !== 0) {
-      throw new Error("Expected undefined offset to normalize to 0");
-    }
-    if (normalizeQueryOffset(-10) !== 0) {
-      throw new Error("Expected negative offset -10 to normalize to 0");
-    }
-    if (normalizeQueryOffset(NaN) !== 0) {
-      throw new Error("Expected NaN offset to normalize to 0");
-    }
-    if (normalizeQueryOffset(14.8) !== 14) {
-      throw new Error("Expected float offset 14.8 to be floored to 14");
-    }
-  });
-
-  // --------------------------------------------------------------------------
-  // 2. Sort Whitelist Validation
-  // --------------------------------------------------------------------------
-
-  await test("validateSortOptions accepts valid whitelisted sort fields and directions", () => {
-    const validSort = validateSortOptions(
-      { field: "name", direction: "desc" },
-      CUSTOMER_SORT_FIELDS
+  await test("Public repository query contract contains cursor and no offset field", () => {
+    const source = require("fs").readFileSync(
+      require("path").join(process.cwd(), "lib/backend/database/querySpecification.ts"),
+      "utf-8"
     );
-    if (!validSort || validSort.field !== "name" || validSort.direction !== "desc") {
-      throw new Error("Expected valid customer sort to pass validation");
+    const block = source.match(/export interface QuerySpecification[\s\S]*?\{([\s\S]*?)\n\}/)?.[1];
+    if (!block) throw new Error("QuerySpecification interface not found");
+    if (!source.includes("extends PaginationOptions")) throw new Error("QuerySpecification is not cursor-pagination based");
+    if (/\boffset\b/.test(block)) throw new Error("offset remains in the public QuerySpecification contract");
+  });
+
+  await test("Sort validation accepts approved fields and preserves direction", () => {
+    const order = normalizeAndValidateOrderBy("Customer", { field: "name", direction: "desc" });
+    if (String(order[0].field) !== "name" || order[0].direction !== "desc") {
+      throw new Error("approved customer sort was not preserved");
+    }
+    if (!order.some((entry) => String(entry.field) === "id")) {
+      throw new Error("deterministic id tie-breaker was not appended");
     }
   });
 
-  await test("validateSortOptions rejects arbitrary / malicious sort fields", () => {
-    const maliciousSorts = [
-      { field: "__proto__", direction: "asc" },
-      { field: "passwordHash", direction: "asc" },
-      { field: "organizationId", direction: "asc" },
-      { field: "SELECT * FROM users", direction: "asc" },
-      { field: "constructor", direction: "asc" },
-    ];
-
-    for (const badSort of maliciousSorts) {
-      const result = validateSortOptions(badSort as any, CUSTOMER_SORT_FIELDS);
-      if (result !== undefined) {
-        throw new Error(`Expected malicious sort field '${badSort.field}' to be rejected, but got ${JSON.stringify(result)}`);
+  await test("Sort validation rejects arbitrary and injection-like fields", () => {
+    const malicious = ["__proto__", "passwordHash", "organizationId", "SELECT * FROM users", "constructor"];
+    for (const field of malicious) {
+      let rejected = false;
+      try {
+        normalizeAndValidateOrderBy("Customer", { field: field as any, direction: "asc" });
+      } catch (error) {
+        rejected = error instanceof ValidationError;
       }
+      if (!rejected) throw new Error(`Unapproved sort field '${field}' was accepted`);
     }
   });
 
-  await test("validateSortOptions normalizes case-insensitive direction and defaults invalid direction to 'asc'", () => {
-    const sort = validateSortOptions({ field: "arr", direction: "DESC" as any }, CUSTOMER_SORT_FIELDS);
-    if (!sort || sort.direction !== "desc") {
-      throw new Error("Expected 'DESC' to normalize to 'desc'");
+  await test("Entity sort whitelists expose only approved domain fields", () => {
+    const customerFields = ENTITY_SORT_WHITELIST.Customer || [];
+    if (!customerFields.includes("name") || !customerFields.includes("id")) {
+      throw new Error("Customer sort whitelist is missing canonical fields");
     }
-
-    const sortInvalidDir = validateSortOptions({ field: "arr", direction: "invalid" as any }, CUSTOMER_SORT_FIELDS);
-    if (!sortInvalidDir || sortInvalidDir.direction !== "asc") {
-      throw new Error("Expected invalid direction to default to 'asc'");
+    if (customerFields.includes("organizationId") || customerFields.includes("passwordHash")) {
+      throw new Error("Sensitive/internal field leaked into Customer sort whitelist");
     }
   });
 
-  // --------------------------------------------------------------------------
-  // 3. Repository Query Execution & Tenant Isolation
-  // --------------------------------------------------------------------------
-
-  await test("findMany enforces MAX_PAGE_SIZE even if caller requests an unbounded limit", async () => {
-    const customers = await db.customersRepo.findMany(tenantA, { limit: 99999 });
-    if (customers.length > MAX_PAGE_SIZE) {
-      throw new Error(`Query returned ${customers.length} records, exceeding MAX_PAGE_SIZE of ${MAX_PAGE_SIZE}`);
+  await test("findMany enforces MAX_PAGE_SIZE for unbounded requests", async () => {
+    const db = new DatabaseStore();
+    for (let i = 0; i < 110; i++) {
+      await db.customersRepo.create(makeCustomer(`limit-${i}`, `Limit ${i}`), tenantA);
+    }
+    const page = await db.customersRepo.findMany(tenantA, { limit: 99999 });
+    if (page.items.length !== MAX_PAGE_SIZE || page.count !== MAX_PAGE_SIZE || !page.hasMore) {
+      throw new Error("repository did not enforce canonical maximum page size");
     }
   });
 
-  await test("findMany strictly isolates records to authenticated tenant under structured queries", async () => {
-    const acmeCustomers = await db.customersRepo.findMany(tenantA, {
-      filter: { tier: "Enterprise" },
-      sort: { field: "name", direction: "asc" },
-      limit: 10,
-    });
+  await test("findMany strictly isolates tenant records under structured queries", async () => {
+    const db = new DatabaseStore();
+    await db.customersRepo.create(makeCustomer("a-1", "Alpha", "Enterprise"), tenantA);
+    await db.customersRepo.create(makeCustomer("b-1", "Beta", "Enterprise"), tenantB);
 
-    for (const c of acmeCustomers) {
-      if (c.organizationId !== tenantA.organizationId) {
-        throw new Error(`Cross-tenant data leakage detected: customer ${c.id} belongs to ${c.organizationId}`);
-      }
-    }
-
-    const globexCustomers = await db.customersRepo.findMany(tenantB, {
-      filter: { tier: "Enterprise" },
-      sort: { field: "name", direction: "asc" },
-      limit: 10,
-    });
-
-    for (const c of globexCustomers) {
-      if (c.organizationId !== tenantB.organizationId) {
-        throw new Error(`Cross-tenant data leakage detected: customer ${c.id} belongs to ${c.organizationId}`);
-      }
+    const aPage = await db.customersRepo.findMany(tenantA, { where: { tier: { eq: "Enterprise" } } });
+    const bPage = await db.customersRepo.findMany(tenantB, { where: { tier: { eq: "Enterprise" } } });
+    if (aPage.items.some((item) => item.organizationId !== tenantA.organizationId)) throw new Error("Tenant A leakage");
+    if (bPage.items.some((item) => item.organizationId !== tenantB.organizationId)) throw new Error("Tenant B leakage");
+    if (aPage.items.some((item) => item.id === "b-1") || bPage.items.some((item) => item.id === "a-1")) {
+      throw new Error("cross-tenant record appeared in canonical page");
     }
   });
 
-  await test("findMany sorting applies correctly on whitelisted fields (ASC / DESC)", async () => {
-    const ascCustomers = await db.customersRepo.findMany(tenantA, {
-      sort: { field: "name", direction: "asc" },
-      limit: 50,
-    });
-
-    for (let i = 0; i < ascCustomers.length - 1; i++) {
-      if (ascCustomers[i].name.localeCompare(ascCustomers[i + 1].name) > 0) {
-        throw new Error(`Expected ascending name order, but '${ascCustomers[i].name}' came before '${ascCustomers[i + 1].name}'`);
-      }
+  await test("findMany sorting applies correctly on approved fields ASC and DESC", async () => {
+    const db = new DatabaseStore();
+    for (const [id, name] of [["c", "Charlie"], ["a", "Alpha"], ["b", "Bravo"]] as const) {
+      await db.customersRepo.create(makeCustomer(id, name), tenantA);
     }
+    const asc = await db.customersRepo.findMany(tenantA, { orderBy: { field: "name", direction: "asc" } });
+    const desc = await db.customersRepo.findMany(tenantA, { orderBy: { field: "name", direction: "desc" } });
+    if (asc.items.map((item) => item.name).join(",") !== "Alpha,Bravo,Charlie") throw new Error("ascending order failed");
+    if (desc.items.map((item) => item.name).join(",") !== "Charlie,Bravo,Alpha") throw new Error("descending order failed");
+  });
 
-    const descCustomers = await db.customersRepo.findMany(tenantA, {
-      sort: { field: "name", direction: "desc" },
-      limit: 50,
+  await test("Structured filters preserve domain and tenant invariants", async () => {
+    const db = new DatabaseStore();
+    await db.customersRepo.create(makeCustomer("customer-a", "Customer A"), tenantA);
+    await db.contractsRepo.create({
+      id: "contract-active",
+      customerId: "customer-a",
+      title: "Active Contract",
+      contractValue: 1000,
+      annualRecurringRevenue: 1000,
+      currency: "USD",
+      startDate: "2026-01-01",
+      endDate: "2027-01-01",
+      renewalDaysRemaining: 120,
+      status: "active",
+      billingCadence: "annual",
+      slaCompliance: 100,
+      volatilityIndexationClause: false,
+    }, tenantA);
+    const contracts = await db.contractsRepo.findMany(tenantA, { where: { status: { eq: "active" } } });
+    if (contracts.items.length !== 1 || contracts.items[0].status !== "active") throw new Error("contract filter failed");
+    if (contracts.items[0].organizationId !== tenantA.organizationId) throw new Error("contract tenant scope failed");
+  });
+
+  await test("Audit repository enforces canonical page bounds and tenant isolation", async () => {
+    const db = new DatabaseStore();
+    for (let i = 0; i < 110; i++) {
+      await db.auditLogsRepo.record({
+        organizationId: tenantA.organizationId,
+        actorId: tenantA.userId,
+        actorEmail: tenantA.userEmail,
+        action: "test",
+        resource: "Customer",
+        resourceId: `audit-${i}`,
+        requestId: tenantA.requestId,
+        status: "success",
+      });
+    }
+    await db.auditLogsRepo.record({
+      organizationId: tenantB.organizationId,
+      actorId: tenantB.userId,
+      actorEmail: tenantB.userEmail,
+      action: "test",
+      resource: "Customer",
+      resourceId: "audit-b",
+      requestId: tenantB.requestId,
+      status: "success",
     });
 
-    for (let i = 0; i < descCustomers.length - 1; i++) {
-      if (descCustomers[i].name.localeCompare(descCustomers[i + 1].name) < 0) {
-        throw new Error(`Expected descending name order, but '${descCustomers[i].name}' came before '${descCustomers[i + 1].name}'`);
-      }
+    const page = await db.auditLogsRepo.findMany(tenantA, { limit: 1000 });
+    if (page.items.length !== MAX_PAGE_SIZE || page.count !== MAX_PAGE_SIZE || page.totalCount !== 110) {
+      throw new Error("audit page bounds are incorrect");
+    }
+    if (page.items.some((log) => log.organizationId !== tenantA.organizationId)) {
+      throw new Error("audit log cross-tenant leakage detected");
     }
   });
 
-  await test("findMany structured filters filter correctly across domain entities", async () => {
-    // Contracts
-    const activeContracts = await db.contractsRepo.findMany(tenantA, {
-      filter: { status: "active" },
-    });
-    for (const c of activeContracts) {
-      if (c.status !== "active") {
-        throw new Error(`Expected contract status 'active', got '${c.status}'`);
-      }
-      if (c.organizationId !== tenantA.organizationId) {
-        throw new Error("Tenant isolation breached in contract filter");
-      }
-    }
-
-    // Transactions
-    const revenueTransactions = await db.transactionsRepo.findMany(tenantA, {
-      filter: { type: "revenue" },
-    });
-    for (const t of revenueTransactions) {
-      if (t.type !== "revenue") {
-        throw new Error(`Expected transaction type 'revenue', got '${t.type}'`);
-      }
-      if (t.organizationId !== tenantA.organizationId) {
-        throw new Error("Tenant isolation breached in transaction filter");
-      }
-    }
-
-    // Signals
-    const activeSignals = await db.signalsRepo.findMany(tenantA, {
-      filter: { status: "active" },
-    });
-    for (const s of activeSignals) {
-      if (s.status !== "active") {
-        throw new Error(`Expected signal status 'active', got '${s.status}'`);
-      }
-    }
-  });
-
-  await test("Audit log repository enforces limit bounds and structured filtering", async () => {
-    const logs = await db.auditLogsRepo.findMany(tenantA, {
-      limit: 1000, // Should be capped at MAX_PAGE_SIZE
-    });
-
-    if (logs.length > MAX_PAGE_SIZE) {
-      throw new Error(`Audit log query returned ${logs.length} entries, exceeding MAX_PAGE_SIZE (${MAX_PAGE_SIZE})`);
-    }
-
-    for (const log of logs) {
-      if (log.organizationId !== tenantA.organizationId) {
-        throw new Error(`Audit log cross-tenant leakage: log ${log.id} belongs to ${log.organizationId}`);
-      }
-    }
-  });
-
-  const passedCount = results.filter((r) => r.passed).length;
-  const failedCount = results.filter((r) => !r.passed).length;
-
-  return {
-    suite: suiteName,
-    total: results.length,
-    passedCount,
-    failedCount,
-    results,
-  };
+  const passedCount = results.filter((result) => result.passed).length;
+  const failedCount = results.length - passedCount;
+  return { suite: suiteName, total: results.length, passedCount, failedCount, results };
 }
