@@ -1,14 +1,11 @@
 /**
  * APEX ONE — Storage-Agnostic Structured Query Specifications
- * 
- * ARCHITECTURAL SPECIFICATION:
- * Replaces arbitrary JavaScript callback predicates from repository interfaces with declarative,
- * storage-agnostic structured query specifications.
- * 
- * These specifications are:
- * 1. Serializable and inspectable.
- * 2. Directly translatable into SQL (WHERE clauses, ILIKE, IN, parameter bindings, ORDER BY, LIMIT/OFFSET) by PostgreSQL adapters.
- * 3. Evaluable by in-memory repository adapters with complete fidelity.
+ *
+ * Stage 3 canonical query contract:
+ * - Declarative filters/search/order only; no executable predicates.
+ * - Cursor pagination only at public repository/service boundaries.
+ * - Directly translatable to parameterized SQL WHERE/ORDER BY/keyset LIMIT.
+ * - Fully evaluable by the in-memory adapter for deterministic tests.
  */
 
 import {
@@ -22,7 +19,6 @@ import {
   ENTITY_SORT_WHITELIST,
   normalizeAndValidateOrderBy,
   compareRecords,
-  OrderBySpec,
 } from "./pagination";
 
 export {
@@ -81,18 +77,15 @@ export interface OrderBySpecification<T> {
 
 export type OrderByClause<T = Record<string, unknown>> = OrderBySpecification<T>;
 
-export interface QuerySpecification<T = Record<string, unknown>> {
+/**
+ * Canonical repository collection query. Offset is intentionally absent.
+ */
+export interface QuerySpecification<T = Record<string, unknown>> extends PaginationOptions {
   where?: QueryFilter<T>;
   search?: SearchSpecification<T>;
   orderBy?: OrderBySpecification<T>[] | OrderBySpecification<T>;
-  limit?: number;
-  offset?: number;
-  cursor?: string | null;
 }
 
-/**
- * Helper to check if a value is an operator object.
- */
 function isOperatorObject(val: unknown): val is ComparisonOperator<unknown> {
   if (val === null || typeof val !== "object" || Array.isArray(val) || val instanceof Date) {
     return false;
@@ -131,20 +124,14 @@ function toComparable(val: unknown): number | string {
   return String(val);
 }
 
-/**
- * Evaluates whether a single property value satisfies a condition.
- */
 export function evaluateCondition<V>(fieldValue: V, condition: FieldCondition<V>): boolean {
-  if (condition === undefined) {
-    return true;
-  }
+  if (condition === undefined) return true;
 
   if (condition === null) {
     return fieldValue === null || fieldValue === undefined;
   }
 
   if (!isOperatorObject(condition)) {
-    // Direct value equality comparison
     if (typeof fieldValue === "string" && typeof condition === "string") {
       return fieldValue.toLowerCase() === condition.toLowerCase();
     }
@@ -155,9 +142,7 @@ export function evaluateCondition<V>(fieldValue: V, condition: FieldCondition<V>
 
   if (op.isNull !== undefined) {
     const isActuallyNull = fieldValue === null || fieldValue === undefined;
-    if (op.isNull !== isActuallyNull) {
-      return false;
-    }
+    if (op.isNull !== isActuallyNull) return false;
   }
 
   if (op.eq !== undefined) {
@@ -205,9 +190,7 @@ export function evaluateCondition<V>(fieldValue: V, condition: FieldCondition<V>
     const b = toComparable(op.lt);
     if (typeof a === "number" && typeof b === "number") {
       if (a >= b) return false;
-    } else if (String(a) >= String(b)) {
-      return false;
-    }
+    } else if (String(a) >= String(b)) return false;
   }
 
   if (op.lte !== undefined) {
@@ -216,9 +199,7 @@ export function evaluateCondition<V>(fieldValue: V, condition: FieldCondition<V>
     const b = toComparable(op.lte);
     if (typeof a === "number" && typeof b === "number") {
       if (a > b) return false;
-    } else if (String(a) > String(b)) {
-      return false;
-    }
+    } else if (String(a) > String(b)) return false;
   }
 
   if (op.gt !== undefined) {
@@ -227,9 +208,7 @@ export function evaluateCondition<V>(fieldValue: V, condition: FieldCondition<V>
     const b = toComparable(op.gt);
     if (typeof a === "number" && typeof b === "number") {
       if (a <= b) return false;
-    } else if (String(a) <= String(b)) {
-      return false;
-    }
+    } else if (String(a) <= String(b)) return false;
   }
 
   if (op.gte !== undefined) {
@@ -238,40 +217,40 @@ export function evaluateCondition<V>(fieldValue: V, condition: FieldCondition<V>
     const b = toComparable(op.gte);
     if (typeof a === "number" && typeof b === "number") {
       if (a < b) return false;
-    } else if (String(a) < String(b)) {
-      return false;
-    }
+    } else if (String(a) < String(b)) return false;
   }
 
   if (op.contains !== undefined) {
     if (fieldValue === null || fieldValue === undefined) return false;
-    const str = String(fieldValue).toLowerCase();
-    if (!str.includes(op.contains.toLowerCase())) return false;
+    if (!String(fieldValue).toLowerCase().includes(op.contains.toLowerCase())) return false;
   }
 
   if (op.startsWith !== undefined) {
     if (fieldValue === null || fieldValue === undefined) return false;
-    const str = String(fieldValue).toLowerCase();
-    if (!str.startsWith(op.startsWith.toLowerCase())) return false;
+    if (!String(fieldValue).toLowerCase().startsWith(op.startsWith.toLowerCase())) return false;
   }
 
   if (op.endsWith !== undefined) {
     if (fieldValue === null || fieldValue === undefined) return false;
-    const str = String(fieldValue).toLowerCase();
-    if (!str.endsWith(op.endsWith.toLowerCase())) return false;
+    if (!String(fieldValue).toLowerCase().endsWith(op.endsWith.toLowerCase())) return false;
   }
 
   if (op.ilike !== undefined) {
     if (fieldValue === null || fieldValue === undefined) return false;
     const str = String(fieldValue).toLowerCase();
-    const pattern = op.ilike.toLowerCase().replace(/%/g, ".*").replace(/_/g, ".");
-    const regex = new RegExp(`^${pattern}$`, "i");
-    if (!regex.test(str)) return false;
+    const escaped = op.ilike
+      .toLowerCase()
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/%/g, ".*")
+      .replace(/_/g, ".");
+    if (!new RegExp(`^${escaped}$`, "i").test(str)) return false;
   }
 
   if (op.arrayContains !== undefined) {
     if (!Array.isArray(fieldValue)) return false;
-    const needle = typeof op.arrayContains === "string" ? op.arrayContains.toLowerCase() : op.arrayContains;
+    const needle = typeof op.arrayContains === "string"
+      ? op.arrayContains.toLowerCase()
+      : op.arrayContains;
     const exists = fieldValue.some((item) => {
       if (typeof item === "string" && typeof needle === "string") {
         return item.toLowerCase() === needle;
@@ -283,88 +262,55 @@ export function evaluateCondition<V>(fieldValue: V, condition: FieldCondition<V>
 
   if (op.arrayContainsAny !== undefined) {
     if (!Array.isArray(fieldValue)) return false;
-    const needles = op.arrayContainsAny;
-    const exists = fieldValue.some((item) => {
-      return needles.some((needle) => {
+    const exists = fieldValue.some((item) =>
+      op.arrayContainsAny!.some((needle) => {
         if (typeof item === "string" && typeof needle === "string") {
           return item.toLowerCase() === needle.toLowerCase();
         }
         return item === needle;
-      });
-    });
+      })
+    );
     if (!exists) return false;
   }
 
   return true;
 }
 
-/**
- * Recursively evaluates whether an item satisfies a QueryFilter.
- */
 export function matchesFilter<T>(item: T, filter?: QueryFilter<T>): boolean {
-  if (!filter || Object.keys(filter).length === 0) {
-    return true;
-  }
+  if (!filter || Object.keys(filter).length === 0) return true;
 
   const obj = item as Record<string, unknown>;
 
-  // Check logical AND
   if (filter.AND && Array.isArray(filter.AND)) {
     for (const subFilter of filter.AND) {
-      if (!matchesFilter(item, subFilter)) {
-        return false;
-      }
+      if (!matchesFilter(item, subFilter)) return false;
     }
   }
 
-  // Check logical OR
-  if (filter.OR && Array.isArray(filter.OR)) {
-    if (filter.OR.length > 0) {
-      const anyMatch = filter.OR.some((subFilter) => matchesFilter(item, subFilter));
-      if (!anyMatch) {
-        return false;
-      }
-    }
+  if (filter.OR && Array.isArray(filter.OR) && filter.OR.length > 0) {
+    if (!filter.OR.some((subFilter) => matchesFilter(item, subFilter))) return false;
   }
 
-  // Check logical NOT
-  if (filter.NOT) {
-    if (matchesFilter(item, filter.NOT)) {
-      return false;
-    }
-  }
+  if (filter.NOT && matchesFilter(item, filter.NOT)) return false;
 
-  // Check direct field conditions
   for (const key of Object.keys(filter)) {
-    if (key === "AND" || key === "OR" || key === "NOT") {
-      continue;
-    }
+    if (key === "AND" || key === "OR" || key === "NOT") continue;
     const condition = (filter as Record<string, unknown>)[key] as FieldCondition<unknown>;
-    const fieldValue = obj[key];
-    if (!evaluateCondition(fieldValue, condition)) {
-      return false;
-    }
+    if (!evaluateCondition(obj[key], condition)) return false;
   }
 
   return true;
 }
 
-/**
- * Evaluates whether an item matches free-text SearchSpecification.
- */
 export function matchesSearch<T>(item: T, search?: SearchSpecification<T>): boolean {
-  if (!search || !search.term || search.term.trim().length === 0) {
-    return true;
-  }
+  if (!search || !search.term || search.term.trim().length === 0) return true;
 
   const term = search.term.toLowerCase().trim();
   const obj = item as Record<string, unknown>;
 
   return search.fields.some((fieldKey) => {
     const val = obj[fieldKey as string];
-    if (val === null || val === undefined) {
-      return false;
-    }
+    if (val === null || val === undefined) return false;
     if (Array.isArray(val)) {
       return val.some((elem) => String(elem).toLowerCase().includes(term));
     }
@@ -372,32 +318,19 @@ export function matchesSearch<T>(item: T, search?: SearchSpecification<T>): bool
   });
 }
 
-/**
- * Checks if an item matches an entire QuerySpecification.
- */
 export function matchesSpecification<T>(item: T, spec?: QuerySpecification<T>): boolean {
-  if (!spec) {
-    return true;
-  }
-
-  if (spec.where && !matchesFilter(item, spec.where)) {
-    return false;
-  }
-
-  if (spec.search && !matchesSearch(item, spec.search)) {
-    return false;
-  }
-
+  if (!spec) return true;
+  if (spec.where && !matchesFilter(item, spec.where)) return false;
+  if (spec.search && !matchesSearch(item, spec.search)) return false;
   return true;
 }
 
 /**
- * Pure helper to apply filtering, ordering, and pagination to an array of items.
+ * Non-paginated helper for internal calculations. Public collection reads must
+ * use applyQuerySpecificationPaginated so cursor metadata is never lost.
  */
 export function applyQuerySpecification<T>(items: T[], spec?: QuerySpecification<T>): T[] {
-  if (!spec) {
-    return [...items];
-  }
+  if (!spec) return [...items];
 
   let result = items.filter((item) => matchesSpecification(item, spec));
 
@@ -412,85 +345,75 @@ export function applyQuerySpecification<T>(items: T[], spec?: QuerySpecification
         if (fieldA === fieldB) continue;
         if (fieldA === undefined || fieldA === null) return 1;
         if (fieldB === undefined || fieldB === null) return -1;
-
         if (typeof fieldA === "number" && typeof fieldB === "number") {
           return (fieldA - fieldB) * direction;
         }
-
         if (fieldA instanceof Date && fieldB instanceof Date) {
           return (fieldA.getTime() - fieldB.getTime()) * direction;
         }
-
         const comp = String(fieldA).localeCompare(String(fieldB));
-        if (comp !== 0) {
-          return comp * direction;
-        }
+        if (comp !== 0) return comp * direction;
       }
       return 0;
     });
-  }
-
-  if (spec.offset !== undefined && spec.offset > 0) {
-    result = result.slice(spec.offset);
-  }
-
-  if (spec.limit !== undefined && spec.limit >= 0) {
-    result = result.slice(0, spec.limit);
   }
 
   return result;
 }
 
 /**
- * Applies structured filtering, deterministic sorting, and cursor pagination.
+ * Applies structured filtering, deterministic sorting, and tenant-bound cursor pagination.
  */
-export function applyQuerySpecificationPaginated<T extends { id: string; organizationId: string }>(
+export function applyQuerySpecificationPaginated<
+  T extends { id: string; organizationId: string }
+>(
   items: T[],
   spec?: QuerySpecification<T>,
   expectedTenantId?: string,
   entityName?: string
 ): PaginatedResult<T> {
-  // 1. Filter
-  let filtered = spec ? items.filter((item) => matchesSpecification(item, spec)) : [...items];
+  let filtered = spec
+    ? items.filter((item) => matchesSpecification(item, spec))
+    : [...items];
   const totalCount = filtered.length;
 
-  // 2. Validate and apply deterministic multi-key ordering with tie-breaker
   const normalizedOrder = normalizeAndValidateOrderBy<T>(entityName, spec?.orderBy);
   filtered.sort((a, b) => compareRecords(a, b, normalizedOrder));
 
-  // 3. Normalize limit
   const limit = normalizeLimit(spec?.limit);
 
-  // 4. Cursor Seek
   let startIndex = 0;
   if (spec?.cursor) {
     const cursorPayload = decodeCursor(spec.cursor, expectedTenantId);
+    const primaryOrder = normalizedOrder[0];
+    const primaryField = String(primaryOrder.field);
+    const primaryDirection = primaryOrder.direction === "desc" ? "desc" : "asc";
 
-    // Look for exact entity id match first
+    if (cursorPayload.f !== primaryField || cursorPayload.d !== primaryDirection) {
+      throw new (require("../core/errors").ValidationError)(
+        "Pagination cursor does not match the requested sort order."
+      );
+    }
+
     const exactMatchIndex = filtered.findIndex((item) => item.id === cursorPayload.id);
     if (exactMatchIndex !== -1) {
       startIndex = exactMatchIndex + 1;
     } else {
-      // Keyset comparison fallback
-      const primaryOrder = normalizedOrder[0];
-      const primaryField = String(primaryOrder.field);
       const cursorDummy = {
         [primaryField]: cursorPayload.v,
         id: cursorPayload.id,
       } as unknown as T;
-
-      const idx = filtered.findIndex((item) => compareRecords(item, cursorDummy, normalizedOrder) > 0);
+      const idx = filtered.findIndex(
+        (item) => compareRecords(item, cursorDummy, normalizedOrder) > 0
+      );
       startIndex = idx === -1 ? filtered.length : idx;
     }
   }
 
-  // 5. Slice page
   const pageItems = filtered.slice(startIndex, startIndex + limit);
-  const remainingCount = filtered.length - (startIndex + pageItems.length);
-  const hasMore = remainingCount > 0;
+  const hasMore = startIndex + pageItems.length < filtered.length;
 
-  // 6. Generate nextCursor if hasMore
-  let nextCursor: string | undefined = undefined;
+  let nextCursor: string | null = null;
   if (hasMore && pageItems.length > 0) {
     const lastItem = pageItems[pageItems.length - 1];
     const primaryOrder = normalizedOrder[0];
@@ -502,7 +425,7 @@ export function applyQuerySpecificationPaginated<T extends { id: string; organiz
       id: lastItem.id,
       f: primaryField,
       d: primaryOrder.direction === "desc" ? "desc" : "asc",
-      t: lastItem.organizationId || expectedTenantId || "",
+      t: expectedTenantId || lastItem.organizationId,
     });
   }
 
