@@ -37,6 +37,7 @@ const ctx: TenantContext = {
   userRole: "Administrator",
   permissions: ["*"],
   requestId: "req-immutable",
+  timestamp: "2026-09-02T00:00:00.000Z",
 };
 
 async function createFixture() {
