@@ -1,7 +1,6 @@
 /**
  * APEX ONE — Entity Lifecycle & Deletion Integrity Test Suite
- * 
- * Task 04.05.03:
+ *
  * Verifies that the RESTRICT deletion policy prevents dangling foreign references
  * and enforces tenant-scoped dependency validation prior to record deletion.
  */
@@ -13,6 +12,16 @@ import {
   CrossTenantViolationError,
   ConflictError,
 } from "../core/errors";
+import type {
+  ContractRecord,
+  DocumentRecord,
+  KnowledgeItemRecord,
+  WorkflowRecord,
+  WorkflowRunRecord,
+  ValueOpportunityRecord,
+  ValueCapturedRecord,
+  SignalRecord,
+} from "../database/schema";
 
 export interface TestResult {
   suite: string;
@@ -28,6 +37,239 @@ export interface SuiteSummary {
   passedCount: number;
   failedCount: number;
   results: TestResult[];
+}
+
+type ErrorConstructor = new (...args: any[]) => Error;
+
+const orgA = "org-alpha";
+const orgB = "org-beta";
+const FIXED_NOW = "2026-09-02T00:00:00.000Z";
+
+const ctxA: TenantContext = {
+  organizationId: orgA,
+  userId: "usr-alpha-1",
+  userEmail: "alpha@apex.local",
+  userRole: "admin",
+  permissions: [
+    "customer:read", "customer:write", "customer:delete",
+    "contract:read", "contract:write", "contract:delete",
+    "financial:read", "financial:write", "financial:delete",
+    "document:read", "document:write", "document:delete",
+    "knowledge:read", "knowledge:write", "knowledge:delete",
+    "workflow:read", "workflow:write", "workflow:delete",
+    "value:read", "value:write", "value:delete",
+    "signal:read", "signal:write", "signal:delete",
+  ],
+  requestId: "req-alpha-lifecycle",
+  timestamp: FIXED_NOW,
+};
+
+const ctxB: TenantContext = {
+  organizationId: orgB,
+  userId: "usr-beta-1",
+  userEmail: "beta@apex.local",
+  userRole: "admin",
+  permissions: [
+    "customer:read", "customer:write", "customer:delete",
+    "contract:read", "contract:write", "contract:delete",
+    "financial:read", "financial:write", "financial:delete",
+    "document:read", "document:write", "document:delete",
+    "knowledge:read", "knowledge:write", "knowledge:delete",
+    "workflow:read", "workflow:write", "workflow:delete",
+    "value:read", "value:write", "value:delete",
+    "signal:read", "signal:write", "signal:delete",
+  ],
+  requestId: "req-beta-lifecycle",
+  timestamp: FIXED_NOW,
+};
+
+function contractFixture(
+  id: string,
+  customerId: string,
+  title: string,
+  contractValue: number
+): Omit<ContractRecord, "organizationId"> {
+  return {
+    id,
+    customerId,
+    title,
+    contractValue,
+    startDate: "2026-01-01",
+    endDate: "2027-01-01",
+    renewalDaysRemaining: 180,
+    status: "active",
+    slaCompliance: 99,
+    volatilityIndexationClause: false,
+    createdAt: FIXED_NOW,
+  };
+}
+
+function documentFixture(
+  id: string,
+  name: string,
+  category: DocumentRecord["category"],
+  customerId?: string
+): Omit<DocumentRecord, "organizationId"> {
+  const isImage = name.toLowerCase().endsWith(".png");
+  return {
+    id,
+    ...(customerId ? { customerId } : {}),
+    name,
+    fileType: isImage ? "image" : "pdf",
+    category,
+    size: isImage ? "500 KB" : "1.2 MB",
+    uploadedBy: "",
+    storageKey: `docs/${id}`,
+    status: "indexed",
+    metadata: {
+      fileSizeBytes: isImage ? 500_000 : 1_200_000,
+      mimeType: isImage ? "image/png" : "application/pdf",
+      storageUri: `memory://documents/${id}`,
+    },
+    extractedFields: [],
+    tags: [],
+    createdAt: FIXED_NOW,
+    updatedAt: FIXED_NOW,
+  };
+}
+
+function knowledgeFixture(
+  id: string,
+  title: string,
+  sourceDocId: string
+): Omit<KnowledgeItemRecord, "organizationId"> {
+  return {
+    id,
+    title,
+    category: "Policy",
+    content: `${title} content`,
+    summary: `${title} summary`,
+    author: "System",
+    sourceDocId,
+    tags: ["lifecycle"],
+    version: 1,
+    createdAt: FIXED_NOW,
+    updatedAt: FIXED_NOW,
+  };
+}
+
+function workflowFixture(
+  id: string,
+  name: string,
+  status: WorkflowRecord["status"] = "active"
+): Omit<WorkflowRecord, "organizationId"> {
+  return {
+    id,
+    name,
+    description: `${name} lifecycle fixture`,
+    subsidiary: "General Operations",
+    status,
+    version: 1,
+    nodes: [],
+    connections: [],
+    runsCount: 0,
+    successRate: 0,
+    createdAt: FIXED_NOW,
+    updatedAt: FIXED_NOW,
+  };
+}
+
+function workflowRunFixture(
+  id: string,
+  workflowId: string
+): Omit<WorkflowRunRecord, "organizationId"> {
+  return {
+    id,
+    workflowId,
+    workflowVersion: 1,
+    triggeredBy: "system",
+    triggerType: "manual",
+    status: "running",
+    steps: [],
+    contextData: {},
+    startedAt: FIXED_NOW,
+  };
+}
+
+function opportunityFixture(
+  id: string,
+  title: string,
+  sourceEntityType: ValueOpportunityRecord["sourceEntityType"],
+  sourceEntityId: string,
+  overrides: Partial<Omit<ValueOpportunityRecord, "id" | "organizationId" | "title" | "sourceEntityType" | "sourceEntityId">> = {}
+): Omit<ValueOpportunityRecord, "organizationId"> {
+  return {
+    id,
+    title,
+    category: "Process optimization",
+    potentialValue: 15000,
+    confidence: 90,
+    evidence: "Lifecycle dependency fixture",
+    sourceEntityType,
+    sourceEntityId,
+    recommendedAction: "Review dependency",
+    expectedOutcome: "Dependency preserved",
+    realizationSpeed: "Medium",
+    strategicImportance: "Medium",
+    risk: "Low",
+    status: "Identified",
+    createdAt: FIXED_NOW,
+    updatedAt: FIXED_NOW,
+    ...overrides,
+  };
+}
+
+function valueCapturedFixture(
+  id: string,
+  opportunityId: string,
+  opportunityTitle: string
+): Omit<ValueCapturedRecord, "organizationId"> {
+  return {
+    id,
+    opportunityId,
+    opportunityTitle,
+    category: "Cost avoided",
+    capturedValue: 12500,
+    evidenceType: "Lifecycle fixture",
+    evidenceDescription: "Captured value dependency record",
+    realizationDate: "2026-09-02",
+    certifiedBy: "system",
+    auditTrail: [],
+    createdAt: FIXED_NOW,
+  };
+}
+
+function signalFixture(id: string): Omit<SignalRecord, "organizationId"> {
+  return {
+    id,
+    category: "operation",
+    severity: "medium",
+    title: "Usage Surge Detected",
+    description: "API call volume exceeded normal baseline by 300%",
+    evidence: "API Gateway telemetry",
+    estimatedFinancialImpact: 20000,
+    status: "active",
+    detectedAt: FIXED_NOW,
+  };
+}
+
+function customerFixture(id: string, name: string, email: string, arr: number) {
+  return {
+    id,
+    name,
+    tier: "Enterprise" as const,
+    status: "active" as const,
+    healthScore: 90,
+    arr,
+    owner: "owner@apex.local",
+    contactName: `${name} Contact`,
+    contactRole: "Lead",
+    contactEmail: email,
+    since: "2026-01-01",
+    tags: ["lifecycle"],
+    createdAt: FIXED_NOW,
+    updatedAt: FIXED_NOW,
+  };
 }
 
 export async function runEntityLifecycleIntegrityTestSuite(): Promise<SuiteSummary> {
@@ -54,90 +296,16 @@ export async function runEntityLifecycleIntegrityTestSuite(): Promise<SuiteSumma
     }
   };
 
-  const orgA = "org-alpha";
-  const orgB = "org-beta";
-
-  const ctxA: TenantContext = {
-    organizationId: orgA,
-    userId: "usr-alpha-1",
-    userEmail: "alpha@apex.local",
-    userRole: "admin",
-    permissions: [
-      "customer:read",
-      "customer:write",
-      "customer:delete",
-      "contract:read",
-      "contract:write",
-      "contract:delete",
-      "financial:read",
-      "financial:write",
-      "financial:delete",
-      "document:read",
-      "document:write",
-      "document:delete",
-      "knowledge:read",
-      "knowledge:write",
-      "knowledge:delete",
-      "workflow:read",
-      "workflow:write",
-      "workflow:delete",
-      "value:read",
-      "value:write",
-      "value:delete",
-      "signal:read",
-      "signal:write",
-      "signal:delete",
-    ],
-    requestId: "req-alpha-lifecycle",
-  };
-
-  const ctxB: TenantContext = {
-    organizationId: orgB,
-    userId: "usr-beta-1",
-    userEmail: "beta@apex.local",
-    userRole: "admin",
-    permissions: [
-      "customer:read",
-      "customer:write",
-      "customer:delete",
-      "contract:read",
-      "contract:write",
-      "contract:delete",
-      "financial:read",
-      "financial:write",
-      "financial:delete",
-      "document:read",
-      "document:write",
-      "document:delete",
-      "knowledge:read",
-      "knowledge:write",
-      "knowledge:delete",
-      "workflow:read",
-      "workflow:write",
-      "workflow:delete",
-      "value:read",
-      "value:write",
-      "value:delete",
-      "signal:read",
-      "signal:write",
-      "signal:delete",
-    ],
-    requestId: "req-beta-lifecycle",
-  };
-
-  // Helper to assert throws specific error
   const assertThrows = async (
     fn: () => Promise<unknown>,
-    expectedErrorClass: new (...args: unknown[]) => Error,
+    expectedErrorClass: ErrorConstructor,
     messageSubstring?: string
   ) => {
     let threw = false;
-    let actualError: unknown = null;
     try {
       await fn();
     } catch (e: unknown) {
       threw = true;
-      actualError = e;
       if (!(e instanceof expectedErrorClass)) {
         throw new Error(
           `Expected error of type ${expectedErrorClass.name}, but got ${
@@ -156,63 +324,24 @@ export async function runEntityLifecycleIntegrityTestSuite(): Promise<SuiteSumma
     }
   };
 
-  // =========================================================================
-  // 1. CUSTOMER DELETION INTEGRITY (RESTRICT)
-  // =========================================================================
-
   await runTest(
     "1.1 RESTRICT: Rejects Customer deletion when active Contract depends on Customer",
     async () => {
       const db = new DatabaseStore();
       const cust = await db.customersRepo.create(
-        {
-          id: "cust-del-1",
-          name: "Acme Corp",
-          tier: "Enterprise",
-          status: "active",
-          healthScore: 90,
-          arr: 120000,
-          owner: "owner@apex.local",
-          contactName: "John Doe",
-          contactRole: "VP Tech",
-          contactEmail: "john@acme.com",
-          since: "2026-01-01",
-          tags: ["core"],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        customerFixture("cust-del-1", "Acme Corp", "john@acme.com", 120000),
         ctxA
       );
-
       await db.contractsRepo.create(
-        {
-          id: "cnt-del-1",
-          customerId: cust.id,
-          title: "Master Services Agreement",
-          contractNumber: "MSA-2026-001",
-          type: "MSA",
-          status: "active",
-          value: 120000,
-          startDate: "2026-01-01",
-          endDate: "2027-01-01",
-          renewalDaysRemaining: 180,
-          paymentTerms: "Net 30",
-          autoRenew: true,
-          owner: "owner@apex.local",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        contractFixture("cnt-del-1", cust.id, "Master Services Agreement", 120000),
         ctxA
       );
 
-      // Attempt deletion should be rejected with ConflictError
       await assertThrows(
         () => db.customersRepo.delete(cust.id, ctxA),
         ConflictError,
         "Cannot delete Customer because dependent Contract records exist"
       );
-
-      // Confirm customer still exists
       const found = await db.customersRepo.findById(cust.id, ctxA);
       if (!found) throw new Error("Customer was deleted despite dependency check");
     }
@@ -223,39 +352,21 @@ export async function runEntityLifecycleIntegrityTestSuite(): Promise<SuiteSumma
     async () => {
       const db = new DatabaseStore();
       const cust = await db.customersRepo.create(
-        {
-          id: "cust-del-2",
-          name: "Beta Logistics",
-          tier: "Mid-Market",
-          status: "active",
-          healthScore: 85,
-          arr: 50000,
-          owner: "owner@apex.local",
-          contactName: "Jane Smith",
-          contactRole: "Director",
-          contactEmail: "jane@betalogistics.com",
-          since: "2026-02-01",
-          tags: ["logistics"],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        customerFixture("cust-del-2", "Beta Logistics", "jane@betalogistics.com", 50000),
         ctxA
       );
-
       await db.transactionsRepo.create(
         {
           id: "txn-del-2",
           customerId: cust.id,
-          description: "Monthly subscription",
+          type: "revenue",
           amount: 5000,
           currency: "USD",
-          type: "revenue",
-          status: "settled",
-          paymentMethod: "bank_transfer",
-          referenceNumber: "INV-2026-002",
+          status: "cleared",
+          reference: "INV-2026-002",
           category: "subscription",
-          recognizedAt: new Date().toISOString(),
-          createdAt: new Date().toISOString(),
+          date: "2026-09-02",
+          createdAt: FIXED_NOW,
         },
         ctxA
       );
@@ -273,39 +384,11 @@ export async function runEntityLifecycleIntegrityTestSuite(): Promise<SuiteSumma
     async () => {
       const db = new DatabaseStore();
       const cust = await db.customersRepo.create(
-        {
-          id: "cust-del-3",
-          name: "Gamma Tech",
-          tier: "SMB",
-          status: "active",
-          healthScore: 80,
-          arr: 25000,
-          owner: "owner@apex.local",
-          contactName: "Gamma Contact",
-          contactRole: "Lead",
-          contactEmail: "contact@gamma.com",
-          since: "2026-03-01",
-          tags: ["saas"],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        customerFixture("cust-del-3", "Gamma Tech", "contact@gamma.com", 25000),
         ctxA
       );
-
       await db.documentsRepo.create(
-        {
-          id: "doc-del-3",
-          name: "SLA Agreement.pdf",
-          fileSize: "1.2 MB",
-          mimeType: "application/pdf",
-          storageKey: "docs/sla.pdf",
-          status: "indexed",
-          category: "sla",
-          tags: ["sla"],
-          customerId: cust.id,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        documentFixture("doc-del-3", "SLA Agreement.pdf", "SLA Agreement", cust.id),
         ctxA
       );
 
@@ -322,38 +405,17 @@ export async function runEntityLifecycleIntegrityTestSuite(): Promise<SuiteSumma
     async () => {
       const db = new DatabaseStore();
       const cust = await db.customersRepo.create(
-        {
-          id: "cust-del-4",
-          name: "Delta Retail",
-          tier: "Enterprise",
-          status: "active",
-          healthScore: 92,
-          arr: 200000,
-          owner: "owner@apex.local",
-          contactName: "Delta Contact",
-          contactRole: "VP Retail",
-          contactEmail: "delta@retail.com",
-          since: "2026-01-15",
-          tags: ["retail"],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        customerFixture("cust-del-4", "Delta Retail", "delta@retail.com", 200000),
         ctxA
       );
-
       await db.opportunitiesRepo.create(
-        {
-          id: "opp-del-4",
-          title: "Enterprise Expansion",
-          category: "expansion",
-          confidenceScore: 0.85,
-          sourceEntityType: "Customer",
-          sourceEntityId: cust.id,
-          projectedValue: 75000,
-          status: "identified",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        opportunityFixture(
+          "opp-del-4",
+          "Enterprise Expansion",
+          "Customer",
+          cust.id,
+          { category: "Customer expansion", potentialValue: 75000, confidence: 85 }
+        ),
         ctxA
       );
 
@@ -370,96 +432,32 @@ export async function runEntityLifecycleIntegrityTestSuite(): Promise<SuiteSumma
     async () => {
       const db = new DatabaseStore();
       const cust = await db.customersRepo.create(
-        {
-          id: "cust-del-5",
-          name: "Epsilon Analytics",
-          tier: "Mid-Market",
-          status: "active",
-          healthScore: 88,
-          arr: 45000,
-          owner: "owner@apex.local",
-          contactName: "Epsilon Contact",
-          contactRole: "CTO",
-          contactEmail: "cto@epsilon.com",
-          since: "2026-01-20",
-          tags: ["analytics"],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        customerFixture("cust-del-5", "Epsilon Analytics", "cto@epsilon.com", 45000),
         ctxA
       );
-
       const contract = await db.contractsRepo.create(
-        {
-          id: "cnt-del-5",
-          customerId: cust.id,
-          title: "Service Order",
-          contractNumber: "SO-2026-005",
-          type: "Order",
-          status: "active",
-          value: 45000,
-          startDate: "2026-01-01",
-          endDate: "2027-01-01",
-          renewalDaysRemaining: 180,
-          paymentTerms: "Net 30",
-          autoRenew: false,
-          owner: "owner@apex.local",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        contractFixture("cnt-del-5", cust.id, "Service Order", 45000),
         ctxA
       );
 
-      // Contract deletion first
       const deletedContract = await db.contractsRepo.delete(contract.id, ctxA);
       if (!deletedContract) throw new Error("Contract deletion failed");
-
-      // Customer deletion now succeeds
       const deletedCust = await db.customersRepo.delete(cust.id, ctxA);
       if (!deletedCust) throw new Error("Customer deletion failed after contract removal");
-
-      // Verifying customer is gone
       await assertThrows(() => db.customersRepo.findById(cust.id, ctxA), NotFoundError);
     }
   );
-
-  // =========================================================================
-  // 2. DOCUMENT & KNOWLEDGE DELETION INTEGRITY
-  // =========================================================================
 
   await runTest(
     "2.1 RESTRICT: Rejects Document deletion when KnowledgeItem depends on Document",
     async () => {
       const db = new DatabaseStore();
       const doc = await db.documentsRepo.create(
-        {
-          id: "doc-del-21",
-          name: "Security Whitepaper.pdf",
-          fileSize: "2.4 MB",
-          mimeType: "application/pdf",
-          storageKey: "docs/whitepaper.pdf",
-          status: "indexed",
-          category: "security",
-          tags: ["security", "compliance"],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        documentFixture("doc-del-21", "Security Whitepaper.pdf", "Compliance Document"),
         ctxA
       );
-
       await db.knowledgeRepo.create(
-        {
-          id: "k-del-21",
-          title: "SOC2 Compliance Framework",
-          category: "security",
-          content: "Comprehensive overview of SOC2 Type II compliance controls.",
-          summary: "SOC2 overview",
-          tags: ["compliance"],
-          confidenceScore: 0.95,
-          sourceDocId: doc.id,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        knowledgeFixture("k-del-21", "SOC2 Compliance Framework", doc.id),
         ctxA
       );
 
@@ -476,84 +474,36 @@ export async function runEntityLifecycleIntegrityTestSuite(): Promise<SuiteSumma
     async () => {
       const db = new DatabaseStore();
       const doc = await db.documentsRepo.create(
-        {
-          id: "doc-del-22",
-          name: "Architecture Diagram.png",
-          fileSize: "500 KB",
-          mimeType: "image/png",
-          storageKey: "docs/arch.png",
-          status: "indexed",
-          category: "architecture",
-          tags: ["diagram"],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        documentFixture("doc-del-22", "Architecture Diagram.png", "Other"),
+        ctxA
+      );
+      const knowledge = await db.knowledgeRepo.create(
+        knowledgeFixture("k-del-22", "System Topology", doc.id),
         ctxA
       );
 
-      const k = await db.knowledgeRepo.create(
-        {
-          id: "k-del-22",
-          title: "System Topology",
-          category: "architecture",
-          content: "Diagram overview",
-          tags: ["diagram"],
-          confidenceScore: 0.9,
-          sourceDocId: doc.id,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        ctxA
-      );
-
-      // Delete Knowledge record
-      await db.knowledgeRepo.delete(k.id, ctxA);
-
-      // Now Document delete succeeds
+      await db.knowledgeRepo.delete(knowledge.id, ctxA);
       const deleted = await db.documentsRepo.delete(doc.id, ctxA);
       if (!deleted) throw new Error("Document deletion failed");
       await assertThrows(() => db.documentsRepo.findById(doc.id, ctxA), NotFoundError);
     }
   );
 
-  // =========================================================================
-  // 3. WORKFLOW & WORKFLOW RUN DELETION INTEGRITY
-  // =========================================================================
-
   await runTest(
     "3.1 RESTRICT: Rejects Workflow deletion when WorkflowRun depends on Workflow",
     async () => {
       const db = new DatabaseStore();
-      const wf = await db.workflowsRepo.create(
-        {
-          id: "wf-del-31",
-          name: "Customer Onboarding Pipeline",
-          category: "onboarding",
-          trigger: "customer_created",
-          steps: [{ id: "step-1", name: "Send Welcome", type: "email" }],
-          status: "active",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+      const workflow = await db.workflowsRepo.create(
+        workflowFixture("wf-del-31", "Customer Onboarding Pipeline"),
         ctxA
       );
-
       await db.workflowRunsRepo.create(
-        {
-          id: "wfr-del-31",
-          workflowId: wf.id,
-          status: "running",
-          triggeredBy: ctxA.userId,
-          currentStep: "step-1",
-          logs: ["Started"],
-          startedAt: new Date().toISOString(),
-          createdAt: new Date().toISOString(),
-        },
+        workflowRunFixture("wfr-del-31", workflow.id),
         ctxA
       );
 
       await assertThrows(
-        () => db.workflowsRepo.delete(wf.id, ctxA),
+        () => db.workflowsRepo.delete(workflow.id, ctxA),
         ConflictError,
         "Cannot delete Workflow because dependent WorkflowRun records exist"
       );
@@ -564,65 +514,37 @@ export async function runEntityLifecycleIntegrityTestSuite(): Promise<SuiteSumma
     "3.2 SUCCESS: Workflow deletion succeeds when no WorkflowRuns exist",
     async () => {
       const db = new DatabaseStore();
-      const wf = await db.workflowsRepo.create(
-        {
-          id: "wf-del-32",
-          name: "Deprecated Email Batch",
-          category: "marketing",
-          trigger: "manual",
-          steps: [],
-          status: "paused",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+      const workflow = await db.workflowsRepo.create(
+        workflowFixture("wf-del-32", "Deprecated Email Batch", "paused"),
         ctxA
       );
-
-      const deleted = await db.workflowsRepo.delete(wf.id, ctxA);
+      const deleted = await db.workflowsRepo.delete(workflow.id, ctxA);
       if (!deleted) throw new Error("Workflow deletion failed");
-      await assertThrows(() => db.workflowsRepo.findById(wf.id, ctxA), NotFoundError);
+      await assertThrows(() => db.workflowsRepo.findById(workflow.id, ctxA), NotFoundError);
     }
   );
-
-  // =========================================================================
-  // 4. VALUE OPPORTUNITY & VALUE CAPTURED DELETION INTEGRITY
-  // =========================================================================
 
   await runTest(
     "4.1 RESTRICT: Rejects ValueOpportunity deletion when ValueCaptured references Opportunity",
     async () => {
       const db = new DatabaseStore();
-      const opp = await db.opportunitiesRepo.create(
-        {
-          id: "opp-del-41",
-          title: "Cost Optimization in Cloud",
-          category: "cost_reduction",
-          confidenceScore: 0.92,
-          sourceEntityType: "Operation",
-          sourceEntityId: "cloud-infra-audit",
-          projectedValue: 15000,
-          status: "in_progress",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+      const opportunity = await db.opportunitiesRepo.create(
+        opportunityFixture(
+          "opp-del-41",
+          "Cost Optimization in Cloud",
+          "Operation",
+          "cloud-infra-audit",
+          { category: "Process optimization", potentialValue: 15000, status: "Executing" }
+        ),
         ctxA
       );
-
       await db.valueCapturedRepo.create(
-        {
-          id: "vc-del-41",
-          opportunityId: opp.id,
-          capturedValue: 12500,
-          methodology: "EC2 Reserved Instance migration",
-          verifiedBy: ctxA.userEmail,
-          capturedAt: new Date().toISOString(),
-          createdAt: new Date().toISOString(),
-        },
+        valueCapturedFixture("vc-del-41", opportunity.id, opportunity.title),
         ctxA
       );
 
       await assertThrows(
-        () => db.opportunitiesRepo.delete(opp.id, ctxA),
+        () => db.opportunitiesRepo.delete(opportunity.id, ctxA),
         ConflictError,
         "Cannot delete ValueOpportunity because dependent ValueCaptured records exist"
       );
@@ -633,90 +555,42 @@ export async function runEntityLifecycleIntegrityTestSuite(): Promise<SuiteSumma
     "4.2 SUCCESS: ValueOpportunity deletion succeeds when no ValueCaptured records exist",
     async () => {
       const db = new DatabaseStore();
-      const opp = await db.opportunitiesRepo.create(
-        {
-          id: "opp-del-42",
-          title: "Discarded Opportunity",
-          category: "retention",
-          confidenceScore: 0.2,
-          sourceEntityType: "Operation",
-          sourceEntityId: "survey-feedback",
-          projectedValue: 5000,
-          status: "dismissed",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+      const opportunity = await db.opportunitiesRepo.create(
+        opportunityFixture(
+          "opp-del-42",
+          "Discarded Opportunity",
+          "Operation",
+          "survey-feedback",
+          { confidence: 20, risk: "High" }
+        ),
         ctxA
       );
-
-      const deleted = await db.opportunitiesRepo.delete(opp.id, ctxA);
+      const deleted = await db.opportunitiesRepo.delete(opportunity.id, ctxA);
       if (!deleted) throw new Error("Opportunity deletion failed");
-      await assertThrows(() => db.opportunitiesRepo.findById(opp.id, ctxA), NotFoundError);
+      await assertThrows(() => db.opportunitiesRepo.findById(opportunity.id, ctxA), NotFoundError);
     }
   );
-
-  // =========================================================================
-  // 5. POLYMORPHIC SOURCE ENTITY DELETIONS (CONTRACT, TRANSACTION, SIGNAL)
-  // =========================================================================
 
   await runTest(
     "5.1 RESTRICT: Rejects Contract deletion when ValueOpportunity polymorphically references Contract",
     async () => {
       const db = new DatabaseStore();
       const cust = await db.customersRepo.create(
-        {
-          id: "cust-del-51",
-          name: "Zeta Partners",
-          tier: "Enterprise",
-          status: "active",
-          healthScore: 95,
-          arr: 300000,
-          owner: "owner@apex.local",
-          contactName: "Zeta Contact",
-          contactRole: "Managing Director",
-          contactEmail: "zeta@partners.com",
-          since: "2026-01-01",
-          tags: ["partners"],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        customerFixture("cust-del-51", "Zeta Partners", "zeta@partners.com", 300000),
         ctxA
       );
-
       const contract = await db.contractsRepo.create(
-        {
-          id: "cnt-del-51",
-          customerId: cust.id,
-          title: "Multi-Year Service Contract",
-          contractNumber: "CTR-2026-051",
-          type: "Enterprise",
-          status: "active",
-          value: 300000,
-          startDate: "2026-01-01",
-          endDate: "2029-01-01",
-          renewalDaysRemaining: 365,
-          paymentTerms: "Annual Prepay",
-          autoRenew: true,
-          owner: "owner@apex.local",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        contractFixture("cnt-del-51", cust.id, "Multi-Year Service Contract", 300000),
         ctxA
       );
-
       await db.opportunitiesRepo.create(
-        {
-          id: "opp-del-51",
-          title: "Renewal Upsell",
-          category: "upsell",
-          confidenceScore: 0.9,
-          sourceEntityType: "Contract",
-          sourceEntityId: contract.id,
-          projectedValue: 60000,
-          status: "identified",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        opportunityFixture(
+          "opp-del-51",
+          "Renewal Upsell",
+          "Contract",
+          contract.id,
+          { category: "Customer expansion", potentialValue: 60000 }
+        ),
         ctxA
       );
 
@@ -732,34 +606,15 @@ export async function runEntityLifecycleIntegrityTestSuite(): Promise<SuiteSumma
     "5.2 RESTRICT: Rejects Signal deletion when ValueOpportunity polymorphically references Signal",
     async () => {
       const db = new DatabaseStore();
-      const signal = await db.signalsRepo.create(
-        {
-          id: "sig-del-52",
-          title: "Usage Surge Detected",
-          description: "API call volume exceeded normal baseline by 300%",
-          source: "API Gateway Telemetry",
-          category: "usage",
-          severity: "medium",
-          status: "active",
-          timestamp: new Date().toISOString(),
-          metadata: { baseline: 1000, current: 4000 },
-        },
-        ctxA
-      );
-
+      const signal = await db.signalsRepo.create(signalFixture("sig-del-52"), ctxA);
       await db.opportunitiesRepo.create(
-        {
-          id: "opp-del-52",
-          title: "Tier Upgrade Opportunity",
-          category: "expansion",
-          confidenceScore: 0.88,
-          sourceEntityType: "Signal",
-          sourceEntityId: signal.id,
-          projectedValue: 20000,
-          status: "identified",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        opportunityFixture(
+          "opp-del-52",
+          "Tier Upgrade Opportunity",
+          "Signal",
+          signal.id,
+          { category: "Customer expansion", potentialValue: 20000, confidence: 88 }
+        ),
         ctxA
       );
 
@@ -771,78 +626,23 @@ export async function runEntityLifecycleIntegrityTestSuite(): Promise<SuiteSumma
     }
   );
 
-  // =========================================================================
-  // 6. TENANT ISOLATION BOUNDARY IN DELETION INTEGRITY
-  // =========================================================================
-
   await runTest(
     "6.1 ISOLATION: Org B dependent record does NOT block deletion of Org A record",
     async () => {
       const db = new DatabaseStore();
-      // Org A Customer
       const custA = await db.customersRepo.create(
-        {
-          id: "cust-shared-id-1",
-          name: "Org A Customer",
-          tier: "SMB",
-          status: "active",
-          healthScore: 90,
-          arr: 10000,
-          owner: "alpha@apex.local",
-          contactName: "Contact A",
-          contactRole: "Lead",
-          contactEmail: "a@test.com",
-          since: "2026-01-01",
-          tags: ["a"],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        customerFixture("cust-shared-id-1", "Org A Customer", "a@test.com", 10000),
         ctxA
       );
-
-      // Org B Customer with different ID, and Org B Contract referencing Org B customer
       const custB = await db.customersRepo.create(
-        {
-          id: "cust-org-b-1",
-          name: "Org B Customer",
-          tier: "SMB",
-          status: "active",
-          healthScore: 90,
-          arr: 20000,
-          owner: "beta@apex.local",
-          contactName: "Contact B",
-          contactRole: "Lead",
-          contactEmail: "b@test.com",
-          since: "2026-01-01",
-          tags: ["b"],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        customerFixture("cust-org-b-1", "Org B Customer", "b@test.com", 20000),
         ctxB
       );
-
       await db.contractsRepo.create(
-        {
-          id: "cnt-org-b-1",
-          customerId: custB.id,
-          title: "Org B Contract",
-          contractNumber: "CTR-B-1",
-          type: "Standard",
-          status: "active",
-          value: 20000,
-          startDate: "2026-01-01",
-          endDate: "2027-01-01",
-          renewalDaysRemaining: 100,
-          paymentTerms: "Net 30",
-          autoRenew: false,
-          owner: "beta@apex.local",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        contractFixture("cnt-org-b-1", custB.id, "Org B Contract", 20000),
         ctxB
       );
 
-      // Deleting custA in Org A should succeed without interference from Org B records
       const deleted = await db.customersRepo.delete(custA.id, ctxA);
       if (!deleted) throw new Error("Deletion in Org A failed");
     }
@@ -853,26 +653,9 @@ export async function runEntityLifecycleIntegrityTestSuite(): Promise<SuiteSumma
     async () => {
       const db = new DatabaseStore();
       const custA = await db.customersRepo.create(
-        {
-          id: "cust-org-a-private",
-          name: "Org A Private Customer",
-          tier: "Enterprise",
-          status: "active",
-          healthScore: 95,
-          arr: 500000,
-          owner: "alpha@apex.local",
-          contactName: "Private Lead",
-          contactRole: "Lead",
-          contactEmail: "lead@priv.com",
-          since: "2026-01-01",
-          tags: ["private"],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        customerFixture("cust-org-a-private", "Org A Private Customer", "lead@priv.com", 500000),
         ctxA
       );
-
-      // Org B user attempts to delete Org A customer
       await assertThrows(
         () => db.customersRepo.delete(custA.id, ctxB),
         CrossTenantViolationError
@@ -880,39 +663,19 @@ export async function runEntityLifecycleIntegrityTestSuite(): Promise<SuiteSumma
     }
   );
 
-  // =========================================================================
-  // 7. AUDIT TRAIL LOGGING ON DELETION
-  // =========================================================================
-
   await runTest(
     "7.1 AUDIT: Deleting an entity logs a successful audit event with actor context",
     async () => {
       const db = new DatabaseStore();
       const cust = await db.customersRepo.create(
-        {
-          id: "cust-audit-del",
-          name: "Audit Test Customer",
-          tier: "SMB",
-          status: "active",
-          healthScore: 90,
-          arr: 15000,
-          owner: "alpha@apex.local",
-          contactName: "Audit Contact",
-          contactRole: "Manager",
-          contactEmail: "audit@test.com",
-          since: "2026-01-01",
-          tags: ["audit"],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
+        customerFixture("cust-audit-del", "Audit Test Customer", "audit@test.com", 15000),
         ctxA
       );
-
       await db.customersRepo.delete(cust.id, ctxA);
 
       const logs = await db.auditLogsRepo.findMany(ctxA, { limit: 10 });
       const deleteLog = logs.items.find(
-        (l) => l.action === "customer:delete" && l.resourceId === cust.id
+        (log) => log.action === "customer:delete" && log.resourceId === cust.id
       );
 
       if (!deleteLog) {
