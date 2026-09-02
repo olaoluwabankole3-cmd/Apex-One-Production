@@ -1,6 +1,6 @@
 /**
  * APEX ONE — AI Orchestration & Tool Registry Domain Service
- * 
+ *
  * Rules:
  * 1. AI NEVER has raw/unrestricted database access or SQL execution.
  * 2. AI interacts exclusively through authorized, tenant-aware tools.
@@ -13,6 +13,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { TenantContext, requirePermission } from "../../core/security";
 import { db, DatabaseStore } from "../../database/store";
+import { MAX_PAGE_SIZE } from "../../database/querySpecification";
+import { collectAllPages } from "../../database/paginationTraversal";
 
 let aiClient: GoogleGenAI | null = null;
 function getAiClient() {
@@ -64,11 +66,15 @@ export function createAuthorizedAiTools(database: DatabaseStore = db): Record<st
       description: "Retrieve customers and ARR within the authenticated organization",
       parameters: { type: "object", properties: { status: { type: "string" } } },
       handler: async (args, ctx) => {
-        const customers = await database.customersRepo.findMany(ctx, {
-          filter: {
-            status: args.status ? (args.status as any) : undefined,
-          },
-        });
+        const customers = await collectAllPages((cursor) =>
+          database.customersRepo.findMany(ctx, {
+            where: {
+              status: args.status ? (args.status as any) : undefined,
+            },
+            limit: MAX_PAGE_SIZE,
+            cursor,
+          })
+        );
         return customers.map((c) => ({
           id: c.id,
           name: c.name,
@@ -83,7 +89,9 @@ export function createAuthorizedAiTools(database: DatabaseStore = db): Record<st
       description: "Retrieve active value discovery and expansion opportunities for the organization",
       parameters: { type: "object", properties: {} },
       handler: async (_args, ctx) => {
-        const opps = await database.opportunitiesRepo.findMany(ctx);
+        const opps = await collectAllPages((cursor) =>
+          database.opportunitiesRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
+        );
         return opps.map((o) => ({
           id: o.id,
           title: o.title,
@@ -98,12 +106,21 @@ export function createAuthorizedAiTools(database: DatabaseStore = db): Record<st
       description: "Search institutional memory facts, policies, and historical audit findings with provenance",
       parameters: { type: "object", properties: { query: { type: "string" } } },
       handler: async (args, ctx) => {
-        const q = typeof args.query === "string" ? args.query : undefined;
-        const memories = await database.memoryRepo.findMany(ctx, {
-          filter: {
-            search: q,
-          },
-        });
+        const q = typeof args.query === "string" ? args.query.trim() : undefined;
+        const memories = await collectAllPages((cursor) =>
+          database.memoryRepo.findMany(ctx, {
+            ...(q
+              ? {
+                  search: {
+                    fields: ["title", "content", "source", "sourceReference"],
+                    term: q,
+                  },
+                }
+              : {}),
+            limit: MAX_PAGE_SIZE,
+            cursor,
+          })
+        );
         return memories.map((m) => ({
           title: m.title,
           content: m.content,
@@ -117,11 +134,15 @@ export function createAuthorizedAiTools(database: DatabaseStore = db): Record<st
       description: "Retrieve indexed document summaries and extraction records for the organization",
       parameters: { type: "object", properties: { category: { type: "string" } } },
       handler: async (args, ctx) => {
-        const docs = await database.documentsRepo.findMany(ctx, {
-          filter: {
-            category: args.category ? (args.category as any) : undefined,
-          },
-        });
+        const docs = await collectAllPages((cursor) =>
+          database.documentsRepo.findMany(ctx, {
+            where: {
+              category: args.category ? (args.category as any) : undefined,
+            },
+            limit: MAX_PAGE_SIZE,
+            cursor,
+          })
+        );
         return docs.map((d) => ({
           id: d.id,
           name: d.name,
@@ -136,7 +157,9 @@ export function createAuthorizedAiTools(database: DatabaseStore = db): Record<st
       description: "Retrieve active contract metadata, SLAs, and indexation clauses for the organization",
       parameters: { type: "object", properties: {} },
       handler: async (_args, ctx) => {
-        const contracts = await database.contractsRepo.findMany(ctx);
+        const contracts = await collectAllPages((cursor) =>
+          database.contractsRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
+        );
         return contracts.map((c) => ({
           id: c.id,
           title: c.title,
@@ -150,7 +173,6 @@ export function createAuthorizedAiTools(database: DatabaseStore = db): Record<st
   };
 }
 
-// Authorized Tenant-Aware Tools Registry
 export const authorizedAiTools: Record<string, AiToolDefinition> = createAuthorizedAiTools(db);
 
 export class AiOrchestratorService {
@@ -166,13 +188,22 @@ export class AiOrchestratorService {
     const orgName = org?.name || "Apex Demo Group";
     const currency = org?.currencySymbol || "₦";
 
-    // 1. Gather tenant-grounded evidence strictly through repository scoping
     const [tenantCustomers, tenantOpps, tenantMemories, tenantContracts, tenantSignals] = await Promise.all([
-      this.database.customersRepo.findMany(ctx),
-      this.database.opportunitiesRepo.findMany(ctx),
-      this.database.memoryRepo.findMany(ctx),
-      this.database.contractsRepo.findMany(ctx),
-      this.database.signalsRepo.findMany(ctx),
+      collectAllPages((cursor) =>
+        this.database.customersRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
+      ),
+      collectAllPages((cursor) =>
+        this.database.opportunitiesRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
+      ),
+      collectAllPages((cursor) =>
+        this.database.memoryRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
+      ),
+      collectAllPages((cursor) =>
+        this.database.contractsRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
+      ),
+      collectAllPages((cursor) =>
+        this.database.signalsRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })
+      ),
     ]);
 
     const totalRecordsGrounded =
@@ -182,7 +213,6 @@ export class AiOrchestratorService {
       tenantContracts.length +
       tenantSignals.length;
 
-    // Check if organization has sufficient data
     if (totalRecordsGrounded === 0) {
       return {
         text: `**[Apex Intelligence Engine — Data Status: Insufficient Data]**\n\nNo active customer, contract, or operational telemetry records exist for **${orgName}**.\n\nTo perform high-confidence value scans and revenue calibration, please connect telemetry feeds or upload contract documentation in the **Knowledge & Documents** hub.`,
@@ -200,7 +230,6 @@ export class AiOrchestratorService {
     const totalPotentialVal = tenantOpps.reduce((sum, o) => sum + (o.potentialValue || 0), 0);
     const unindexedContracts = tenantContracts.filter((c) => !c.volatilityIndexationClause);
 
-    // Extract structured claims
     const claims: AiEvidenceClaim[] = [];
     if (tenantCustomers.length > 0) {
       claims.push({
@@ -271,7 +300,6 @@ Always format structured recommendations with:
         if (timeoutTimer) clearTimeout(timeoutTimer);
       }
     } catch {
-      // Clean, evidence-grounded non-fabricating response if Gemini API key is not configured in environment or timeout
       responseStatus = "requires_verification";
       generatedText = `**[Apex Intelligence Engine — Telemetry Analysis for ${orgName}]**
 
