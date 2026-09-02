@@ -1,30 +1,64 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTenantContext } from "@/lib/backend/core/security";
 import { valueService } from "@/lib/backend/domains/value/valueService";
-import { BackendError } from "@/lib/backend/core/errors";
+import { Validator } from "@/lib/backend/core/validation";
+import {
+  assertAllowedQueryKeys,
+  optionalQueryString,
+  parseCursorPagination,
+} from "@/lib/backend/core/requestValidation";
+import { serializeApiError } from "@/lib/backend/core/httpContract";
+import { toCollectionResponse } from "@/lib/contracts/http";
+
+const VALUE_CATEGORIES = [
+  "Customer expansion",
+  "Dormant customers",
+  "Contract optimization",
+  "Revenue recovery",
+  "Process optimization",
+  "Capacity utilization",
+  "all",
+] as const;
+const VALUE_STATUSES = [
+  "Identified",
+  "Validated",
+  "Approved",
+  "Executing",
+  "Captured",
+  "all",
+] as const;
 
 export async function GET(req: NextRequest) {
+  let requestId: string | undefined;
+
   try {
     const ctx = await resolveTenantContext(req.headers);
-    const { searchParams } = new URL(req.url);
-    const category = searchParams.get("category") || undefined;
-    const status = searchParams.get("status") || undefined;
-    const limitParam = searchParams.get("limit");
-    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
-    const cursor = searchParams.get("cursor") || undefined;
+    requestId = ctx.requestId;
+    const { searchParams } = req.nextUrl;
 
-    const result = await valueService.getOpportunities(ctx, { category, status, limit, cursor });
-    return NextResponse.json({
-      success: true,
-      data: result.items,
-      cursor: result.nextCursor,
-      hasMore: result.hasMore,
-      count: result.count,
+    assertAllowedQueryKeys(searchParams, ["category", "status", "limit", "cursor"]);
+
+    const category = Validator.optionalEnum(
+      optionalQueryString(searchParams, "category"),
+      VALUE_CATEGORIES,
+      "category"
+    );
+    const status = Validator.optionalEnum(
+      optionalQueryString(searchParams, "status"),
+      VALUE_STATUSES,
+      "status"
+    );
+    const pagination = parseCursorPagination(searchParams);
+
+    const result = await valueService.getOpportunities(ctx, {
+      category,
+      status,
+      ...pagination,
     });
-  } catch (err: any) {
-    if (err instanceof BackendError) {
-      return NextResponse.json({ error: err.message, code: err.code }, { status: err.statusCode });
-    }
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+
+    return NextResponse.json(toCollectionResponse(result, requestId));
+  } catch (error: unknown) {
+    const serialized = serializeApiError(error, requestId);
+    return NextResponse.json(serialized.body, { status: serialized.status });
   }
 }
