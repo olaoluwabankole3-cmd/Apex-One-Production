@@ -35,18 +35,20 @@ const tenantA: TenantContext = {
   organizationId: "org-alpha",
   userId: "user-alpha-1",
   userEmail: "alpha@apex.corp",
-  roles: ["org_admin"],
+  userRole: "Administrator",
   permissions: ["*"],
   requestId: "req-test-alpha",
+  timestamp: "2026-09-02T00:00:00.000Z",
 };
 
 const tenantB: TenantContext = {
   organizationId: "org-beta",
   userId: "user-beta-1",
   userEmail: "beta@apex.corp",
-  roles: ["org_admin"],
+  userRole: "Administrator",
   permissions: ["*"],
   requestId: "req-test-beta",
+  timestamp: "2026-09-02T00:00:00.000Z",
 };
 
 function customer(id: string, overrides: Record<string, unknown> = {}) {
@@ -172,15 +174,36 @@ export async function runRepositoryQuerySpecificationTestSuite(): Promise<TestSu
   });
 
   await test("QuerySpec: array operators on tags", async (db) => {
+    const now = "2026-01-01T00:00:00.000Z";
     await db.documentsRepo.create({
-      id: "doc-1", name: "Q4 Financials", category: "financial", fileType: "pdf", fileSize: 1024,
-      storageUri: "uri://1", tags: ["finance", "quarterly", "confidential"], status: "indexed",
-      uploadedBy: "user-1", uploadedAt: "2026-01-01",
+      id: "doc-1",
+      name: "Q4 Financials",
+      category: "Other",
+      fileType: "pdf",
+      size: "1 KB",
+      storageKey: "documents/doc-1.pdf",
+      metadata: { fileSizeBytes: 1024, mimeType: "application/pdf", storageUri: "uri://1" },
+      tags: ["finance", "quarterly", "confidential"],
+      status: "indexed",
+      uploadedBy: "",
+      extractedFields: [],
+      createdAt: now,
+      updatedAt: now,
     }, tenantA);
     await db.documentsRepo.create({
-      id: "doc-2", name: "Engineering Roadmap", category: "technical", fileType: "pdf", fileSize: 2048,
-      storageUri: "uri://2", tags: ["engineering", "roadmap"], status: "indexed",
-      uploadedBy: "user-1", uploadedAt: "2026-01-01",
+      id: "doc-2",
+      name: "Engineering Roadmap",
+      category: "Other",
+      fileType: "pdf",
+      size: "2 KB",
+      storageKey: "documents/doc-2.pdf",
+      metadata: { fileSizeBytes: 2048, mimeType: "application/pdf", storageUri: "uri://2" },
+      tags: ["engineering", "roadmap"],
+      status: "indexed",
+      uploadedBy: "",
+      extractedFields: [],
+      createdAt: now,
+      updatedAt: now,
     }, tenantA);
 
     const contains = await db.documentsRepo.findMany(tenantA, { where: { tags: { arrayContains: "confidential" } } });
@@ -347,15 +370,13 @@ export async function runRepositoryQuerySpecificationTestSuite(): Promise<TestSu
       customerId: "cust-risk",
       title: "Master Services Agreement",
       contractValue: 100000,
-      annualRecurringRevenue: 100000,
-      currency: "USD",
       startDate: "2025-01-01",
       endDate: "2026-03-31",
       renewalDaysRemaining: 15,
       status: "active",
-      billingCadence: "annual",
       slaCompliance: 99.9,
       volatilityIndexationClause: false,
+      createdAt: "2025-01-01T00:00:00.000Z",
     }, tenantA);
     const expiring = await db.contractsRepo.findExpiringSoon(30, tenantA);
     if (expiring.items[0]?.id !== "contract-1") throw new Error("contract convenience query failed");
@@ -364,11 +385,12 @@ export async function runRepositoryQuerySpecificationTestSuite(): Promise<TestSu
       id: "knowledge-1",
       title: "Security Guidelines",
       content: "Use tenant isolation and encryption.",
-      category: "policy",
+      category: "Policy",
+      author: "Security Team",
       tags: ["security"],
-      confidenceScore: 0.98,
-      verifiedBy: "user-1",
-      verifiedAt: "2026-01-01",
+      version: 1,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
     }, tenantA);
     const knowledge = await db.knowledgeRepo.searchContent("encryption", tenantA);
     if (knowledge.items[0]?.id !== "knowledge-1") throw new Error("knowledge convenience query failed");
