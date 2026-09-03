@@ -6,8 +6,8 @@
  * 2. AI interacts exclusively through authorized, tenant-aware tools.
  * 3. Every tool execution is validated against the authenticated TenantContext.
  * 4. AI MUST NEVER fabricate financial figures or business facts.
- * 5. When data is missing, AI returns structured status: 'insufficient_data' or 'low_confidence'.
- * 6. Internal responses carry an explicit evidence chain (claim, source, evidence, confidence).
+ * 5. Grounding in source records is distinct from verification/certification.
+ * 6. AI-generated claims start unverified/uncertified unless a canonical evidence decision exists.
  */
 
 import { GoogleGenAI } from "@google/genai";
@@ -16,6 +16,8 @@ import { DatabaseStore } from "../../database/store";
 import { createApplicationInfrastructure } from "../../infrastructure/composition";
 import { MAX_PAGE_SIZE } from "../../database/querySpecification";
 import { collectAllPages } from "../../database/paginationTraversal";
+import { EvidenceService } from "../evidence/evidenceService";
+import type { CertificationState, VerificationState } from "../evidence/model";
 
 let aiClient: GoogleGenAI | null = null;
 function getAiClient() {
@@ -41,12 +43,16 @@ export interface AiEvidenceClaim {
   source: string;
   evidence: string;
   confidence: number;
+  verificationState: VerificationState;
+  certificationState: CertificationState;
 }
 
 export interface AiIntelligenceResponse {
   text: string;
   claims: AiEvidenceClaim[];
-  status: "verified_evidence" | "insufficient_data" | "low_confidence" | "requires_verification";
+  status: "grounded_records" | "insufficient_data" | "low_confidence" | "requires_verification";
+  verificationState: VerificationState;
+  certificationState: CertificationState;
   groundedRecordsCount: number;
   organizationId: string;
   mode: string;
@@ -63,6 +69,8 @@ export interface AiToolDefinition {
 export function createAuthorizedAiTools(
   database: DatabaseStore = createApplicationInfrastructure().database
 ): Record<string, AiToolDefinition> {
+  const evidenceService = new EvidenceService(database);
+
   return {
     get_tenant_customers: {
       name: "get_tenant_customers",
@@ -92,7 +100,7 @@ export function createAuthorizedAiTools(
     },
     get_organizational_memory: {
       name: "get_organizational_memory",
-      description: "Search institutional memory facts, policies, and historical audit findings with provenance",
+      description: "Search institutional memory records with source attribution and canonical evidence state",
       parameters: { type: "object", properties: { query: { type: "string" } } },
       handler: async (args, ctx) => {
         const q = typeof args.query === "string" ? args.query.trim() : undefined;
@@ -103,7 +111,19 @@ export function createAuthorizedAiTools(
             cursor,
           })
         );
-        return memories.map((m) => ({ title: m.title, content: m.content, source: m.source, confidence: m.confidence }));
+        return Promise.all(memories.map(async (m) => {
+          const evidence = await evidenceService.getStatus("OrganizationalMemory", m.id, ctx);
+          return {
+            id: m.id,
+            title: m.title,
+            content: m.content,
+            source: m.source,
+            sourceReference: m.sourceReference,
+            confidence: m.confidence,
+            verificationState: evidence.verificationState,
+            certificationState: evidence.certificationState,
+          };
+        }));
       },
     },
     get_tenant_documents: {
@@ -145,13 +165,17 @@ export function createAuthorizedAiTools(
 export const authorizedAiTools: Record<string, AiToolDefinition> = createAuthorizedAiTools();
 
 export class AiOrchestratorService {
-  constructor(private readonly database: DatabaseStore = createApplicationInfrastructure().database) {}
+  private readonly evidenceService: EvidenceService;
+
+  constructor(private readonly database: DatabaseStore = createApplicationInfrastructure().database) {
+    this.evidenceService = new EvidenceService(database);
+  }
 
   public async processIntelligencePrompt(dto: AiChatRequestDto, ctx: TenantContext): Promise<AiIntelligenceResponse> {
     requirePermission(ctx, "ai:execute");
 
-    const org = this.database.organizations.get(ctx.organizationId);
-    const orgName = org?.name || "Apex Demo Group";
+    const org = await this.database.findOrganizationById(ctx.organizationId);
+    const orgName = org?.name || "Organization";
     const currency = org?.currencySymbol || "₦";
 
     const [tenantCustomers, tenantOpps, tenantMemories, tenantContracts, tenantSignals] = await Promise.all([
@@ -162,6 +186,16 @@ export class AiOrchestratorService {
       collectAllPages((cursor) => this.database.signalsRepo.findMany(ctx, { limit: MAX_PAGE_SIZE, cursor })),
     ]);
 
+    const memoryEvidenceStates = await Promise.all(
+      tenantMemories.map((memory) => this.evidenceService.getStatus("OrganizationalMemory", memory.id, ctx))
+    );
+    const canonicallyVerifiedMemories = memoryEvidenceStates.filter(
+      (state) => state.verificationState === "verified"
+    ).length;
+    const canonicallyCertifiedMemories = memoryEvidenceStates.filter(
+      (state) => state.certificationState === "certified"
+    ).length;
+
     const totalRecordsGrounded =
       tenantCustomers.length + tenantOpps.length + tenantMemories.length + tenantContracts.length + tenantSignals.length;
 
@@ -170,6 +204,8 @@ export class AiOrchestratorService {
         text: `**[Apex Intelligence Engine — Data Status: Insufficient Data]**\n\nNo active customer, contract, or operational telemetry records exist for **${orgName}**.\n\nTo perform high-confidence value scans and revenue calibration, please connect telemetry feeds or upload contract documentation in the **Knowledge & Documents** hub.`,
         claims: [],
         status: "insufficient_data",
+        verificationState: "unverified",
+        certificationState: "uncertified",
         groundedRecordsCount: 0,
         organizationId: ctx.organizationId,
         mode: dto.mode || "Revenue",
@@ -187,40 +223,48 @@ export class AiOrchestratorService {
       claims.push({
         claim: `Monitors ${tenantCustomers.length} active customer accounts representing ${currency}${totalArr.toLocaleString()} annualized recurring value.`,
         source: "CustomerRepository",
-        evidence: `Verified across ${tenantCustomers.length} customer records.`,
+        evidence: `Calculated from ${tenantCustomers.length} tenant-scoped customer records.`,
         confidence: 100,
+        verificationState: "unverified",
+        certificationState: "uncertified",
       });
     }
     if (tenantOpps.length > 0) {
       claims.push({
         claim: `Identified ${tenantOpps.length} active value expansion/recovery opportunities representing ${currency}${totalPotentialVal.toLocaleString()}.`,
         source: "ValueOpportunityRepository",
-        evidence: `Aggregated from ${tenantOpps.length} verified pipeline opportunities.`,
+        evidence: `Aggregated from ${tenantOpps.length} recorded pipeline opportunities; record presence is not verification.`,
         confidence: 94,
+        verificationState: "unverified",
+        certificationState: "uncertified",
       });
     }
     if (unindexedContracts.length > 0) {
       claims.push({
         claim: `${unindexedContracts.length} contract(s) lack CBN volatility indexation clauses, presenting currency exposure risks.`,
         source: "ContractRepository",
-        evidence: `Verified: ${unindexedContracts.map((c) => c.title).join(", ")}`,
+        evidence: `Source records: ${unindexedContracts.map((c) => c.title).join(", ")}`,
         confidence: 96,
+        verificationState: "unverified",
+        certificationState: "uncertified",
       });
     }
 
     const contextSnippet = `
-ORGANIZATION CONTEXT (Strict Grounding):
+ORGANIZATION CONTEXT (Strict Source Grounding):
 - Organization: ${orgName} (ID: ${ctx.organizationId})
 - Currency: ${currency} (${org?.currency || "NGN"})
 - Active Monitored Customers: ${tenantCustomers.length} (Total ARR: ${currency}${totalArr.toLocaleString()})
 - Active Contracts: ${tenantContracts.length} (Total Contract Value: ${currency}${totalContractVal.toLocaleString()})
 - Value Opportunities: ${tenantOpps.length} (Total Potential Value: ${currency}${totalPotentialVal.toLocaleString()})
 - Active Operational Signals: ${tenantSignals.length}
-- Verified Institutional Memories: ${tenantMemories.length}
+- Institutional Memory Records: ${tenantMemories.length}
+- Canonically Verified Institutional Memories: ${canonicallyVerifiedMemories}
+- Canonically Certified Institutional Memories: ${canonicallyCertifiedMemories}
 `;
 
     let generatedText = "";
-    let responseStatus: "verified_evidence" | "requires_verification" | "low_confidence" = "verified_evidence";
+    let responseStatus: "grounded_records" | "requires_verification" | "low_confidence" = "grounded_records";
 
     try {
       const ai = getAiClient();
@@ -229,15 +273,16 @@ ORGANIZATION CONTEXT (Strict Grounding):
         contents: `${contextSnippet}\n\nUSER QUERY (${dto.mode || "General"} Analysis Mode):\n${dto.prompt}`,
         config: {
           systemInstruction: `You are the APEX ONE Value Analyst & Enterprise Intelligence Orchestrator for ${orgName}.
-You analyze operations, contracts, and revenue leakages with board-level precision based ONLY on the grounded data provided.
+You analyze operations, contracts, and revenue leakages with board-level precision based ONLY on the grounded source data provided.
 NEVER fabricate numbers, customers, or financial amounts not substantiated by the context.
+Do not describe a record, aggregate, inference, or AI-generated claim as verified or certified unless the context explicitly supplies that canonical evidence state.
 All calculations must strictly use ${currency}.
 Always format structured recommendations with:
 1. **INSIGHT**: Qualitative diagnosis
-2. **FINANCIAL IMPACT**: Explicit calculation grounded in verified records
+2. **FINANCIAL IMPACT**: Explicit calculation grounded in source records
 3. **REASON**: Underlying operational friction
 4. **RECOMMENDED ACTION**: Specific play to deploy
-5. **CONFIDENCE**: Percentage bound based on data completeness
+5. **CONFIDENCE**: Percentage based on source completeness; confidence is not verification or certification
 6. **NEXT STEP**: Immediate tactical move`,
         },
       });
@@ -253,17 +298,17 @@ Always format structured recommendations with:
       }
     } catch {
       responseStatus = "requires_verification";
-      generatedText = `**[Apex Intelligence Engine — Telemetry Analysis for ${orgName}]**
+      generatedText = `**[Apex Intelligence Engine — Source-Grounded Analysis for ${orgName}]**
 
-1. **INSIGHT**: Analyzed organizational telemetry for **${orgName}** under **${dto.mode || "Revenue"}** mode across ${totalRecordsGrounded} verified tenant records.
-2. **FINANCIAL IMPACT**: Monitored active ARR of **${currency}${totalArr.toLocaleString()}** across ${tenantCustomers.length} corporate accounts, with **${currency}${totalPotentialVal.toLocaleString()}** identified in active value opportunities.
+1. **INSIGHT**: Analyzed organizational telemetry for **${orgName}** under **${dto.mode || "Revenue"}** mode across ${totalRecordsGrounded} tenant-scoped source records.
+2. **FINANCIAL IMPACT**: Monitored active ARR of **${currency}${totalArr.toLocaleString()}** across ${tenantCustomers.length} corporate accounts, with **${currency}${totalPotentialVal.toLocaleString()}** recorded in active value opportunities.
 3. **REASON**: ${unindexedContracts.length > 0 ? `${unindexedContracts.length} contract(s) lack FX indexation clauses during quarterly review windows.` : "Operational throughput bottlenecks detected in active telemetry."}
-4. **RECOMMENDED ACTION**: ${tenantOpps.length > 0 ? `Execute high-priority opportunity: "${tenantOpps[0].title}".` : "Initiate comprehensive value discovery scan across connected customer tiers."}
-5. **CONFIDENCE**: 92% (Grounded in verified tenant records)
-6. **NEXT STEP**: Supply GEMINI_API_KEY in **Settings > Secrets** for live generative reasoning, or execute approved actions in the Execution Actions center.`;
+4. **RECOMMENDED ACTION**: ${tenantOpps.length > 0 ? `Review high-priority opportunity: "${tenantOpps[0].title}" before execution.` : "Initiate comprehensive value discovery scan across connected customer tiers."}
+5. **CONFIDENCE**: 92% based on source completeness. This confidence score is not a verification or certification decision.
+6. **NEXT STEP**: Supply GEMINI_API_KEY in **Settings > Secrets** for live generative reasoning, then route material claims through the canonical evidence verification workflow before relying on them as verified facts.`;
     }
 
-    this.database.recordAuditLog({
+    await this.database.recordAuditLog({
       organizationId: ctx.organizationId,
       actorId: ctx.userId,
       actorEmail: ctx.userEmail,
@@ -272,7 +317,13 @@ Always format structured recommendations with:
       resourceId: dto.mode || "Revenue",
       requestId: ctx.requestId,
       status: "success",
-      metadata: { promptLength: dto.prompt.length, mode: dto.mode, recordsGrounded: totalRecordsGrounded },
+      metadata: {
+        promptLength: dto.prompt.length,
+        mode: dto.mode,
+        recordsGrounded: totalRecordsGrounded,
+        canonicalVerifiedMemories: canonicallyVerifiedMemories,
+        canonicalCertifiedMemories: canonicallyCertifiedMemories,
+      },
       timestamp: new Date().toISOString(),
     });
 
@@ -280,6 +331,8 @@ Always format structured recommendations with:
       text: generatedText,
       claims,
       status: responseStatus,
+      verificationState: "unverified",
+      certificationState: "uncertified",
       groundedRecordsCount: totalRecordsGrounded,
       organizationId: ctx.organizationId,
       mode: dto.mode || "Revenue",

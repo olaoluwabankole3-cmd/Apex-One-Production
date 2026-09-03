@@ -79,7 +79,7 @@ export interface CapturedLedgerEntry {
   category: string;
   amountCaptured: number;
   impactMetrics: string;
-  verifiedBy: string;
+  recordedBy?: string;
 }
 
 interface ValueEngineContextValue {
@@ -188,7 +188,7 @@ export function ValueEngineProvider({ children }: { children: ReactNode }) {
                 category: opp.category === "Revenue Leakage" || opp.category === "Leakage" ? "Revenue Recovered" : "Cost Avoided",
                 amountCaptured: opp.valueAmount,
                 impactMetrics: `Manually executed board action to recapture ${opp.title} value.`,
-                verifiedBy: "Yusuf Alao (CFO Office)",
+                recordedBy: user?.name || user?.email || "Authenticated user",
               },
               ...prevLedger,
             ];
@@ -222,7 +222,7 @@ export function ValueEngineProvider({ children }: { children: ReactNode }) {
 
         if (isCompleted) {
           newLogs.push("Value Capture Play EXECUTED successfully.");
-          newLogs.push("Verifying value retention in live telemetry...");
+          newLogs.push("Recording value-retention telemetry...");
           newLogs.push("Value captured and routed to Finance Ledger.");
 
           // If completed, update related opportunity status
@@ -236,7 +236,7 @@ export function ValueEngineProvider({ children }: { children: ReactNode }) {
             );
           }
 
-          // Add to captured ledger
+          // Add to captured ledger as a recorded event. Canonical verification/certification lives in EvidenceService.
           const today = new Date().toISOString().split("T")[0];
           setCapturedLedger((prevLedger) => [
             {
@@ -246,7 +246,7 @@ export function ValueEngineProvider({ children }: { children: ReactNode }) {
               category: play.type === "leakage" ? "Revenue Recovered" : "Cost Avoided",
               amountCaptured: play.estimatedGain,
               impactMetrics: `Automated playbook executed to fully resolve targeted waste and leakage.`,
-              verifiedBy: "APEX AI Smart Validator",
+              recordedBy: "APEX automation",
             },
             ...prevLedger,
           ]);

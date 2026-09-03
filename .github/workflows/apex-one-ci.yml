@@ -25,20 +25,16 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: "20.x"
-
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
-
       - name: Install dependencies (frozen lockfile)
         run: bun install --frozen-lockfile
-
       - name: Run security and integrity tests
         run: bun run test:security
 
@@ -46,24 +42,19 @@ jobs:
     name: Production Composition Root
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: "20.x"
-
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
-
       - name: Install dependencies (frozen lockfile)
         run: bun install --frozen-lockfile
-
       - name: Verify production provider composition
         run: bun run test:composition
 
@@ -71,7 +62,6 @@ jobs:
     name: PostgreSQL Persistence Integration
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     services:
       postgres:
         image: postgres:16-alpine
@@ -86,28 +76,22 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-
     env:
       DATABASE_URL: postgres://apex:apex-ci-password@127.0.0.1:5432/apex_test?sslmode=disable
       TEST_ENV: "true"
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: "20.x"
-
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
-
       - name: Install dependencies (frozen lockfile)
         run: bun install --frozen-lockfile
-
       - name: Run PostgreSQL durability and isolation integration tests
         run: bun run test:postgres
 
@@ -115,7 +99,6 @@ jobs:
     name: Transaction & Repository Integrity
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     services:
       postgres:
         image: postgres:16-alpine
@@ -130,36 +113,66 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-
     env:
       DATABASE_URL: postgres://apex:apex-ci-password@127.0.0.1:7543/apex_integrity_test?sslmode=disable
       TEST_ENV: "true"
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: "20.x"
-
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
-
       - name: Install dependencies (frozen lockfile)
         run: bun install --frozen-lockfile
-
       - name: Run Stage 5 transaction and repository integrity tests
         run: bun run test:integrity
+
+  evidence-provenance-integrity:
+    name: Evidence & Provenance Integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: apex
+          POSTGRES_PASSWORD: apex-ci-password
+          POSTGRES_DB: apex_evidence_test
+        ports:
+          - 8543:5432
+        options: >-
+          --health-cmd "pg_isready -U apex -d apex_evidence_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://apex:apex-ci-password@127.0.0.1:8543/apex_evidence_test?sslmode=disable
+      TEST_ENV: "true"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20.x"
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Install dependencies (frozen lockfile)
+        run: bun install --frozen-lockfile
+      - name: Run Stage 6 evidence and provenance model/integration tests
+        run: bun run test:evidence
 
   redis-auth-state:
     name: Redis Authentication State Integration
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     services:
       redis:
         image: redis:7-alpine
@@ -170,28 +183,22 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-
     env:
       REDIS_URL: redis://127.0.0.1:6379/0
       TEST_ENV: "true"
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: "20.x"
-
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
-
       - name: Install dependencies (frozen lockfile)
         run: bun install --frozen-lockfile
-
       - name: Run Redis session and rate-limit integration tests
         run: bun run test:redis
 
@@ -199,7 +206,6 @@ jobs:
     name: S3 Document Storage Integration
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     services:
       postgres:
         image: postgres:16-alpine
@@ -214,7 +220,6 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-
       localstack:
         image: localstack/localstack:3.8.1
         env:
@@ -229,7 +234,6 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
-
     env:
       DATABASE_URL: postgres://apex:apex-ci-password@127.0.0.1:55432/apex_documents_test?sslmode=disable
       S3_ENDPOINT: http://127.0.0.1:4566
@@ -239,24 +243,19 @@ jobs:
       S3_SECRET_ACCESS_KEY: test
       DOCUMENT_STORAGE_ENCRYPTION_KEY: MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=
       TEST_ENV: "true"
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: "20.x"
-
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
-
       - name: Install dependencies (frozen lockfile)
         run: bun install --frozen-lockfile
-
       - name: Run S3-compatible encrypted document-storage integration tests
         run: bun run test:s3
 
@@ -264,7 +263,6 @@ jobs:
     name: PostgreSQL Document Search Integration
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
     services:
       postgres:
         image: postgres:16-alpine
@@ -279,28 +277,22 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-
     env:
       DATABASE_URL: postgres://apex:apex-ci-password@127.0.0.1:65432/apex_search_test?sslmode=disable
       TEST_ENV: "true"
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: "20.x"
-
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
-
       - name: Install dependencies (frozen lockfile)
         run: bun install --frozen-lockfile
-
       - name: Run durable PostgreSQL document-search integration tests
         run: bun run test:search
 
@@ -308,7 +300,6 @@ jobs:
     name: Durability & Recovery Assurance
     runs-on: ubuntu-latest
     timeout-minutes: 20
-
     services:
       postgres:
         image: postgres:16-alpine
@@ -323,7 +314,6 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-
       redis:
         image: redis:7-alpine
         ports:
@@ -333,7 +323,6 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-
       localstack:
         image: localstack/localstack:3.8.1
         env:
@@ -348,7 +337,6 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
-
     env:
       DATABASE_URL: postgres://apex:apex-ci-password@127.0.0.1:5432/apex_recovery_test?sslmode=disable
       REDIS_URL: redis://127.0.0.1:6379/0
@@ -359,24 +347,19 @@ jobs:
       S3_SECRET_ACCESS_KEY: test
       DOCUMENT_STORAGE_ENCRYPTION_KEY: MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=
       TEST_ENV: "true"
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: "20.x"
-
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
-
       - name: Install dependencies (frozen lockfile)
         run: bun install --frozen-lockfile
-
       - name: Run Stage 4G durability and recovery assurance
         run: bun run test:recovery
 
@@ -389,28 +372,24 @@ jobs:
       - production-composition
       - postgres-persistence
       - transaction-repository-integrity
+      - evidence-provenance-integrity
       - redis-auth-state
       - s3-document-storage
       - postgres-search-index
       - durability-recovery
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: "20.x"
-
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
-
       - name: Install dependencies (frozen lockfile)
         run: bun install --frozen-lockfile
-
       - name: Run TypeScript verification
         run: bun run typecheck
 
@@ -423,28 +402,24 @@ jobs:
       - production-composition
       - postgres-persistence
       - transaction-repository-integrity
+      - evidence-provenance-integrity
       - redis-auth-state
       - s3-document-storage
       - postgres-search-index
       - durability-recovery
       - typecheck
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
-
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: "20.x"
-
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.4.0
-
       - name: Install dependencies (frozen lockfile)
         run: bun install --frozen-lockfile
-
       - name: Run production build
         run: bun run build
