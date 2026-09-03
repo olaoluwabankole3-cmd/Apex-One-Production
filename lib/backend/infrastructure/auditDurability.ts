@@ -10,21 +10,15 @@ BEGIN
 END;
 $$;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_trigger
-    WHERE tgname = 'apex_audit_logs_append_only'
-      AND NOT tgisinternal
-  ) THEN
-    CREATE TRIGGER apex_audit_logs_append_only
-      BEFORE UPDATE OR DELETE ON apex_audit_logs
-      FOR EACH ROW
-      EXECUTE FUNCTION apex_reject_audit_mutation();
-  END IF;
-END;
-$$;
+DROP TRIGGER IF EXISTS apex_audit_logs_append_only ON apex_audit_logs;
+
+CREATE TRIGGER apex_audit_logs_append_only
+  BEFORE UPDATE OR DELETE ON apex_audit_logs
+  FOR EACH ROW
+  EXECUTE FUNCTION apex_reject_audit_mutation();
+
+ALTER TABLE apex_audit_logs
+  ENABLE ALWAYS TRIGGER apex_audit_logs_append_only;
 
 CREATE INDEX IF NOT EXISTS apex_audit_logs_request_idx
   ON apex_audit_logs (organization_id, ((record->>'requestId')), occurred_at DESC, id DESC);
@@ -68,9 +62,12 @@ export async function getDurableAuditStatus(databaseUrl: string): Promise<Durabl
     const result = await connection.query(`
       SELECT
         EXISTS (
-          SELECT 1 FROM pg_trigger
+          SELECT 1
+          FROM pg_trigger
           WHERE tgname = 'apex_audit_logs_append_only'
+            AND tgrelid = 'apex_audit_logs'::regclass
             AND NOT tgisinternal
+            AND tgenabled IN ('O', 'A')
         )::text AS append_only_trigger,
         EXISTS (
           SELECT 1 FROM pg_indexes
