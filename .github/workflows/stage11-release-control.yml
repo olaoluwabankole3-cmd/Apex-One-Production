@@ -1,0 +1,158 @@
+name: APEX ONE — Stage 11 Release Control
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Release action
+        required: true
+        type: choice
+        options:
+          - promote
+          - rollback
+      environment:
+        description: Protected deployment environment
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      source_environment:
+        description: Source environment for the release candidate
+        required: true
+        default: candidate
+        type: choice
+        options:
+          - candidate
+          - staging
+      image_digest:
+        description: Immutable sha256 image digest for promotion/current release
+        required: false
+        type: string
+      rollback_to_digest:
+        description: Explicit previous successful sha256 digest for rollback
+        required: false
+        type: string
+      release_id:
+        description: Optional stable release ID
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: apex-one-release-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  release-control:
+    name: ${{ inputs.action }} ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.environment }}
+    env:
+      APEX_DEPLOYMENT_CONTROL_URL: ${{ secrets.APEX_DEPLOYMENT_CONTROL_URL }}
+      APEX_DEPLOYMENT_CONTROL_TOKEN: ${{ secrets.APEX_DEPLOYMENT_CONTROL_TOKEN }}
+    steps:
+      - name: Checkout exact main release source
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Resolve and freeze exact main commit
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          COMMIT_SHA="$(git rev-parse HEAD)"
+          REMOTE_MAIN="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          test "$COMMIT_SHA" = "$REMOTE_MAIN"
+          echo "commit_sha=$COMMIT_SHA" >> "$GITHUB_OUTPUT"
+          echo "Exact main commit: $COMMIT_SHA"
+
+      - name: Require successful exact-main Production CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT_SHA: ${{ steps.source.outputs.commit_sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            row="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/apex-one-ci.yml/runs?branch=main&per_page=50" \
+              --jq "[.workflow_runs[] | select(.head_sha == \"$COMMIT_SHA\" and .name == \"APEX ONE — Production CI\")][0] | if . == null then \"\" else [.status, (.conclusion // \"\"), (.id|tostring)] | @tsv end")"
+
+            if [ -n "$row" ]; then
+              status="$(printf '%s' "$row" | cut -f1)"
+              conclusion="$(printf '%s' "$row" | cut -f2)"
+              run_id="$(printf '%s' "$row" | cut -f3)"
+              if [ "$status" = "completed" ] && [ "$conclusion" = "success" ]; then
+                echo "Exact-main Production CI passed in run $run_id"
+                exit 0
+              fi
+              if [ "$status" = "completed" ] && [ "$conclusion" != "success" ]; then
+                echo "Exact-main Production CI run $run_id completed with '$conclusion'"
+                exit 1
+              fi
+            fi
+
+            sleep 10
+          done
+
+          echo "Timed out waiting for exact-main Production CI"
+          exit 1
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - name: Install frozen release-control dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Execute controlled promotion or rollback
+        env:
+          COMMIT_SHA: ${{ steps.source.outputs.commit_sha }}
+          RELEASE_ACTION: ${{ inputs.action }}
+          RELEASE_ENVIRONMENT: ${{ inputs.environment }}
+          SOURCE_ENVIRONMENT: ${{ inputs.source_environment }}
+          IMAGE_DIGEST: ${{ inputs.image_digest }}
+          ROLLBACK_TO_DIGEST: ${{ inputs.rollback_to_digest }}
+          RELEASE_ID: ${{ inputs.release_id }}
+        run: |
+          set -euo pipefail
+          args=(
+            --action "$RELEASE_ACTION"
+            --environment "$RELEASE_ENVIRONMENT"
+            --commit-sha "$COMMIT_SHA"
+            --source-environment "$SOURCE_ENVIRONMENT"
+            --plan-output release-plan.json
+            --receipt-output release-receipt.json
+            --execute
+          )
+
+          if [ -n "$IMAGE_DIGEST" ]; then
+            args+=(--image-digest "$IMAGE_DIGEST")
+          fi
+          if [ -n "$ROLLBACK_TO_DIGEST" ]; then
+            args+=(--rollback-to "$ROLLBACK_TO_DIGEST")
+          fi
+          if [ -n "$RELEASE_ID" ]; then
+            args+=(--release-id "$RELEASE_ID")
+          fi
+
+          bun run release:control -- "${args[@]}"
+
+      - name: Record non-secret release evidence
+        if: success()
+        run: |
+          set -euo pipefail
+          {
+            echo "## APEX ONE release completed"
+            echo
+            echo '```json'
+            cat release-receipt.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

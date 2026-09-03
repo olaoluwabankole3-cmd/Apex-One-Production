@@ -26,6 +26,8 @@
     "assurance:prepare": "tsx scripts/prepareProductionAssuranceFixture.ts",
     "assurance:restore-storage": "tsx scripts/restoreProductionAssuranceObjectStorage.ts",
     "test:assurance:http": "tsx scripts/runProductionHttpAssuranceTests.ts",
+    "test:observability": "tsx scripts/runObservabilityDeploymentTests.ts",
+    "release:control": "tsx scripts/executeReleaseControl.ts",
     "test:infrastructure": "tsx scripts/checkInfrastructureBoundary.ts",
     "test:security": "bun run test:infrastructure && bun run test:evidence:model && tsx scripts/runSecurityTests.ts && bun run test:ai-trust"
   },

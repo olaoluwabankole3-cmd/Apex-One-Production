@@ -14,6 +14,7 @@ import {
   S3ObjectStorageError,
   S3WireClient,
 } from "../lib/backend/infrastructure/s3/S3WireClient";
+import { ensureDurableAuditConstraints } from "../lib/backend/infrastructure/auditDurability";
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -45,6 +46,7 @@ async function main(): Promise<void> {
 
   const store = DatabaseStore.createPostgresStore(databaseUrl);
   await store.bootstrapPersistence();
+  await ensureDurableAuditConstraints(databaseUrl);
   await store.clearPersistentStateForTesting();
 
   const org: OrganizationRecord = {

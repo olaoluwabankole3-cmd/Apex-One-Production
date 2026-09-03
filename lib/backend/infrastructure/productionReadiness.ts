@@ -9,12 +9,21 @@ import {
 } from "./runtime";
 import { S3CompatibleObjectStorageService } from "../domains/documents/documentStorage";
 import { PostgresDocumentSearchIndex } from "../domains/documents/documentSearchIndex";
+import { getDurableAuditStatus } from "./auditDurability";
+import {
+  getProductionReleaseIdentityIssues,
+  resolveReleaseIdentity,
+  type ReleaseIdentity,
+} from "./releaseIdentity";
+import { getDeploymentTopologySummary } from "./deploymentTopology";
+import { emitTelemetry } from "../observability/telemetry";
 
 export type ActiveReadinessState = "ready" | "unavailable" | "not_required";
 
 export interface ActiveReadinessCheck {
   authority: InfrastructureAuthority;
   state: ActiveReadinessState;
+  durationMs: number;
 }
 
 export interface ProductionReadinessReport {
@@ -24,7 +33,10 @@ export interface ProductionReadinessReport {
   checks: ActiveReadinessCheck[];
   unavailableAuthorities: InfrastructureAuthority[];
   configurationIssueCount: number;
+  release: ReleaseIdentity;
+  topology: ReturnType<typeof getDeploymentTopologySummary>;
   checkedAt: string;
+  probeDurationMs: number;
 }
 
 const PROBE_TIMEOUT_MS = 5_000;
@@ -56,6 +68,13 @@ async function probeDatabase(env: InfrastructureEnvironment): Promise<void> {
   });
 }
 
+async function probeAuditDurability(env: InfrastructureEnvironment): Promise<void> {
+  const status = await getDurableAuditStatus(required(env.DATABASE_URL, "DATABASE_URL"));
+  if (!status.appendOnlyTrigger || !status.requestCorrelationIndex) {
+    throw new Error("Durable audit migration has not been applied");
+  }
+}
+
 async function probeRedis(env: InfrastructureEnvironment): Promise<void> {
   const redis = new RedisWireClient(required(env.REDIS_URL, "REDIS_URL"));
   const reply = await redis.execute(["PING"]);
@@ -72,9 +91,6 @@ async function probeObjectStorage(env: InfrastructureEnvironment): Promise<void>
     endpoint: env.S3_ENDPOINT?.trim() || undefined,
   });
 
-  // A readiness check must prove the configured bucket is both reachable and
-  // usable with the configured encryption authority. The probe is isolated
-  // under a system-only prefix and is deleted before the request completes.
   const key = `system/readiness/${randomUUID()}.json`;
   try {
     await storage.putObject(key, "{\"apexReadiness\":true}", "application/json");
@@ -84,8 +100,7 @@ async function probeObjectStorage(env: InfrastructureEnvironment): Promise<void>
     try {
       await storage.deleteObject(key);
     } catch {
-      // Preserve the original probe outcome; cleanup failures are surfaced by a
-      // subsequent readiness probe and by the storage integration gate.
+      // Preserve the original probe outcome. A later probe will surface cleanup failure.
     }
   }
 }
@@ -101,31 +116,42 @@ async function check(
   requiredByConfiguration: boolean,
   probe: () => Promise<void>
 ): Promise<ActiveReadinessCheck> {
-  if (!requiredByConfiguration) return { authority, state: "not_required" };
+  if (!requiredByConfiguration) return { authority, state: "not_required", durationMs: 0 };
+  const startedAt = Date.now();
   try {
     await withTimeout(authority, probe());
-    return { authority, state: "ready" };
+    return { authority, state: "ready", durationMs: Date.now() - startedAt };
   } catch {
-    return { authority, state: "unavailable" };
+    return { authority, state: "unavailable", durationMs: Date.now() - startedAt };
   }
 }
 
 /**
- * Stage 10 black-box readiness authority.
+ * Stage 11 production readiness authority.
  *
- * Configuration readiness alone is insufficient: this report actively proves
- * the durable database, Redis, S3-compatible object storage, and PostgreSQL
- * search authorities can be reached. Raw connection errors and credentials are
- * deliberately never returned to callers.
+ * It extends Stage 10 active dependency probing with:
+ * - append-only audit durability verification,
+ * - immutable release identity,
+ * - deployment-topology identity,
+ * - per-authority probe latency and structured telemetry.
+ *
+ * Raw connection errors, URLs, credentials, and exception text are deliberately
+ * never returned to callers or emitted as telemetry attributes.
  */
 export async function getProductionReadinessReport(
   env: InfrastructureEnvironment = process.env
 ): Promise<ProductionReadinessReport> {
+  const startedAt = Date.now();
   const staticReadiness = getInfrastructureReadiness(env);
   const configuration = staticReadiness.configuration;
+  const release = resolveReleaseIdentity(env);
+  const releaseIssues = staticReadiness.production
+    ? getProductionReleaseIdentityIssues(env)
+    : [];
 
-  const databaseRequired = configuration.database === "postgres" || configuration.audit === "postgres";
+  const databaseRequired = configuration.database === "postgres";
   const redisRequired = configuration.session === "redis" || configuration.rateLimit === "redis";
+  const auditRequired = configuration.audit === "postgres";
   const objectStorageRequired = configuration.objectStorage === "s3";
   const searchRequired = configuration.searchIndex === "postgres";
 
@@ -134,11 +160,9 @@ export async function getProductionReadinessReport(
   const rateLimit: ActiveReadinessCheck = {
     authority: "rateLimit",
     state: redisRequired ? redis.state : "not_required",
+    durationMs: redis.durationMs,
   };
-  const audit: ActiveReadinessCheck = {
-    authority: "audit",
-    state: databaseRequired ? database.state : "not_required",
-  };
+  const audit = await check("audit", auditRequired, () => probeAuditDurability(env));
   const objectStorage = await check("objectStorage", objectStorageRequired, () => probeObjectStorage(env));
   const searchIndex = await check("searchIndex", searchRequired, () => probeSearchIndex(env));
 
@@ -147,14 +171,45 @@ export async function getProductionReadinessReport(
     .filter((item) => item.state === "unavailable")
     .map((item) => item.authority);
 
-  const ready = staticReadiness.ready && unavailableAuthorities.length === 0;
-  return {
+  const configurationIssueCount = staticReadiness.issues.length + releaseIssues.length;
+  const ready =
+    staticReadiness.ready &&
+    configurationIssueCount === 0 &&
+    unavailableAuthorities.length === 0;
+  const probeDurationMs = Date.now() - startedAt;
+  const report: ProductionReadinessReport = {
     status: ready ? "ready" : "not_ready",
     production: staticReadiness.production,
     configuration,
     checks,
     unavailableAuthorities,
-    configurationIssueCount: staticReadiness.issues.length,
+    configurationIssueCount,
+    release,
+    topology: getDeploymentTopologySummary(),
     checkedAt: new Date().toISOString(),
+    probeDurationMs,
   };
+
+  emitTelemetry(
+    "infrastructure.readiness",
+    {
+      level: ready ? "info" : "warn",
+      outcome: ready ? "success" : "failure",
+      durationMs: probeDurationMs,
+      release,
+      attributes: {
+        production: staticReadiness.production,
+        configurationIssueCount,
+        unavailableAuthorities,
+        checks: checks.map((item) => ({
+          authority: item.authority,
+          state: item.state,
+          durationMs: item.durationMs,
+        })),
+      },
+    },
+    env
+  );
+
+  return report;
 }

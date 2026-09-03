@@ -1,0 +1,98 @@
+name: APEX ONE — Stage 11 Observability & Deployment
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apex-one-stage11-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  observability-deployment:
+    name: Telemetry / Audit / Release Control
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: apex
+          POSTGRES_PASSWORD: apex-ci-password
+          POSTGRES_DB: apex_stage11_test
+        ports:
+          - 13543:5432
+        options: >-
+          --health-cmd "pg_isready -U apex -d apex_stage11_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://apex:apex-ci-password@127.0.0.1:13543/apex_stage11_test?sslmode=disable
+      TEST_ENV: "true"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20.x"
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Install dependencies (frozen lockfile)
+        run: bun install --frozen-lockfile
+      - name: Run Stage 11 observability and deployment tests
+        run: bun run test:observability
+      - name: Run release-attestation and topology regression tests
+        run: ./node_modules/.bin/tsx scripts/runReleaseAttestationTests.ts
+
+  stage11-typecheck:
+    name: Stage 11 TypeScript Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs:
+      - observability-deployment
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20.x"
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Install dependencies (frozen lockfile)
+        run: bun install --frozen-lockfile
+      - name: Run TypeScript verification
+        run: bun run typecheck
+
+  stage11-build:
+    name: Stage 11 Production Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs:
+      - observability-deployment
+      - stage11-typecheck
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20.x"
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Install dependencies (frozen lockfile)
+        run: bun install --frozen-lockfile
+      - name: Run production build
+        run: bun run build
