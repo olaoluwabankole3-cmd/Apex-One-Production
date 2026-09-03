@@ -89,9 +89,12 @@ jobs:
         run: bun run build
       - name: Prepare synthetic durable assurance fixtures
         run: bun run assurance:prepare
-      - name: Start production-built HTTP server
+      - name: Start production-built standalone HTTP server
         run: |
-          nohup bun run start -- -p 3000 -H 0.0.0.0 > /tmp/apex-stage10-server.log 2>&1 &
+          mkdir -p .next/standalone/.next
+          cp -R .next/static .next/standalone/.next/static
+          if [ -d public ]; then cp -R public .next/standalone/public; fi
+          HOSTNAME=0.0.0.0 PORT=3000 nohup node .next/standalone/server.js > /tmp/apex-stage10-server.log 2>&1 &
           echo $! > /tmp/apex-stage10-server.pid
           for attempt in $(seq 1 60); do
             if curl -fsS http://localhost:3000/api/v1/health >/dev/null; then
