@@ -42,7 +42,7 @@ export const primaryNavigation: AppNavigationItem[] = [
   { href: "/calendar", label: "Calendar", icon: CalendarDays, permission: "org:read" },
   { href: "/notifications", label: "Notifications", icon: Bell, permission: "org:read" },
   { href: "/knowledge-hub", label: "Knowledge Hub", icon: BookOpenText, permission: "knowledge:read" },
-  { href: "/settings", label: "Settings", icon: Settings, permission: "org:read" },
+  { href: "/settings", label: "Settings", icon: Settings, permission: "org:admin" },
 ];
 
 export const valueNavigation: AppNavigationItem[] = [
