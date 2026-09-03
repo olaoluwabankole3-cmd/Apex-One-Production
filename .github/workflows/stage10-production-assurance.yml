@@ -148,7 +148,7 @@ jobs:
         run: node scripts/runBrowserAuthRbacAssurance.mjs
       - name: Require clean standalone image runtime
         run: |
-          if grep -E -q "sharp' is required|sharp-missing-in-production" /tmp/apex-stage10-server.log; then
+          if grep -E -q "sharp' is required|sharp-missing-in-production|Failed to generate cache key for URL" /tmp/apex-stage10-server.log; then
             cat /tmp/apex-stage10-server.log
             exit 1
           fi
