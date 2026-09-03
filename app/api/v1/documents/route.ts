@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTenantContext } from "@/lib/backend/core/security";
-import { documentService } from "@/lib/backend/domains/documents/documentService";
+import { documentConsistencyService } from "@/lib/backend/domains/documents/documentConsistencyService";
 import type { UploadDocumentDto } from "@/lib/backend/domains/documents/documentTypes";
 import { Validator } from "@/lib/backend/core/validation";
 import {
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
     const query = optionalQueryString(searchParams, "query", 500);
     const pagination = parseCursorPagination(searchParams);
 
-    const result = await documentService.getDocuments(ctx, {
+    const result = await documentConsistencyService.getDocuments(ctx, {
       category,
       status,
       customerId,
@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const doc = await documentService.uploadDocument(
+    const doc = await documentConsistencyService.uploadDocument(
       body as unknown as UploadDocumentDto,
       ctx
     );
