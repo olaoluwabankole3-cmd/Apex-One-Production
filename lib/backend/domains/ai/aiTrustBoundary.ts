@@ -109,19 +109,21 @@ const TOOL_PERMISSIONS: Record<AiDataToolName, PermissionCapability> = {
 };
 
 /**
- * Domain nouns are intentionally stop words for free-text search extraction.
- * They choose a retrieval domain but should not accidentally become a literal
- * repository search term. A query such as "show customers" therefore retrieves
- * a bounded customer scope rather than searching customer names for "customers".
+ * Domain vocabulary chooses a retrieval domain but must not become a literal
+ * repository search term by itself. Specific residual terms (for example an
+ * account name) can still narrow the bounded domain scope.
  */
 const STOP_WORDS = new Set([
   "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "give", "how", "i", "in",
-  "is", "it", "me", "of", "on", "or", "our", "show", "tell", "that", "the", "their", "this", "to",
+  "is", "it", "me", "my", "of", "on", "or", "our", "show", "tell", "that", "the", "their", "this", "to",
   "use", "what", "which", "who", "with", "about", "please", "provide", "analyze", "analyse", "review", "across",
-  "enterprise", "organization", "organisation", "company", "business", "customer", "customers", "health",
-  "contract", "contracts", "opportunity", "opportunities", "value", "memory", "memories", "institutional",
-  "document", "documents", "file", "files", "operation", "operations", "operational", "revenue", "signal", "signals",
-  "capacity", "strategy", "executive", "leakage",
+  "enterprise", "organization", "organisation", "company", "business", "customer", "customers", "account", "accounts",
+  "client", "clients", "arr", "retention", "churn", "health", "contract", "contracts", "sla", "renewal", "renewals",
+  "pricing", "indexation", "agreement", "agreements", "opportunity", "opportunities", "value", "leakage", "leakages",
+  "recovery", "expansion", "capture", "captured", "revenue", "memory", "memories", "decision", "decisions", "policy",
+  "policies", "history", "historical", "institutional", "document", "documents", "file", "files", "report", "reports",
+  "invoice", "audit", "operation", "operations", "operational", "capacity", "signal", "signals", "incident", "incidents",
+  "compliance", "risk", "strategy", "executive",
 ]);
 
 function hasPermission(ctx: TenantContext, capability: PermissionCapability): boolean {
@@ -147,15 +149,11 @@ function extractSearchTerm(prompt: string): string | undefined {
     .split(/\s+/)
     .filter((word) => word.length >= 3 && !STOP_WORDS.has(word));
 
-  // Only compact, specific residual terms become repository search text.
   if (words.length > 0 && words.length <= 3) return words.join(" ").slice(0, 80);
   return undefined;
 }
 
 function requestedToolsForQuery(query: AiTrustQuery): AiDataToolName[] {
-  // Query text chooses domains. Mode is only a deterministic fallback when the
-  // query itself does not name a domain, preventing a mode from broadening an
-  // already-specific user request.
   const text = query.prompt.toLowerCase();
   const tools: AiDataToolName[] = [];
 
@@ -164,7 +162,7 @@ function requestedToolsForQuery(query: AiTrustQuery): AiDataToolName[] {
   const keywordGroups: Array<[AiDataToolName, RegExp]> = [
     ["get_tenant_customers", /\b(customer|customers|account|accounts|client|clients|arr|retention|churn|health)\b/],
     ["get_tenant_contracts", /\b(contract|contracts|sla|renewal|renewals|pricing|indexation|agreement|agreements)\b/],
-    ["get_value_opportunities", /\b(opportunity|opportunities|value|leakage|recovery|expansion|captur|revenue)\b/],
+    ["get_value_opportunities", /\b(opportunity|opportunities|value|leakage|leakages|recovery|expansion|captur|revenue)\b/],
     ["get_organizational_memory", /\b(memory|memories|decision|decisions|policy|policies|history|historical|institutional)\b/],
     ["get_tenant_documents", /\b(document|documents|file|files|report|reports|board paper|invoice|audit report)\b/],
     ["get_operational_signals", /\b(operation|operations|operational|capacity|signal|signals|incident|incidents|compliance|risk)\b/],
@@ -524,7 +522,6 @@ export async function executeAuthorizedAiRetrieval(
       throw new Error(`AI tool record limit exceeded for ${call.tool}`);
     }
     const definition = registry[call.tool];
-    // Defense in depth: planner authorization is never trusted as sufficient.
     requirePermission(ctx, definition.requiredPermission);
     results.push(await definition.handler(call, ctx));
   }
