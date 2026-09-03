@@ -20,7 +20,7 @@
     "test:evidence:model": "tsx scripts/runEvidenceModelTests.ts",
     "test:evidence:terminology": "tsx scripts/runEvidenceTerminologyTests.ts",
     "test:evidence": "bun run test:evidence:model && tsx scripts/runEvidenceProvenanceTests.ts && bun run test:evidence:terminology",
-    "test:lifecycle": "tsx scripts/runValueExecutionLifecycleTests.ts",
+    "test:lifecycle": "tsx scripts/runValueExecutionLifecycleTests.ts && tsx scripts/runValueExecutionLifecycleConcurrencyTests.ts",
     "test:infrastructure": "tsx scripts/checkInfrastructureBoundary.ts",
     "test:security": "bun run test:infrastructure && bun run test:evidence:model && tsx scripts/runSecurityTests.ts"
   },
