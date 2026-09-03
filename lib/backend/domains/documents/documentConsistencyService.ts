@@ -243,6 +243,32 @@ export class DocumentConsistencyService extends DocumentService {
       }
     }
 
+    // Document status is independently durable. If the document row committed
+    // but the first consistency event did not (for example, a transient audit
+    // write failure), reconstruct retry work from the authoritative status so
+    // the document cannot remain permanently stranded in processing/failed.
+    const coveredDocumentIds = new Set(
+      Array.from(operations.values()).map((metadata) => metadata.documentId)
+    );
+    const stranded = await collectAllPages((cursor) =>
+      this.stage9Database.documentsRepo.findMany(ctx, {
+        where: { status: { in: ["processing", "failed"] } },
+        limit: MAX_PAGE_SIZE,
+        cursor,
+      })
+    );
+    for (const document of stranded) {
+      if (coveredDocumentIds.has(document.id)) continue;
+      const operationId = `document-consistency-recovery-${document.id}`;
+      operations.set(operationId, {
+        documentId: document.id,
+        operationType: "process_document",
+        attempts: 0,
+        lastError: "Recovered from durable document status without an active consistency event",
+      });
+      coveredDocumentIds.add(document.id);
+    }
+
     return {
       pending: Array.from(operations.entries()).map(([operationId, metadata]) => ({ operationId, metadata })),
       totalPending: operations.size,
