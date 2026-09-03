@@ -15,7 +15,11 @@ function document(category: DocumentRecord["category"], name: string): DocumentR
     uploadedBy: "stage9@example.test",
     storageKey: `tenants/stage9/documents/${name}`,
     status: "processing",
-    metadata: {},
+    metadata: {
+      fileSizeBytes: 1024,
+      mimeType: "application/pdf",
+      storageUri: `s3://stage9/${name}`,
+    },
     extractedFields: [],
     tags: ["stage9"],
     createdAt: timestamp,
