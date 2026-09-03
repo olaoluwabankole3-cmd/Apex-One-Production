@@ -24,7 +24,7 @@ function errorMessage(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).replace(/\s+/g, " ").slice(0, 300);
 }
 
-interface ProcessingOperationMetadata {
+interface ProcessingOperationMetadata extends Record<string, unknown> {
   documentId: string;
   operationType: "process_document";
   attempts: number;
