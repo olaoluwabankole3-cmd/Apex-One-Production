@@ -42,6 +42,8 @@ export interface DeploymentReceipt {
   environment: ReleaseEnvironmentName;
   activeImageDigest: string;
   completedAt: string;
+  verifiedSourceEnvironment?: ReleaseSourceEnvironment;
+  verifiedSourceImageDigest?: string;
 }
 
 const RELEASE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$/;
@@ -138,6 +140,14 @@ function validateControlUrl(rawUrl: string, allowInsecureLoopbackForTesting: boo
   return url;
 }
 
+function verifiedSourceEnvironment(value: unknown): ReleaseSourceEnvironment | undefined {
+  return value === "candidate" || value === "staging" ? value : undefined;
+}
+
+function verifiedSourceImageDigest(value: unknown): string | undefined {
+  return typeof value === "string" && isImmutableImageDigest(value) ? value : undefined;
+}
+
 export async function executeReleasePlan(
   plan: ReleasePlan,
   options: DeploymentControlOptions
@@ -183,6 +193,16 @@ export async function executeReleasePlan(
     throw new Error("Deployment controller did not return a deployment identifier");
   }
 
+  const sourceEnvironment = verifiedSourceEnvironment(body.verifiedSourceEnvironment);
+  const sourceImageDigest = verifiedSourceImageDigest(body.verifiedSourceImageDigest);
+  if (plan.action === "promote" && plan.environment === "production") {
+    if (sourceEnvironment !== "staging" || sourceImageDigest !== plan.targetImageDigest) {
+      throw new Error(
+        "Deployment controller did not attest that the production image was promoted from the same staging digest"
+      );
+    }
+  }
+
   return {
     deploymentId: body.deploymentId,
     status: "succeeded",
@@ -192,5 +212,7 @@ export async function executeReleasePlan(
       typeof body.completedAt === "string" && body.completedAt.trim()
         ? body.completedAt
         : new Date().toISOString(),
+    ...(sourceEnvironment ? { verifiedSourceEnvironment: sourceEnvironment } : {}),
+    ...(sourceImageDigest ? { verifiedSourceImageDigest: sourceImageDigest } : {}),
   };
 }
