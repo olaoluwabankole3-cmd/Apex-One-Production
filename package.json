@@ -29,7 +29,8 @@
     "test:observability": "tsx scripts/runObservabilityDeploymentTests.ts",
     "release:control": "tsx scripts/executeReleaseControl.ts",
     "test:infrastructure": "tsx scripts/checkInfrastructureBoundary.ts",
-    "test:security": "bun run test:infrastructure && bun run test:evidence:model && tsx scripts/runSecurityTests.ts && bun run test:ai-trust"
+    "test:security": "bun run test:infrastructure && bun run test:evidence:model && tsx scripts/runSecurityTests.ts && bun run test:ai-trust",
+    "test:product-integrity": "tsx scripts/runProductIntegrityTests.ts"
   },
   "dependencies": {
     "@google/genai": "^2.16.0",
