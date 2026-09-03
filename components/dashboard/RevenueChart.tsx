@@ -62,9 +62,9 @@ export default function RevenueChart() {
       <div className="mt-4 h-[260px]">
         {series.length === 0 ? (
           <div className="h-full w-full rounded-xl border border-dashed border-white/[0.05] bg-white/[0.002] flex flex-col items-center justify-center text-center p-6">
-            <span className="text-[12px] font-bold text-ivory/60 uppercase tracking-wider block font-mono">Ledger Feed Disconnected</span>
+            <span className="text-[12px] font-bold text-ivory/60 uppercase tracking-wider block font-mono">Revenue Data Not Connected</span>
             <p className="text-[11px] text-ivory/35 max-w-xs mt-1.5 leading-relaxed">
-              No live database telemetry streams linked. Active Demo Mode in Settings to simulate ledger transactions.
+              No authoritative historical revenue series is available. APEX ONE will not fabricate chart values while the source is unconnected.
             </p>
           </div>
         ) : (
