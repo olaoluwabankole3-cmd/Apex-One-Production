@@ -144,7 +144,11 @@ class ToggleIndex implements IDocumentSearchIndex {
   }
 }
 
-function indexedSourceDocument(id: string, checksum: string): Omit<DocumentRecord, "organizationId"> {
+function indexedSourceDocument(
+  id: string,
+  checksum: string,
+  uploadedBy: string
+): Omit<DocumentRecord, "organizationId"> {
   const timestamp = now();
   return {
     id,
@@ -152,7 +156,7 @@ function indexedSourceDocument(id: string, checksum: string): Omit<DocumentRecor
     fileType: "pdf",
     category: "Policy" as never,
     size: "1 KB",
-    uploadedBy: "stage9@example.test",
+    uploadedBy,
     storageKey: `tenants/test/documents/${id}/${id}.pdf`,
     status: "indexed",
     metadata: {
@@ -345,7 +349,10 @@ async function main() {
   await check("15. Source-document checksum drift invalidates a revision basis", async () => {
     const checksumA = "a".repeat(64);
     const checksumB = "b".repeat(64);
-    const source = await memory.documentsRepo.create(indexedSourceDocument("source-stage9", checksumA), memoryCtx);
+    const source = await memory.documentsRepo.create(
+      indexedSourceDocument("source-stage9", checksumA, memoryCtx.userEmail),
+      memoryCtx
+    );
     const sourced = await knowledge.createKnowledgeItem({
       title: "Sourced policy",
       category: "Policy",
