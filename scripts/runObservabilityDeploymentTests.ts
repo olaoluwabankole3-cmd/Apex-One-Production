@@ -228,6 +228,7 @@ async function main(): Promise<void> {
             deploymentId: "deployment-stage11-test",
             status: "succeeded",
             activeImageDigest: plan.targetImageDigest,
+            verifiedCommitSha: plan.commitSha,
             completedAt: "2026-09-03T00:01:00.000Z",
           }),
           { status: 200, headers: { "content-type": "application/json" } }
