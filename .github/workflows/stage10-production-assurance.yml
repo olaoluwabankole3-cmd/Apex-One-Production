@@ -13,6 +13,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lockfile-refresh:
+    name: Stage 10 Sharp Lockfile Bootstrap
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Add pinned standalone image dependency
+        run: bun add --exact sharp@0.35.4
+      - name: Upload generated package and lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: stage10-sharp-lockfile
+          path: |
+            package.json
+            bun.lock
+          if-no-files-found: error
+          retention-days: 1
+
   runtime-assurance:
     name: HTTP / Browser / Fault / Recovery Assurance
     runs-on: ubuntu-latest
