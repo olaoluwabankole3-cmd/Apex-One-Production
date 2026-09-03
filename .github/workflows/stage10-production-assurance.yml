@@ -131,6 +131,14 @@ jobs:
           docker stop "$id"
           ./node_modules/.bin/tsx scripts/assertProductionReadiness.ts not_ready
           docker start "$id"
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:14566/_localstack/health >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:14566/_localstack/health >/dev/null
+          bun run assurance:restore-storage
           ./node_modules/.bin/tsx scripts/assertProductionReadiness.ts ready
       - name: Install pinned Chromium harness
         run: |
