@@ -42,6 +42,7 @@ export interface DeploymentReceipt {
   environment: ReleaseEnvironmentName;
   activeImageDigest: string;
   completedAt: string;
+  verifiedCommitSha?: string;
   verifiedSourceEnvironment?: ReleaseSourceEnvironment;
   verifiedSourceImageDigest?: string;
 }
@@ -148,6 +149,10 @@ function verifiedSourceImageDigest(value: unknown): string | undefined {
   return typeof value === "string" && isImmutableImageDigest(value) ? value : undefined;
 }
 
+function verifiedCommitSha(value: unknown): string | undefined {
+  return typeof value === "string" && isCommitSha(value) ? value : undefined;
+}
+
 export async function executeReleasePlan(
   plan: ReleasePlan,
   options: DeploymentControlOptions
@@ -193,8 +198,15 @@ export async function executeReleasePlan(
     throw new Error("Deployment controller did not return a deployment identifier");
   }
 
+  const imageCommitSha = verifiedCommitSha(body.verifiedCommitSha);
   const sourceEnvironment = verifiedSourceEnvironment(body.verifiedSourceEnvironment);
   const sourceImageDigest = verifiedSourceImageDigest(body.verifiedSourceImageDigest);
+
+  if (plan.action === "promote" && imageCommitSha !== plan.commitSha) {
+    throw new Error(
+      "Deployment controller did not attest that the promoted image digest belongs to the frozen release commit"
+    );
+  }
   if (plan.action === "promote" && plan.environment === "production") {
     if (sourceEnvironment !== "staging" || sourceImageDigest !== plan.targetImageDigest) {
       throw new Error(
@@ -212,6 +224,7 @@ export async function executeReleasePlan(
       typeof body.completedAt === "string" && body.completedAt.trim()
         ? body.completedAt
         : new Date().toISOString(),
+    ...(imageCommitSha ? { verifiedCommitSha: imageCommitSha } : {}),
     ...(sourceEnvironment ? { verifiedSourceEnvironment: sourceEnvironment } : {}),
     ...(sourceImageDigest ? { verifiedSourceImageDigest: sourceImageDigest } : {}),
   };
