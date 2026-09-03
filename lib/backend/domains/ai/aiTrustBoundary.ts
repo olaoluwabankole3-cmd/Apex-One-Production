@@ -108,11 +108,20 @@ const TOOL_PERMISSIONS: Record<AiDataToolName, PermissionCapability> = {
   get_operational_signals: "workflow:read",
 };
 
+/**
+ * Domain nouns are intentionally stop words for free-text search extraction.
+ * They choose a retrieval domain but should not accidentally become a literal
+ * repository search term. A query such as "show customers" therefore retrieves
+ * a bounded customer scope rather than searching customer names for "customers".
+ */
 const STOP_WORDS = new Set([
   "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "give", "how", "i", "in",
   "is", "it", "me", "of", "on", "or", "our", "show", "tell", "that", "the", "their", "this", "to",
-  "what", "which", "who", "with", "about", "please", "provide", "analyze", "analyse", "review", "across",
-  "enterprise", "organization", "organisation", "company", "business",
+  "use", "what", "which", "who", "with", "about", "please", "provide", "analyze", "analyse", "review", "across",
+  "enterprise", "organization", "organisation", "company", "business", "customer", "customers", "health",
+  "contract", "contracts", "opportunity", "opportunities", "value", "memory", "memories", "institutional",
+  "document", "documents", "file", "files", "operation", "operations", "operational", "revenue", "signal", "signals",
+  "capacity", "strategy", "executive", "leakage",
 ]);
 
 function hasPermission(ctx: TenantContext, capability: PermissionCapability): boolean {
@@ -138,14 +147,16 @@ function extractSearchTerm(prompt: string): string | undefined {
     .split(/\s+/)
     .filter((word) => word.length >= 3 && !STOP_WORDS.has(word));
 
-  // Only turn a compact, specific query into a repository search term.
-  // Broad questions stay domain-scoped rather than becoming accidental full-text misses.
+  // Only compact, specific residual terms become repository search text.
   if (words.length > 0 && words.length <= 3) return words.join(" ").slice(0, 80);
   return undefined;
 }
 
 function requestedToolsForQuery(query: AiTrustQuery): AiDataToolName[] {
-  const text = `${query.mode || ""} ${query.prompt}`.toLowerCase();
+  // Query text chooses domains. Mode is only a deterministic fallback when the
+  // query itself does not name a domain, preventing a mode from broadening an
+  // already-specific user request.
+  const text = query.prompt.toLowerCase();
   const tools: AiDataToolName[] = [];
 
   if (normalizeContextIds(query.contextMemoryIds).length > 0) tools.push("get_organizational_memory");
@@ -203,9 +214,9 @@ function filtersForTool(tool: AiDataToolName, prompt: string): Record<string, st
   }
 
   if (tool === "get_tenant_contracts") {
-    if (/\bexpir/.test(lower)) return { status: "expiring_soon" };
     if (/\bexpired\b/.test(lower)) return { status: "expired" };
     if (/\brenewed\b/.test(lower)) return { status: "renewed" };
+    if (/\bexpir/.test(lower)) return { status: "expiring_soon" };
     if (/\bactive\b/.test(lower)) return { status: "active" };
   }
 
@@ -241,12 +252,13 @@ export function planAuthorizedAiRetrieval(query: AiTrustQuery, ctx: TenantContex
       continue;
     }
 
+    const filters = filtersForTool(tool, query.prompt);
     calls.push({
       tool,
       limit: AI_TOOL_RECORD_LIMIT,
       ...(searchTerm ? { searchTerm } : {}),
       ...(tool === "get_organizational_memory" && contextIds.length > 0 ? { ids: contextIds } : {}),
-      ...(filtersForTool(tool, query.prompt) ? { filters: filtersForTool(tool, query.prompt) } : {}),
+      ...(filters ? { filters } : {}),
     });
   }
 
