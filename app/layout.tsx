@@ -5,9 +5,7 @@ import { OrganizationProvider } from "@/components/layout/OrganizationContext";
 import { RoleProvider } from "@/components/layout/RoleContext";
 import { ValueEngineProvider } from "@/components/value-engine/ValueEngineContext";
 import { AuthProvider } from "@/components/auth/AuthContext";
-import Sidebar from "@/components/layout/Sidebar";
-import Topbar from "@/components/layout/Topbar";
-import ApiFailureBanner from "@/components/layout/ApiFailureBanner";
+import AppShell from "@/components/layout/AppShell";
 import { ClientErrorBoundary } from "@/components/layout/ClientErrorBoundary";
 
 const syne = Syne({
@@ -32,8 +30,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CANARY POINT OS by Apex Sync Intelligence",
-  description: "The Intelligent Operating System for Modern Enterprises.",
+  title: "APEX ONE — Executive Intelligence Operating System",
+  description: "A secure enterprise intelligence and execution operating system by Apex Sync Intelligence.",
 };
 
 export default function RootLayout({
@@ -81,14 +79,7 @@ export default function RootLayout({
             <OrganizationProvider>
               <RoleProvider>
                 <ValueEngineProvider>
-                  <div className="flex min-h-screen">
-                    <Sidebar />
-                    <div className="flex-1 flex flex-col min-w-0">
-                      <Topbar />
-                      <ApiFailureBanner />
-                      <main className="flex-1 px-4 sm:px-6 pb-12 pt-6 lg:px-10 ml-0 -mt-[8px]">{children}</main>
-                    </div>
-                  </div>
+                  <AppShell>{children}</AppShell>
                 </ValueEngineProvider>
               </RoleProvider>
             </OrganizationProvider>
