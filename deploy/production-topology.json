@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "service": "apex-one",
+  "runtime": {
+    "containerFile": "Dockerfile",
+    "port": 3000,
+    "runAsUser": "node",
+    "minimumReplicas": 2,
+    "rollout": {
+      "strategy": "rolling",
+      "maxUnavailable": 0,
+      "maxSurge": 1
+    }
+  },
+  "probes": {
+    "liveness": {
+      "path": "/api/v1/health",
+      "timeoutSeconds": 5,
+      "periodSeconds": 30
+    },
+    "startup": {
+      "path": "/api/v1/health/startup",
+      "timeoutSeconds": 5,
+      "periodSeconds": 10
+    },
+    "readiness": {
+      "path": "/api/v1/health/ready",
+      "timeoutSeconds": 10,
+      "periodSeconds": 15
+    }
+  },
+  "authorities": [
+    { "name": "database", "provider": "postgres", "required": true },
+    { "name": "session", "provider": "redis", "required": true },
+    { "name": "rateLimit", "provider": "redis", "required": true },
+    { "name": "audit", "provider": "postgres", "required": true },
+    { "name": "objectStorage", "provider": "s3", "required": true },
+    { "name": "searchIndex", "provider": "postgres", "required": true }
+  ],
+  "release": {
+    "immutableImageDigestRequired": true,
+    "promotionOrder": ["staging", "production"],
+    "productionRequiresStagingSource": true,
+    "rollbackStrategy": "explicit_previous_successful_digest",
+    "deploymentControlContract": "/v1/releases/{promote|rollback}"
+  }
+}
