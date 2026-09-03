@@ -45,6 +45,7 @@ export interface DeploymentReceipt {
   verifiedCommitSha?: string;
   verifiedSourceEnvironment?: ReleaseSourceEnvironment;
   verifiedSourceImageDigest?: string;
+  verifiedPreviousSuccessfulDigest?: string;
 }
 
 const RELEASE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$/;
@@ -145,7 +146,7 @@ function verifiedSourceEnvironment(value: unknown): ReleaseSourceEnvironment | u
   return value === "candidate" || value === "staging" ? value : undefined;
 }
 
-function verifiedSourceImageDigest(value: unknown): string | undefined {
+function verifiedImageDigest(value: unknown): string | undefined {
   return typeof value === "string" && isImmutableImageDigest(value) ? value : undefined;
 }
 
@@ -200,7 +201,8 @@ export async function executeReleasePlan(
 
   const imageCommitSha = verifiedCommitSha(body.verifiedCommitSha);
   const sourceEnvironment = verifiedSourceEnvironment(body.verifiedSourceEnvironment);
-  const sourceImageDigest = verifiedSourceImageDigest(body.verifiedSourceImageDigest);
+  const sourceImageDigest = verifiedImageDigest(body.verifiedSourceImageDigest);
+  const previousSuccessfulDigest = verifiedImageDigest(body.verifiedPreviousSuccessfulDigest);
 
   if (plan.action === "promote" && imageCommitSha !== plan.commitSha) {
     throw new Error(
@@ -213,6 +215,11 @@ export async function executeReleasePlan(
         "Deployment controller did not attest that the production image was promoted from the same staging digest"
       );
     }
+  }
+  if (plan.action === "rollback" && previousSuccessfulDigest !== plan.targetImageDigest) {
+    throw new Error(
+      "Deployment controller did not attest that the rollback target is a previous successful image digest"
+    );
   }
 
   return {
@@ -227,5 +234,6 @@ export async function executeReleasePlan(
     ...(imageCommitSha ? { verifiedCommitSha: imageCommitSha } : {}),
     ...(sourceEnvironment ? { verifiedSourceEnvironment: sourceEnvironment } : {}),
     ...(sourceImageDigest ? { verifiedSourceImageDigest: sourceImageDigest } : {}),
+    ...(previousSuccessfulDigest ? { verifiedPreviousSuccessfulDigest: previousSuccessfulDigest } : {}),
   };
 }
