@@ -271,7 +271,6 @@ export class ControlledKnowledgeService extends KnowledgeService {
       }, uow.context);
       const created = await uow.knowledge.create({
         id,
-        organizationId: uow.context.organizationId,
         title: revision.title,
         category: revision.category,
         content: revision.content,
