@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTenantContext } from "@/lib/backend/core/security";
-import { documentService } from "@/lib/backend/domains/documents/documentService";
+import { documentConsistencyService } from "@/lib/backend/domains/documents/documentConsistencyService";
 import { Validator } from "@/lib/backend/core/validation";
 import {
   serializeApiError,
@@ -18,7 +18,7 @@ export async function GET(
     requestId = ctx.requestId;
     const { id } = await params;
     const documentId = Validator.requireId(id, "documentId");
-    const doc = await documentService.getDocumentById(documentId, ctx);
+    const doc = await documentConsistencyService.getDocumentById(documentId, ctx);
 
     return NextResponse.json(toApiSuccessResponse(doc, requestId));
   } catch (error: unknown) {
@@ -38,7 +38,7 @@ export async function DELETE(
     requestId = ctx.requestId;
     const { id } = await params;
     const documentId = Validator.requireId(id, "documentId");
-    await documentService.deleteDocument(documentId, ctx);
+    await documentConsistencyService.deleteDocument(documentId, ctx);
 
     return NextResponse.json(
       toApiSuccessResponse({ deleted: true, id: documentId }, requestId)
