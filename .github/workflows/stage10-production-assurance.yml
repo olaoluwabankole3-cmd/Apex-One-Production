@@ -108,6 +108,8 @@ jobs:
         run: ./node_modules/.bin/tsx scripts/assertProductionReadiness.ts ready
       - name: Run built-server HTTP, AI grounding, and concurrency assurance
         run: bun run test:assurance:http
+      - name: Prove ingress-to-durable-audit request correlation
+        run: ./node_modules/.bin/tsx scripts/runRequestCorrelationHttpTests.ts
       - name: Inject Redis outage and prove fail-closed recovery
         run: |
           id=$(docker ps --filter ancestor=redis:7-alpine --format '{{.ID}}' | head -n 1)
