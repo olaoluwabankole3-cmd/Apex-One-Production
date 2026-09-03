@@ -189,7 +189,7 @@ export default function AnalyticsPage() {
         "Meridian Logistics' contract renewal requires negotiation over a proposed 3% price adjustment.",
         "Client has requested custom clearing SLA bounds not currently supported on default tiers."
       ],
-      recommendedAction: "Authorize Elena Cho to extend custom credit overdraft lines up to ₦15M on a 2.5% compromise rate.",
+      recommendedAction: "Route the proposed credit exception to the assigned relationship manager for human review and approval.",
       status: "pending"
     }
   ]);
