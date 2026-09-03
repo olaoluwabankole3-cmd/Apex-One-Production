@@ -143,6 +143,11 @@ export function deriveKnowledgeRevisionView(
   decisions: KnowledgeRevisionDecision[]
 ): KnowledgeRevisionView {
   assertKnowledgeRevisionHash(snapshot);
+  const decisionRank: Record<KnowledgeRevisionDecision["state"], number> = {
+    validated: 1,
+    published: 2,
+    rejected: 3,
+  };
   const relevant = decisions
     .filter(
       (decision) =>
@@ -150,7 +155,10 @@ export function deriveKnowledgeRevisionView(
         decision.revision === snapshot.revision &&
         decision.contentHashSha256 === snapshot.contentHashSha256
     )
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    .sort((a, b) => {
+      const timestampOrder = a.createdAt.localeCompare(b.createdAt);
+      return timestampOrder !== 0 ? timestampOrder : decisionRank[a.state] - decisionRank[b.state];
+    });
 
   let state: KnowledgeRevisionState = "draft";
   let validatedAt: string | undefined;
