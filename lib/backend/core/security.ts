@@ -29,6 +29,7 @@ import {
 } from "./errors";
 import { generateSecureRequestId } from "./crypto";
 import type { ISessionStore } from "../domains/auth/authProvider";
+import { normalizeRequestId } from "../observability/telemetry";
 
 export type { TenantContext, PermissionCapability };
 
@@ -519,7 +520,8 @@ export async function resolveTenantContext(
   headers: Headers | Record<string, string | string[] | undefined>,
   sessionStore?: ISessionStore
 ): Promise<TenantContext> {
-  const requestId = generateRequestId();
+  const requestId =
+    normalizeRequestId(getHeaderValue(headers, "x-request-id")) || generateRequestId();
   const timestamp = new Date().toISOString();
 
   const authorizationHeader = getHeaderValue(headers, "authorization");
