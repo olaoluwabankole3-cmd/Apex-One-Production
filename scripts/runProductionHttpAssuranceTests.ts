@@ -118,10 +118,11 @@ async function main(): Promise<void> {
   await check("8. customer HTTP retrieval returns only seeded tenant-grounded data", async () => {
     const { response, body } = await jsonRequest("/api/v1/customers?limit=10", {}, ceoCookie);
     assert(response.status === 200, `Expected customers 200, received ${response.status}`);
-    const items = body?.data?.items;
-    assert(Array.isArray(items), "Canonical customer collection envelope is missing items");
+    const items = body?.data;
+    assert(Array.isArray(items), "Canonical customer collection envelope is missing data array");
     assert(items.length === 1, `Expected exactly one assurance customer, received ${items.length}`);
     assert(items[0].id === "customer-stage10-grounding", "Unexpected customer escaped the assurance query scope");
+    assert(body?.pagination?.count === 1, "Canonical customer pagination metadata did not preserve the result count");
   });
 
   await check("9. AI HTTP response preserves grounded facts/provenance and leaves model prose unverified", async () => {
