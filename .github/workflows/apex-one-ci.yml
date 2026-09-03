@@ -37,6 +37,8 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Run security and integrity tests
         run: bun run test:security
+      - name: Run product integrity regression gate
+        run: bun run test:product-integrity
 
   production-composition:
     name: Production Composition Root
