@@ -132,6 +132,44 @@ async function main(): Promise<void> {
     "Production promotion with mismatched image commit"
   );
 
+  const rollbackPlan = createReleasePlan({
+    action: "rollback",
+    environment: "production",
+    commitSha: "a".repeat(40),
+    imageDigest: digest("b"),
+    rollbackToDigest: digest("c"),
+    releaseId: "stage11-rollback-attestation",
+  });
+
+  const rollbackReceipt = await executeReleasePlan(rollbackPlan, {
+    controlUrl: "http://127.0.0.1:9999",
+    token: "test-token",
+    allowInsecureLoopbackForTesting: true,
+    fetchImpl: async () => new Response(JSON.stringify({
+      deploymentId: "deployment-stage11-rollback",
+      status: "succeeded",
+      activeImageDigest: rollbackPlan.targetImageDigest,
+      verifiedPreviousSuccessfulDigest: rollbackPlan.targetImageDigest,
+    }), { status: 200, headers: { "content-type": "application/json" } }),
+  });
+  if (rollbackReceipt.verifiedPreviousSuccessfulDigest !== rollbackPlan.targetImageDigest) {
+    throw new Error("Rollback lost previous-success provenance");
+  }
+
+  await expectAsyncThrow(
+    () => executeReleasePlan(rollbackPlan, {
+      controlUrl: "http://127.0.0.1:9999",
+      token: "test-token",
+      allowInsecureLoopbackForTesting: true,
+      fetchImpl: async () => new Response(JSON.stringify({
+        deploymentId: "deployment-arbitrary-rollback",
+        status: "succeeded",
+        activeImageDigest: rollbackPlan.targetImageDigest,
+      }), { status: 200, headers: { "content-type": "application/json" } }),
+    }),
+    "Rollback without previous-success attestation"
+  );
+
   const duplicateAuthority = structuredClone(getProductionTopology()) as DeploymentTopology;
   duplicateAuthority.authorities[5] = { ...duplicateAuthority.authorities[0] };
   expectThrow(() => assertProductionTopology(duplicateAuthority), "Duplicate topology authority");
@@ -152,6 +190,7 @@ async function main(): Promise<void> {
   console.log("✅ Promoted image digest is bound to the exact frozen Git commit");
   console.log("✅ Production promotion requires controller-attested staging source");
   console.log("✅ Production promotion requires the exact same staging image digest");
+  console.log("✅ Rollback requires controller-attested previous successful digest");
   console.log("✅ Controller credentials remain outside release payloads");
   console.log("✅ Deployment topology rejects duplicate authorities/provider drift/zero surge");
   console.log("================================================================================");
