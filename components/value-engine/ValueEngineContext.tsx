@@ -104,7 +104,7 @@ interface ValueEngineContextValue {
     capacityReclaimPercent: number;
     leakagePlugRate: number;
   }>>;
-  executePlayStep: (playId: string) => void;
+  executePlayStep: (playId: string) => Promise<void>;
   skipPlay: (playId: string) => void;
   runAiScan: () => Promise<void>;
   updateOpportunityStatus: (id: string, status: PipelineStatus) => void;
@@ -170,165 +170,38 @@ export function ValueEngineProvider({ children }: { children: ReactNode }) {
     leakagePlugRate: 75,
   });
 
-  const updateOpportunityStatus = (id: string, status: PipelineStatus) => {
-    setOpportunities((prevOpps) => {
-      const updated = prevOpps.map((opp) => (opp.id === id ? { ...opp, status } : opp));
-      
-      if (status === "captured") {
-        const opp = prevOpps.find((o) => o.id === id);
-        if (opp) {
-          setCapturedLedger((prevLedger) => {
-            if (prevLedger.some((l) => l.playTitle.includes(opp.title))) return prevLedger;
-            const today = new Date().toISOString().split("T")[0];
-            return [
-              {
-                id: `cap-${Date.now()}`,
-                date: today,
-                playTitle: `Direct Value Recapture: ${opp.title}`,
-                category: opp.category === "Revenue Leakage" || opp.category === "Leakage" ? "Revenue Recovered" : "Cost Avoided",
-                amountCaptured: opp.valueAmount,
-                impactMetrics: `Manually executed board action to recapture ${opp.title} value.`,
-                recordedBy: user?.name || user?.email || "Authenticated user",
-              },
-              ...prevLedger,
-            ];
-          });
-        }
-      }
-      return updated;
-    });
+  const updateOpportunityStatus = (_id: string, _status: PipelineStatus) => {
+    console.warn("Opportunity status changes are not connected to an authoritative mutation endpoint yet.");
   };
 
-  const dismissOpportunity = (id: string) => {
-    setOpportunities((prevOpps) => prevOpps.filter((opp) => opp.id !== id));
+  const dismissOpportunity = (_id: string) => {
+    console.warn("Opportunity dismissal is not connected to an authoritative mutation endpoint yet.");
   };
 
-  const executePlayStep = (playId: string) => {
-    setPlays((prevPlays) =>
-      prevPlays.map((play) => {
-        if (play.id !== playId) return play;
-
-        const nextStep = play.stepsCompleted + 1;
-        const isCompleted = nextStep >= play.totalSteps;
-        const newLogs = [...play.logs];
-
-        if (nextStep === 1) {
-          newLogs.push("Establishing secure API tunnel...");
-        } else if (nextStep === 2) {
-          newLogs.push("Auditing environment matching variables...");
-        } else if (nextStep === 3 && !isCompleted) {
-          newLogs.push("Enforcing guardrails and executing trigger...");
-        }
-
-        if (isCompleted) {
-          newLogs.push("Value Capture Play EXECUTED successfully.");
-          newLogs.push("Recording value-retention telemetry...");
-          newLogs.push("Value captured and routed to Finance Ledger.");
-
-          // If completed, update related opportunity status
-          if (play.type === "opportunity" || play.type === "capacity") {
-            setOpportunities((prevOpps) =>
-              prevOpps.map((o) => (o.id === play.targetId ? { ...o, status: "captured" } : o))
-            );
-          } else if (play.type === "leakage") {
-            setLeakageEvents((prevLeaks) =>
-              prevLeaks.map((l) => (l.id === play.targetId ? { ...l, status: "plugged" } : l))
-            );
-          }
-
-          // Add to captured ledger as a recorded event. Canonical verification/certification lives in EvidenceService.
-          const today = new Date().toISOString().split("T")[0];
-          setCapturedLedger((prevLedger) => [
-            {
-              id: `cap-${Date.now()}`,
-              date: today,
-              playTitle: play.title,
-              category: play.type === "leakage" ? "Revenue Recovered" : "Cost Avoided",
-              amountCaptured: play.estimatedGain,
-              impactMetrics: `Automated playbook executed to fully resolve targeted waste and leakage.`,
-              recordedBy: "APEX automation",
-            },
-            ...prevLedger,
-          ]);
-        }
-
-        return {
-          ...play,
-          status: isCompleted ? "completed" : "in_progress",
-          stepsCompleted: nextStep,
-          logs: newLogs,
-        };
-      })
-    );
+  const executePlayStep = async (playId: string): Promise<void> => {
+    try {
+      await valueRepository.advanceAction(playId);
+      const [opps, pls, ledger] = await Promise.all([
+        valueRepository.getOpportunities(),
+        valueRepository.getPlays(),
+        valueRepository.getCapturedLedger(),
+      ]);
+      setOpportunities(opps);
+      setPlays(pls);
+      setCapturedLedger(ledger);
+    } catch (error) {
+      console.error("Authoritative action advancement failed:", error);
+    }
   };
 
-  const skipPlay = (playId: string) => {
-    setPlays((prevPlays) => prevPlays.filter((p) => p.id !== playId));
+  const skipPlay = (_playId: string) => {
+    console.warn("Skipping an execution play is not connected to an authoritative mutation endpoint yet.");
   };
 
-  const runAiScan = async () => {
-    if (isScanning) return;
-    setIsScanning(true);
-    setScanProgress(0);
-
-    const interval = setInterval(() => {
-      setScanProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          return 100;
-        }
-        return prev + 10;
-      });
-    }, 200);
-
-    // Wait until progress hits 100
-    await new Promise((resolve) => setTimeout(resolve, 2200));
+  const runAiScan = async (): Promise<void> => {
     setIsScanning(false);
-
-    // Add a newly discovered opportunity!
-    const newId = `opp-gen-${Date.now()}`;
-    const newOpportunity: ValueOpportunity = {
-      id: newId,
-      title: "REDUNDANT WEST AFRICA EDGE SERVERS",
-      category: "Software Optimization",
-      description: "Scanning of development environment identified 4 redundant West Africa edge servers routing stale traffic.",
-      sourceSystem: "Operations (API Gateway Logs)",
-      valueAmount: 8900000, // ₦8.9M
-      status: "discovered",
-      confidence: 94,
-      probability: 80,
-      businessReason: "Inactive networking nodes and stale edge server clusters racking up redundant host fees.",
-      recommendedAction: "Consolidate edge pathways and trigger safe server block teardown.",
-      responsibleDepartment: "Infrastructure Team",
-      expectedCaptureDate: "2026-10-01",
-      impactTier: "Low",
-    };
-
-    setOpportunities((prev) => {
-      if (prev.some((o) => o.title === newOpportunity.title)) return prev;
-      return [newOpportunity, ...prev];
-    });
-
-    // Add a corresponding play
-    setPlays((prev) => [
-      {
-        id: `play-gen-${Date.now()}`,
-        title: "Teardown Stale Edge Servers",
-        description: "Migrate historical paths to the unified microservices cluster and execute safe teardown of stale nodes.",
-        targetId: newId,
-        type: "opportunity",
-        estimatedGain: 8900000,
-        status: "available",
-        stepsCompleted: 0,
-        totalSteps: 3,
-        logs: [
-          "Play initialized.",
-          "Stale networks traced.",
-          "Teardown scripts prepared."
-        ],
-      },
-      ...prev,
-    ]);
+    setScanProgress(0);
+    console.warn("AI opportunity discovery is not connected to an authoritative backend operation yet.");
   };
 
   const totalIdentified = opportunities
