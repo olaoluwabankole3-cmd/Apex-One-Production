@@ -184,6 +184,7 @@ export class S3WireClient {
       method,
       headers,
       body: method === "PUT" ? new Uint8Array(body) : undefined,
+      cache: "no-store",
     });
 
     if (allowNotFound && response.status === 404) return null;

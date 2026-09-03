@@ -23,6 +23,9 @@
     "test:lifecycle": "tsx scripts/runValueExecutionLifecycleTests.ts && tsx scripts/runValueExecutionLifecycleConcurrencyTests.ts",
     "test:ai-trust": "tsx scripts/runAiTrustBoundaryTests.ts",
     "test:consistency": "tsx scripts/runDocumentsKnowledgeConsistencyTests.ts && tsx scripts/runDocumentEvidenceTerminologyTests.ts && tsx scripts/runDocumentStrandedRecoveryTests.ts && tsx scripts/runKnowledgePublicationDeletionBoundaryTests.ts && tsx scripts/runKnowledgeRevisionConcurrencyTests.ts",
+    "assurance:prepare": "tsx scripts/prepareProductionAssuranceFixture.ts",
+    "assurance:restore-storage": "tsx scripts/restoreProductionAssuranceObjectStorage.ts",
+    "test:assurance:http": "tsx scripts/runProductionHttpAssuranceTests.ts",
     "test:infrastructure": "tsx scripts/checkInfrastructureBoundary.ts",
     "test:security": "bun run test:infrastructure && bun run test:evidence:model && tsx scripts/runSecurityTests.ts && bun run test:ai-trust"
   },
@@ -35,7 +38,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
-    "recharts": "^2.12.7"
+    "recharts": "^2.12.7",
+    "sharp": "0.35.4"
   },
   "devDependencies": {
     "@types/node": "^20.14.14",

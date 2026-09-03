@@ -10,8 +10,17 @@ import {
  * Until all durable infrastructure adapters are both configured and wired in
  * code, production requests are rejected before they can reach in-memory
  * authoritative state.
+ *
+ * Stage 10 health probes are deliberately observable even while production is
+ * not ready. Liveness proves the process can answer; the readiness route owns
+ * active dependency checks and returns 503 when durable authorities are down.
  */
 export function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+  if (pathname === "/api/v1/health" || pathname.startsWith("/api/v1/health/")) {
+    return NextResponse.next();
+  }
+
   if (!isProductionInfrastructureEnvironment()) {
     return NextResponse.next();
   }
@@ -28,7 +37,7 @@ export function middleware(request: NextRequest) {
     "X-Request-Id": requestId,
   };
 
-  if (request.nextUrl.pathname.startsWith("/api/")) {
+  if (pathname.startsWith("/api/")) {
     return NextResponse.json(
       {
         success: false,
