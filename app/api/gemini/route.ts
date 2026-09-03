@@ -1,85 +1,40 @@
-import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
-import { resolveTenantContext, requirePermission } from "@/lib/backend/core/security";
-import { createDatabaseStoreFromEnvironment } from "@/lib/backend/infrastructure/composition";
+import { resolveTenantContext } from "@/lib/backend/core/security";
 import { Validator } from "@/lib/backend/core/validation";
 import { BackendError } from "@/lib/backend/core/errors";
+import { aiOrchestratorService } from "@/lib/backend/domains/ai/aiOrchestratorService";
 
-let aiClient: GoogleGenAI | null = null;
-
-function getAiClient() {
-  if (!aiClient) {
-    const key = process.env.GEMINI_API_KEY;
-    if (!key) {
-      throw new Error("GEMINI_API_KEY environment variable is required");
-    }
-    aiClient = new GoogleGenAI({
-      apiKey: key,
-    });
-  }
-  return aiClient;
-}
-
+/**
+ * Legacy compatibility route.
+ *
+ * Stage 8 removes the historical direct repository/Gemini bypass. All AI
+ * requests now traverse the same authenticated, query-scoped trust boundary as
+ * /api/v1/ai/chat. The response keeps a top-level `text` alias for older clients
+ * while also exposing the canonical facts/modelProse/retrieval structure.
+ */
 export async function POST(req: NextRequest) {
   try {
     const ctx = await resolveTenantContext(req.headers);
-    requirePermission(ctx, "ai:execute");
-    const database = createDatabaseStoreFromEnvironment();
-
     const body = await req.json().catch(() => ({}));
-    const validatedPrompt = Validator.requireString(body.prompt, "prompt", { minLength: 1, maxLength: 4000 });
+    const prompt = Validator.requireString(body.prompt, "prompt", { minLength: 1, maxLength: 4000 });
+    const mode = typeof body.mode === "string" ? body.mode : "Executive";
+    const contextMemoryIds = Array.isArray(body.contextMemoryIds)
+      ? body.contextMemoryIds.filter((value: unknown): value is string => typeof value === "string").slice(0, 25)
+      : undefined;
 
-    const org = await database.findOrganizationById(ctx.organizationId);
-    const orgName = org?.name || "Enterprise Workspace";
-    const currency = org?.currencySymbol || "₦";
+    const result = await aiOrchestratorService.processIntelligencePrompt(
+      { prompt, mode, contextMemoryIds },
+      ctx
+    );
 
-    // Dynamic ground context strictly from authenticated tenant data
-    const customers = await database.customersRepo.findMany(ctx);
-    const opps = await database.opportunitiesRepo.findMany(ctx);
-    const totalArr = customers.items.reduce((sum: number, c) => sum + (c.arr || 0), 0);
-    const totalOpps = opps.items.reduce((sum: number, o) => sum + (o.potentialValue || 0), 0);
-
-    await database.recordAuditLog({
-      organizationId: ctx.organizationId,
-      actorId: ctx.userId,
-      actorEmail: ctx.userEmail,
-      action: "ai:execute_gemini",
-      resource: "GeminiRoute",
-      resourceId: "generate",
-      requestId: ctx.requestId,
-      status: "success",
-      metadata: { promptLength: validatedPrompt.length, monitoredAccounts: customers.items.length },
-      timestamp: new Date().toISOString(),
-    });
-
-    const ai = getAiClient();
-
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: validatedPrompt,
-      config: {
-        systemInstruction: `You are APEX ONE Executive Intelligence Analyst for ${orgName}.
-Monitored Organization Context:
-- Currency: ${currency}
-- Monitored Accounts: ${customers.items.length} (Total ARR: ${currency}${totalArr.toLocaleString()})
-- Identified Value Opportunities: ${opps.items.length} (Total: ${currency}${totalOpps.toLocaleString()})
-
-When replying to queries about executive intelligence, financial analysis, audits, or operational strategy:
-1. Provide structured, authoritative, and scannable insights.
-2. If discussing financial impact, format figures in ${currency}.
-3. Speak with executive composure, board-level eloquence, and high precision.
-4. If no enterprise data has been loaded yet, provide actionable instructions on configuring database sync or importing records.`,
-      },
-    });
-
-    return NextResponse.json({ text: response.text || "No response received." });
-  } catch (error: any) {
+    return NextResponse.json(result);
+  } catch (error: unknown) {
     if (error instanceof BackendError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.statusCode });
     }
-    console.error("Gemini API error:", error);
+    console.error("AI compatibility route error:", error);
     return NextResponse.json(
-      { error: error?.message || "An error occurred during generative intelligence execution.", code: "INTERNAL_ERROR" },
+      { error: "An error occurred during enterprise intelligence execution.", code: "INTERNAL_ERROR" },
       { status: 500 }
     );
   }

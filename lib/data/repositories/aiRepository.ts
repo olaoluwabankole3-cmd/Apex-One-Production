@@ -10,6 +10,7 @@ export interface AIConversationMessage {
 
 export interface AIRepository {
   ask(prompt: string): Promise<string>;
+  askTrusted(prompt: string, mode?: string, contextMemoryIds?: string[]): Promise<AiIntelligenceResponse>;
   getConversationHistory(conversationId: string): Promise<AIConversationMessage[]>;
   getSuggestedPrompts(role?: Role): Promise<SuggestedPrompt[]>;
   getQuickActions(role?: Role): Promise<QuickAction[]>;
@@ -18,20 +19,41 @@ export interface AIRepository {
 }
 
 export class ApiAIRepository implements AIRepository {
-  async ask(prompt: string): Promise<string> {
+  async askTrusted(prompt: string, mode = "Executive", contextMemoryIds?: string[]): Promise<AiIntelligenceResponse> {
     const result = await apiClient.postData<AiIntelligenceResponse>("/api/v1/ai/chat", {
       prompt,
+      mode,
+      ...(contextMemoryIds && contextMemoryIds.length > 0 ? { contextMemoryIds } : {}),
     });
 
-    if (typeof result.text !== "string" || result.text.trim().length === 0) {
+    if (!result.modelProse || typeof result.modelProse.text !== "string") {
       throw new ApiClientContractError(
-        "AI intelligence service returned an empty canonical response",
+        "AI intelligence service did not return the Stage 8 modelProse contract",
+        "/api/v1/ai/chat",
+        "POST"
+      );
+    }
+    if (!Array.isArray(result.facts) || !result.retrieval) {
+      throw new ApiClientContractError(
+        "AI intelligence service did not return Stage 8 facts/retrieval provenance",
         "/api/v1/ai/chat",
         "POST"
       );
     }
 
-    return result.text;
+    return result;
+  }
+
+  async ask(prompt: string): Promise<string> {
+    const result = await this.askTrusted(prompt);
+    if (result.modelProse.text.trim().length === 0) {
+      throw new ApiClientContractError(
+        "AI intelligence service returned empty model prose",
+        "/api/v1/ai/chat",
+        "POST"
+      );
+    }
+    return result.modelProse.text;
   }
 
   async getConversationHistory(_conversationId: string): Promise<AIConversationMessage[]> {
@@ -52,8 +74,8 @@ export class ApiAIRepository implements AIRepository {
   async getQuickActions(role?: Role): Promise<QuickAction[]> {
     const defaultActions: QuickAction[] = [
       { id: "qa-1", label: "Generate Board Briefing", description: "Compile executive governance summary", icon: "FileText", roles: ["CEO"] },
-      { id: "qa-2", label: "Audit Float Sweep", description: "Verify end-of-day treasury settlement", icon: "Activity", roles: ["CEO", "Operations"] },
-      { id: "qa-3", label: "Verify Compliance Ledger", description: "Validate multi-tenant isolation proofs", icon: "ShieldCheck", roles: ["Compliance", "Operations"] },
+      { id: "qa-2", label: "Audit Float Sweep", description: "Review end-of-day treasury settlement evidence", icon: "Activity", roles: ["CEO", "Operations"] },
+      { id: "qa-3", label: "Review Compliance Ledger", description: "Inspect multi-tenant isolation evidence", icon: "ShieldCheck", roles: ["Compliance", "Operations"] },
     ];
     if (!role) return defaultActions;
     return defaultActions.filter((q) => q.roles.includes(role));
@@ -71,8 +93,8 @@ export class ApiAIRepository implements AIRepository {
     prompt: string,
     _role: Role
   ): Promise<{ content: string; richContent?: "performance-stats" | "executive-report" | "at-risk-customers" }> {
-    const text = await this.ask(prompt);
-    return { content: text };
+    const result = await this.askTrusted(prompt);
+    return { content: result.modelProse.text };
   }
 }
 

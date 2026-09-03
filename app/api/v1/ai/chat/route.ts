@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveTenantContext } from "@/lib/backend/core/security";
 import {
   aiOrchestratorService,
-  type AiChatRequestDto,
+  type AiIntelligenceRequest,
 } from "@/lib/backend/domains/ai/aiOrchestratorService";
 import { Validator } from "@/lib/backend/core/validation";
 import {
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const dto: AiChatRequestDto = {
+    const dto: AiIntelligenceRequest = {
       prompt,
       ...(mode ? { mode } : {}),
       ...(contextMemoryIds ? { contextMemoryIds } : {}),
