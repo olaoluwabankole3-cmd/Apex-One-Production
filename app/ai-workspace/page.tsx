@@ -5,7 +5,7 @@ import InternalOnlyShield from "@/components/layout/InternalOnlyShield";
 
 export default function AIWorkspacePage() {
   return (
-    <InternalOnlyShield>
+    <InternalOnlyShield requiredPermission="ai:execute">
       <TrustedAiWorkspace />
     </InternalOnlyShield>
   );
