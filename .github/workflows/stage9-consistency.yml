@@ -1,0 +1,96 @@
+name: APEX ONE — Stage 9 Consistency Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: apex-one-stage9-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  documents-knowledge-consistency:
+    name: Documents & Knowledge Consistency
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: apex
+          POSTGRES_PASSWORD: apex-ci-password
+          POSTGRES_DB: apex_stage9_test
+        ports:
+          - 10543:5432
+        options: >-
+          --health-cmd "pg_isready -U apex -d apex_stage9_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://apex:apex-ci-password@127.0.0.1:10543/apex_stage9_test?sslmode=disable
+      TEST_ENV: "true"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20.x"
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Install dependencies (frozen lockfile)
+        run: bun install --frozen-lockfile
+      - name: Run Stage 9 document and knowledge consistency tests
+        run: bun run test:consistency
+
+  stage9-typecheck:
+    name: Stage 9 TypeScript Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs:
+      - documents-knowledge-consistency
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20.x"
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Install dependencies (frozen lockfile)
+        run: bun install --frozen-lockfile
+      - name: Run TypeScript verification
+        run: bun run typecheck
+
+  stage9-build:
+    name: Stage 9 Production Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs:
+      - documents-knowledge-consistency
+      - stage9-typecheck
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20.x"
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+      - name: Install dependencies (frozen lockfile)
+        run: bun install --frozen-lockfile
+      - name: Run production build
+        run: bun run build

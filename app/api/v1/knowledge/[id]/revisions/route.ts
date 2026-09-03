@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTenantContext } from "@/lib/backend/core/security";
-import { publicationSafeKnowledgeService } from "@/lib/backend/domains/knowledge/publicationSafeKnowledgeService";
+import { controlledKnowledgeService } from "@/lib/backend/domains/knowledge/controlledKnowledgeService";
 import type { UpdateKnowledgeItemDto } from "@/lib/backend/domains/knowledge/knowledgeTypes";
 import { Validator } from "@/lib/backend/core/validation";
 import {
@@ -23,7 +23,7 @@ const KNOWLEDGE_CATEGORIES = [
   "Engineering Standard",
   "Treasury Guideline",
 ] as const;
-const KNOWLEDGE_UPDATE_KEYS = [
+const REVISION_KEYS = [
   "title",
   "category",
   "content",
@@ -37,35 +37,31 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   let requestId: string | undefined;
-
   try {
     const ctx = await resolveTenantContext(req.headers);
     requestId = ctx.requestId;
     const { id } = await params;
     const knowledgeId = Validator.requireId(id, "knowledgeId");
-    const item = await publicationSafeKnowledgeService.getKnowledgeItemById(knowledgeId, ctx);
-
-    return NextResponse.json(toApiSuccessResponse(item, requestId));
+    const history = await controlledKnowledgeService.getRevisionHistory(knowledgeId, ctx);
+    return NextResponse.json(toApiSuccessResponse(history, requestId));
   } catch (error: unknown) {
     const serialized = serializeApiError(error, requestId);
     return NextResponse.json(serialized.body, { status: serialized.status });
   }
 }
 
-export async function PUT(
+export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   let requestId: string | undefined;
-
   try {
     const ctx = await resolveTenantContext(req.headers);
     requestId = ctx.requestId;
     const { id } = await params;
     const knowledgeId = Validator.requireId(id, "knowledgeId");
     const body = await readJsonObject(req);
-
-    assertAllowedKeys(body, KNOWLEDGE_UPDATE_KEYS);
+    assertAllowedKeys(body, REVISION_KEYS);
     assertNonEmptyObject(body);
 
     if (body.title !== undefined) {
@@ -90,35 +86,12 @@ export async function PUT(
       );
     }
 
-    const item = await publicationSafeKnowledgeService.updateKnowledgeItem(
+    const revision = await controlledKnowledgeService.createRevision(
       knowledgeId,
       body as unknown as UpdateKnowledgeItemDto,
       ctx
     );
-
-    return NextResponse.json(toApiSuccessResponse(item, requestId));
-  } catch (error: unknown) {
-    const serialized = serializeApiError(error, requestId);
-    return NextResponse.json(serialized.body, { status: serialized.status });
-  }
-}
-
-export async function DELETE(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  let requestId: string | undefined;
-
-  try {
-    const ctx = await resolveTenantContext(req.headers);
-    requestId = ctx.requestId;
-    const { id } = await params;
-    const knowledgeId = Validator.requireId(id, "knowledgeId");
-    await publicationSafeKnowledgeService.deleteKnowledgeItem(knowledgeId, ctx);
-
-    return NextResponse.json(
-      toApiSuccessResponse({ deleted: true, id: knowledgeId }, requestId)
-    );
+    return NextResponse.json(toApiSuccessResponse(revision, requestId), { status: 201 });
   } catch (error: unknown) {
     const serialized = serializeApiError(error, requestId);
     return NextResponse.json(serialized.body, { status: serialized.status });

@@ -22,6 +22,7 @@
     "test:evidence": "bun run test:evidence:model && tsx scripts/runEvidenceProvenanceTests.ts && bun run test:evidence:terminology",
     "test:lifecycle": "tsx scripts/runValueExecutionLifecycleTests.ts && tsx scripts/runValueExecutionLifecycleConcurrencyTests.ts",
     "test:ai-trust": "tsx scripts/runAiTrustBoundaryTests.ts",
+    "test:consistency": "tsx scripts/runDocumentsKnowledgeConsistencyTests.ts && tsx scripts/runDocumentEvidenceTerminologyTests.ts && tsx scripts/runDocumentStrandedRecoveryTests.ts && tsx scripts/runKnowledgePublicationDeletionBoundaryTests.ts && tsx scripts/runKnowledgeRevisionConcurrencyTests.ts",
     "test:infrastructure": "tsx scripts/checkInfrastructureBoundary.ts",
     "test:security": "bun run test:infrastructure && bun run test:evidence:model && tsx scripts/runSecurityTests.ts && bun run test:ai-trust"
   },

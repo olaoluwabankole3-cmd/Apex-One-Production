@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTenantContext } from "@/lib/backend/core/security";
-import { knowledgeService } from "@/lib/backend/domains/knowledge/knowledgeService";
+import { controlledKnowledgeService } from "@/lib/backend/domains/knowledge/controlledKnowledgeService";
 import type { CreateKnowledgeItemDto } from "@/lib/backend/domains/knowledge/knowledgeTypes";
 import { Validator } from "@/lib/backend/core/validation";
 import {
@@ -34,7 +34,6 @@ const KNOWLEDGE_BODY_KEYS = [
   "summary",
   "sourceDocId",
   "tags",
-  "isPublicPlatformKnowledge",
 ] as const;
 
 export async function GET(req: NextRequest) {
@@ -56,7 +55,7 @@ export async function GET(req: NextRequest) {
     const tag = optionalQueryString(searchParams, "tag", 100);
     const pagination = parseCursorPagination(searchParams);
 
-    const result = await knowledgeService.getKnowledgeItems(ctx, {
+    const result = await controlledKnowledgeService.getKnowledgeItems(ctx, {
       category,
       query,
       tags: tag ? [tag] : undefined,
@@ -78,6 +77,7 @@ export async function POST(req: NextRequest) {
     requestId = ctx.requestId;
     const body = await readJsonObject(req);
 
+    // Stage 9: publication authority is no longer a writable create field.
     assertAllowedKeys(body, KNOWLEDGE_BODY_KEYS);
 
     Validator.requireString(body.title, "title", { minLength: 1, maxLength: 200 });
@@ -96,11 +96,8 @@ export async function POST(req: NextRequest) {
         Validator.requireString(tag, `tags[${index}]`, { maxLength: 100 })
       );
     }
-    if (body.isPublicPlatformKnowledge !== undefined) {
-      Validator.optionalBoolean(body.isPublicPlatformKnowledge, "isPublicPlatformKnowledge");
-    }
 
-    const item = await knowledgeService.createKnowledgeItem(
+    const item = await controlledKnowledgeService.createKnowledgeItem(
       body as unknown as CreateKnowledgeItemDto,
       ctx
     );
