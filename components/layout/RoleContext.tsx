@@ -3,24 +3,25 @@
 /**
  * APEX ONE — Presentation Context
  *
- * SECURITY BOUNDARY:
- * - This context is not an authentication or authorization authority.
- * - Role authority comes only from the authenticated backend session.
- * - Permission UX hints belong to AuthContext.hasPermission.
- * - Backend authorization remains authoritative for every protected operation.
+ * This context is not an authentication or authorization authority.
+ * Role and tenant authority come only from the authenticated backend session.
  */
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { ALL_ROLES, type Role, type ActivityItem, type NotificationItem } from "@/lib/types";
 import { notificationRepository } from "@/lib/data/repositories";
-import { isDemoMode } from "@/lib/demo";
 import { useAuth } from "@/components/auth/AuthContext";
 
 interface PresentationContextValue {
   readonly role: Role;
   activities: ActivityItem[];
   setActivities: React.Dispatch<React.SetStateAction<ActivityItem[]>>;
-  addActivity: (act: { actor: string; action: string; target: string; type: ActivityItem["type"] }) => void;
+  addActivity: (act: {
+    actor: string;
+    action: string;
+    target: string;
+    type: ActivityItem["type"];
+  }) => void;
   notifications: NotificationItem[];
   setNotifications: React.Dispatch<React.SetStateAction<NotificationItem[]>>;
   addNotification: (notif: {
@@ -35,86 +36,70 @@ interface PresentationContextValue {
 const RoleContext = createContext<PresentationContextValue | undefined>(undefined);
 
 export function RoleProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, organization, isLoading } = useAuth();
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
-  // AppShell prevents unauthenticated or non-internal sessions from rendering
-  // the enterprise workspace. This sentinel exists only for legacy presentation
-  // consumers while the session is unresolved and never grants access.
-  const role: Role = user && ALL_ROLES.includes(user.role as Role)
-    ? (user.role as Role)
-    : "Customer / Investor";
+  // Administrator is an authoritative backend role. Until all legacy display maps
+  // include it, use the executive presentation profile only; the actual role and
+  // permissions remain authoritative in AuthContext.
+  const role: Role =
+    user?.role === "Administrator"
+      ? "CEO"
+      : user && ALL_ROLES.includes(user.role as Role)
+        ? (user.role as Role)
+        : "Customer / Investor";
 
   useEffect(() => {
     let mounted = true;
 
-    async function syncDevelopmentFixtures() {
-      if (!isDemoMode()) {
-        if (mounted) {
-          setActivities([]);
-          setNotifications([]);
-        }
-        return;
-      }
+    if (isLoading) return;
 
-      const [activityRecords, notificationRecords] = await Promise.all([
-        notificationRepository.getActivities(),
-        notificationRepository.getNotifications(),
-      ]);
-
-      if (!mounted) return;
-      setActivities(activityRecords);
-      setNotifications(notificationRecords);
+    if (!user || !organization) {
+      setActivities([]);
+      setNotifications([]);
+      return;
     }
 
-    syncDevelopmentFixtures();
-    window.addEventListener("storage", syncDevelopmentFixtures);
+    Promise.all([
+      notificationRepository.getActivities(organization.id),
+      notificationRepository.getNotifications(organization.id),
+    ])
+      .then(([activityRecords, notificationRecords]) => {
+        if (!mounted) return;
+        setActivities(activityRecords);
+        setNotifications(notificationRecords);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setActivities([]);
+        setNotifications([]);
+      });
+
     return () => {
       mounted = false;
-      window.removeEventListener("storage", syncDevelopmentFixtures);
     };
-  }, []);
+  }, [user, organization, isLoading]);
 
-  const addActivity = (act: {
+  // Compatibility callbacks deliberately do not create local business events.
+  // Durable activity and notification creation requires a backend operation.
+  const addActivity = (_act: {
     actor: string;
     action: string;
     target: string;
     type: ActivityItem["type"];
   }) => {
-    setActivities((previous) => [
-      {
-        id: `act-${Date.now()}`,
-        actor: act.actor,
-        action: act.action,
-        target: act.target,
-        time: "Just now",
-        type: act.type,
-      },
-      ...previous,
-    ]);
+    console.warn("Local activity creation is disabled; use an authoritative backend operation.");
   };
 
-  const addNotification = (notif: {
+  const addNotification = (_notif: {
     title: string;
     description: string;
     type: NotificationItem["type"];
     severity: NotificationItem["severity"];
     source: string;
   }) => {
-    setNotifications((previous) => [
-      {
-        id: `notif-${Date.now()}`,
-        title: notif.title,
-        description: notif.description,
-        type: notif.type,
-        severity: notif.severity,
-        time: "Just now",
-        read: false,
-        source: notif.source,
-      },
-      ...previous,
-    ]);
+    console.warn("Local notification creation is disabled; use an authoritative backend operation.");
   };
 
   return (
