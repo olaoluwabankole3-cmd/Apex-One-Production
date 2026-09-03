@@ -1,3 +1,5 @@
+export {};
+
 const baseUrl = (process.env.ASSURANCE_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
 const expected = process.argv[2];
 if (expected !== "ready" && expected !== "not_ready") {
