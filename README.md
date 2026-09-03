@@ -1,103 +1,163 @@
-# CANARY POINT OS — by Apex Sync Intelligence
+# APEX ONE
 
-The Intelligent Operating System for Modern Enterprises.
+APEX ONE is a multi-tenant enterprise operating and intelligence platform built with Next.js. The repository contains the application UI, authenticated API, durable persistence adapters, document/knowledge controls, workflow and value-execution domains, AI trust boundary, production readiness probes, structured telemetry, and provider-neutral release controls.
 
-This is a premium interactive prototype built for demoing Apex Sync's capabilities to CEOs, executives, and enterprise clients. All data is mocked — no backend required.
+This README describes the architecture that is implemented in the repository after the production-assurance and observability/deployment stages. It is not a mock-only frontend: production mode is deliberately **fail-closed** unless every required durable authority and immutable release identity is valid.
 
-## What's built (v1 scope)
+## System at a glance
 
-- **Executive Dashboard** (`/`) — fully built: AI Executive Summary with role-aware typewriter briefing, KPI grid with animated numbers and sparklines, revenue performance chart, portfolio breakdown by subsidiary, recent activity feed, and quick actions — all filtered by a live role switcher (CEO, Operations, Relationship Manager, Compliance, Customer Service).
-- **AI Workspace** (`/ai-workspace`) — fully built: a conversational interface with Apex Intelligence. Empty-state welcome with role-aware suggested prompts, a real chat flow (typing indicator → typewriter-streamed response), and three scripted rich responses:
-  - *"Summarize today's business performance"* → text summary + inline KPI stat row
-  - *"Generate executive report"* → an inline generated report card with sections and a mock export button
-  - *"Show customers at risk"* → an inline table of at-risk accounts with risk scores and reasons
-  - Any other prompt gets a sensible generic response grounded in the same mock data, so the demo never dead-ends. Suggested prompts and the AI's tone both adapt to the active role.
+APEX ONE is organized around authenticated tenant-scoped application services rather than direct client access to infrastructure. The principal product domains are:
 
-- **Customer Relationship Workspace** (`/customers`) — fully built: a searchable, filterable customer directory (7 mock accounts across all four subsidiaries — active, at-risk, and onboarding) paired with a full profile view — health-score ring, ARR, owner, contact, and tags — and five connected tabs:
-  - **Timeline** — a chronological, color-coded feed of deals, meetings, notes, support events, and system alerts
-  - **Notes** — pinned and regular relationship notes
-  - **Tasks** — checkable action items with due dates, assignees, and priority
-  - **Meetings** — upcoming and completed meetings with attendees and notes
-  - **Files** — attached documents with type icons and mock download
+- **Customers and enterprise records** — tenant-scoped customer data and related business state.
+- **Documents and knowledge** — encrypted object storage, durable search, document consistency, evidence provenance, controlled knowledge revisions, validation, publication, and deletion boundaries.
+- **Workflows and actions** — workflow definitions, execution, action lifecycle, authorization, and audit.
+- **Value intelligence** — opportunity, simulation, execution-lifecycle, captured-value, and financial-integrity controls.
+- **AI intelligence** — permission-scoped retrieval, deterministic facts, provenance references, and model prose that remains explicitly unverified and uncertified.
+- **Audit and observability** — append-only durable audit, request correlation, structured telemetry, health probes, release identity, and deployment topology identity.
 
-  Selecting a different customer or tab updates everything in place with a smooth transition — this is the "everything visually connected" piece of the brief.
+## Production architecture
 
-- **Operations** (`/operations`) — fully built: an operations command center with four top-line stats (SLA compliance, open incidents, avg resolution time, automation coverage), a subsidiary health grid (all four subsidiaries with reconciliation status, SLA trend sparkline, incidents, and automation coverage bar), an SLA compliance trend chart (8-month, actual vs. target), a filterable incident queue table, and an automation opportunities panel surfacing the workflow bottlenecks referenced in the brief (e.g. Nova Insurance claims processing).
+The production composition root requires exactly six durable authorities. Memory implementations exist for local development and tests only.
 
-- **Document Intelligence** (`/documents`) — fully built: a searchable, filterable document library (6 mock documents — contracts, financial statements, a compliance filing, and a claims audit — spanning all four subsidiaries), a working "Simulate Upload" flow (drag-and-drop or button, 2.2s mock processing animation, new document lands in the library and auto-selects), and a document viewer with three tabs:
-  - **AI Summary** — a generated plain-language summary of the document
-  - **Extracted Data** — key-value fields pulled from the document (parties, dates, amounts, terms)
-  - **Ask a Question** — a document-scoped Q&A chat (reuses the AI Workspace chat components) with suggested questions and canned answers grounded in the extracted fields, plus a sensible fallback for anything else
+| Authority | Production provider | Purpose |
+| --- | --- | --- |
+| Database | PostgreSQL | Canonical tenant/business persistence |
+| Audit | PostgreSQL | Durable append-only audit; shares the database authority for atomic business + audit work |
+| Session | Redis | Authenticated session state |
+| Rate limit | Redis | Distributed rate-limit authority |
+| Object storage | S3-compatible | Encrypted document ciphertext |
+| Search index | PostgreSQL | Durable document search authority |
 
-  One document (Halden & Cross MSA) is seeded in a "processing" state to show what the in-flight experience looks like.
+Production cannot silently fall back to memory providers. Invalid provider selection, missing durable configuration, transport-security violations, incomplete release identity, unavailable authorities, or missing audit durability cause readiness to fail.
 
-- **Analytics** (`/analytics`) — fully built: a business intelligence view with four top-line stats (total revenue, net new ARR, net revenue retention, gross churn), a time-range-aware stacked revenue chart by subsidiary (30D/90D/YTD/12M — Nova Insurance's declining share tells the same story as Operations and Customers), a 12-month customer growth chart, a revenue-by-segment donut (Enterprise/Mid-Market/SMB), a subsidiary performance leaderboard, and a top-accounts-by-ARR panel that reuses the same customer data from the CRM screen.
+For the complete environment contract, see [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md). For runtime topology, promotion, and rollback, see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
-- **Workflow Builder** (`/workflows`) — fully built: a visual, node-based automation builder with a workflow library (4 pre-built automations, each tied to an automation opportunity surfaced in Operations), a real drag-and-drop canvas (nodes are genuinely draggable, connections redraw live via SVG), a node palette to add new steps (Trigger, Action, Condition, AI Agent, Delay, Integration), a node inspector panel, and a working **Run Workflow** simulation that animates execution status through the graph node-by-node, correctly following branches (e.g. the Claims Intake Triage workflow's "Urgent? Yes/No" split).
+## Security and trust boundaries
 
-  This completes all 5 screens from the original product brief.
+APEX ONE derives tenant identity from the authenticated session, never from an arbitrary client-supplied organization identifier. Requests may authenticate with an `Authorization: Bearer <token>` credential or the HttpOnly `apex_session` cookie. Unknown roles fail closed and authorization is capability-based.
 
-- **Calendar** (`/calendar`) — an agenda view grouped by date, pulling from the same meeting data used in the CRM screen plus renewals, workflow runs, and reviews. Filterable by event type.
+Production security properties include:
 
-- **Notifications** (`/notifications`) — a notification center with read/unread state, mark-all-as-read, and filters (All / Unread / Alerts / Mentions / Workflows / System). Content is drawn from the same narrative threads as the rest of the app (the Nova Insurance SLA breach, Meridian Logistics risk signal, workflow run summaries, etc).
+- PostgreSQL, Redis, and custom S3 endpoints require encrypted transport according to the environment contract.
+- Raw session tokens are treated as opaque credentials; Redis session keys use token digests rather than persisting raw tokens as keys.
+- Document content is encrypted with an application-owned 32-byte key before ciphertext is written to S3-compatible storage.
+- Durable audit rows are protected by a PostgreSQL append-only trigger that rejects direct `UPDATE` and `DELETE` operations.
+- A canonical `X-Request-Id` is propagated through ingress, authenticated tenant context, API handling, and durable audit for correlation.
+- Structured telemetry recursively redacts credential-like values and bounds attributes rather than logging request bodies or infrastructure exception details.
+- AI retrieval is tenant- and permission-scoped. Deterministic facts are separated from model prose; model prose does not become verified or certified merely because source records carry evidence state.
+- `DEMO_MODE=true` is an explicit development-only convenience and cannot enable demo authentication in production.
 
-- **Knowledge Hub** (`/knowledge-hub`) — a searchable library of 8 playbooks, policies, onboarding guides, and product docs (e.g. "Handling At-Risk Account Escalations," "Nova Insurance Claims Triage SOP"), with category filters and a full article reading view.
+## Local development
 
-- **Settings** (`/settings`) — tabbed account settings: Profile (including a role switcher that's wired to the same role context used everywhere else in the app), Notification Preferences (working toggles), Integrations (Salesforce, Slack, Outlook, Snowflake, Okta, etc. — connect/disconnect toggles), and Security (SSO status, active sessions, API access).
-
-Every nav destination in the original brief is now fully built out.
-
-Demo company: **Nova Financial Group** (Nova Bank, Nova Finance, Nova Capital, Nova Insurance).
-
-## Stack
-
-Next.js 14 (App Router) · TypeScript · Tailwind CSS · Framer Motion · Recharts · lucide-react
-
-## Running it locally
+The repository is pinned to **Bun 1.4.0**.
 
 ```bash
-npm install
-npm run dev
+bun install --frozen-lockfile
+cp .env.example .env.local
+bun run dev
 ```
 
-Then open [http://localhost:3000](http://localhost:3000).
+The development defaults in `.env.example` select in-memory adapters. Set `DEMO_MODE=true` only when you intentionally want the development-only demo identity; otherwise use the authentication API normally.
 
-To build for production:
+`GEMINI_API_KEY` is needed when AI model generation is invoked. The AI service can still return system-controlled fallback output in paths where generation is unavailable, but a real Gemini key is required for Gemini-backed prose generation.
+
+### Local durable-provider development
+
+You may opt into PostgreSQL, Redis, or S3-compatible providers individually outside production by changing the corresponding adapter variables. When using PostgreSQL, run migrations before exercising the durable application:
 
 ```bash
-npm run build
-npm run start
+bun run db:migrate
 ```
 
-> Note: the first build requires internet access to fetch the Syne, DM Sans, and JetBrains Mono fonts from Google Fonts (handled automatically via `next/font/google`).
+See [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md) for provider values and required connection variables.
 
-## Where things live
+## Production runtime
 
-- `app/` — routes (one folder per nav item, App Router convention)
-- `components/dashboard/` — all Executive Dashboard widgets
-- `components/ai-workspace/` — chat window, message bubbles, inline rich-content widgets, sidebar
-- `components/customers/` — customer list, profile header, tabbed timeline/notes/tasks/meetings/files
-- `components/operations/` — stats, subsidiary health grid, SLA chart, incident queue, automation opportunities
-- `components/documents/` — document library, upload dropzone, viewer, summary/extracted/ask tabs
-- `components/analytics/` — stats, revenue-by-subsidiary chart, customer growth, segment breakdown, leaderboards
-- `components/workflows/` — workflow library, node canvas + drag logic, node palette, inspector, run simulation
-- `components/calendar/` — agenda list with type filters
-- `components/notifications/` — notification feed with read/unread state and filters
-- `components/knowledge-hub/` — article list + detail viewer
-- `components/settings/` — tabbed settings (profile, notifications, integrations, security)
-- `components/layout/` — Sidebar, Topbar, role switcher + role context
-- `components/ui/` — shared primitives (GlassCard, ComingSoon)
-- `lib/mockData.ts` — all mock data (KPIs, revenue series, portfolio, activity, quick actions, AI summaries per role)
-- `lib/types.ts` — shared TypeScript types
+The canonical production image is the repository `Dockerfile`:
 
-## Design system
+- Bun 1.4.0 builder stage.
+- Node 20 Alpine runtime.
+- Next.js standalone output.
+- Runtime user `node` (non-root).
+- Application port `3000`.
+- OCI commit/release metadata labels.
+- Container health check against `/api/v1/health`.
 
-- **Palette**: Matte black `#0A0A0B` / Charcoal `#16161A` / Gold `#C9A961` / Ivory `#F7F5F0` / Emerald `#3FBF8F` / Amber `#E0A845` / Crimson `#D8455F`
-- **Type**: Syne (display) · DM Sans (body) · JetBrains Mono (data/labels)
-- Glassmorphism cards, gold-glow accents, reduced-motion support, keyboard focus states built in.
+The provider-neutral production topology is code-reviewed in [`deploy/production-topology.json`](deploy/production-topology.json). It requires at least two application replicas and a rolling rollout with `maxUnavailable: 0` and `maxSurge: 1`.
 
-## Next up (not yet built)
+### Health probes
 
-Every screen in the app is now fully built — all 5 original brief screens (Executive Dashboard, AI Workspace, Customer Relationship Workspace, Document Intelligence, Workflow Builder), the two extensions (Operations, Analytics), and all four remaining nav destinations (Calendar, Notifications, Knowledge Hub, Settings). There's nothing left stubbed as "Coming Soon."
+| Probe | Endpoint | Meaning |
+| --- | --- | --- |
+| Liveness | `GET /api/v1/health` | Process is alive |
+| Startup | `GET /api/v1/health/startup` | Static deployment/release configuration is valid |
+| Readiness | `GET /api/v1/health/ready` | Required durable authorities are actively usable and audit durability is installed |
 
-From here, natural next steps would be wiring up a real backend (today everything is mock data held in `lib/mockData.ts`), adding persistence for things like task completion and notification read-state, or hooking the AI Workspace and Document Intelligence Q&A up to a live Claude API call instead of the scripted responses.
+Readiness actively checks PostgreSQL, Redis, S3-compatible object storage, PostgreSQL document search, and the append-only audit controls. Probe responses expose health/topology/release information without returning connection strings, credentials, or raw dependency exceptions.
+
+## Release and rollback model
+
+Deployments are controlled through `.github/workflows/stage11-release-control.yml` and the provider-neutral deployment-controller boundary.
+
+Key invariants:
+
+1. Release source is frozen to the exact `main` commit.
+2. Successful **Production CI for that exact main SHA** is required before release control runs.
+3. Promotion accepts only an immutable `sha256:` image digest.
+4. Every promoted digest must be attested by the deployment controller to the frozen Git commit.
+5. Production promotion must originate from staging and must use the exact same digest attested in staging.
+6. Rollback requires an explicit immutable digest that the controller attests was previously successful.
+7. Mutable tags such as `latest` are not release authority.
+8. Staging and production use protected GitHub environments; repository permissions in the release workflow remain read-only.
+
+See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the operator procedure and controller contract.
+
+## Validation and CI
+
+The normal pull-request path inherits the repository’s production gates. Important local commands include:
+
+```bash
+bun run typecheck
+bun run build
+bun run test:security
+bun run test:postgres
+bun run test:redis
+bun run test:s3
+bun run test:search
+bun run test:composition
+bun run test:recovery
+bun run test:evidence
+bun run test:lifecycle
+bun run test:ai-trust
+bun run test:consistency
+bun run test:observability
+```
+
+Production assurance additionally exercises a production-built standalone server, authentication/RBAC in Chromium, HTTP/AI/concurrency behavior, Redis/PostgreSQL/S3 outage and recovery, fail-closed deployment-image behavior, request-correlation durability, and standalone runtime hygiene.
+
+## Repository layout
+
+```text
+app/                         Next.js pages and API routes
+components/                  Product UI and authenticated workspaces
+lib/backend/core/            Security, validation, HTTP and crypto boundaries
+lib/backend/database/        Repository contracts, PostgreSQL adapters and migrations
+lib/backend/domains/         Auth, customers, documents, knowledge, evidence, workflows, AI and value domains
+lib/backend/infrastructure/  Production composition, readiness, topology, release control, Redis/S3 clients
+lib/backend/observability/   Structured telemetry and request correlation
+scripts/                     Migration, assurance, integration and release-control entry points
+deploy/                      Provider-neutral production topology
+docs/                        Environment and deployment operator documentation
+.github/workflows/           Production CI, assurance, consistency, observability and release workflows
+```
+
+## Documentation authority
+
+Operational documentation intentionally follows the implemented architecture:
+
+- `.env.example` — copyable, secret-free environment template.
+- `docs/ENVIRONMENT.md` — environment variables, provider selection, TLS and secret requirements.
+- `deploy/production-topology.json` — machine-readable production topology contract.
+- `docs/DEPLOYMENT.md` — deployment, migration, probes, promotion and rollback procedure.
+
+When documentation and executable safeguards disagree, treat the executable validation as authoritative and update the documentation in the same change rather than weakening the runtime boundary.
