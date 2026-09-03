@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTenantContext } from "@/lib/backend/core/security";
-import { knowledgeService } from "@/lib/backend/domains/knowledge/knowledgeService";
+import { controlledKnowledgeService } from "@/lib/backend/domains/knowledge/controlledKnowledgeService";
 import type { UpdateKnowledgeItemDto } from "@/lib/backend/domains/knowledge/knowledgeTypes";
 import { Validator } from "@/lib/backend/core/validation";
 import {
@@ -43,7 +43,7 @@ export async function GET(
     requestId = ctx.requestId;
     const { id } = await params;
     const knowledgeId = Validator.requireId(id, "knowledgeId");
-    const item = await knowledgeService.getKnowledgeItemById(knowledgeId, ctx);
+    const item = await controlledKnowledgeService.getKnowledgeItemById(knowledgeId, ctx);
 
     return NextResponse.json(toApiSuccessResponse(item, requestId));
   } catch (error: unknown) {
@@ -90,7 +90,7 @@ export async function PUT(
       );
     }
 
-    const item = await knowledgeService.updateKnowledgeItem(
+    const item = await controlledKnowledgeService.updateKnowledgeItem(
       knowledgeId,
       body as unknown as UpdateKnowledgeItemDto,
       ctx
@@ -114,7 +114,7 @@ export async function DELETE(
     requestId = ctx.requestId;
     const { id } = await params;
     const knowledgeId = Validator.requireId(id, "knowledgeId");
-    await knowledgeService.deleteKnowledgeItem(knowledgeId, ctx);
+    await controlledKnowledgeService.deleteKnowledgeItem(knowledgeId, ctx);
 
     return NextResponse.json(
       toApiSuccessResponse({ deleted: true, id: knowledgeId }, requestId)
