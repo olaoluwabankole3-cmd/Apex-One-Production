@@ -5,8 +5,10 @@ import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import GlassCard from "@/components/ui/GlassCard";
 import { revenueRepository } from "@/lib/data/repositories";
 import { PortfolioSlice } from "@/lib/types";
+import { useOrganization } from "@/components/layout/OrganizationContext";
 
 export default function PortfolioBreakdown() {
+  const { organization } = useOrganization();
   const [slices, setSlices] = useState<PortfolioSlice[]>([]);
 
   useEffect(() => {
@@ -22,15 +24,15 @@ export default function PortfolioBreakdown() {
   return (
     <GlassCard delay={0.15} className="p-5 lg:p-6 flex flex-col justify-between">
       <div>
-        <p className="font-display text-[15px] font-bold text-ivory">Portfolio by Subsidiary</p>
-        <p className="mt-0.5 text-[12px] text-ivory/40">Assets under management, $M</p>
+        <p className="font-display text-[15px] font-bold text-ivory">Revenue Mix by Business Unit</p>
+        <p className="mt-0.5 text-[12px] text-ivory/40">Authorized ARR contribution by business unit</p>
       </div>
 
       {slices.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center py-12">
-          <span className="text-[12px] font-bold text-ivory/60 uppercase tracking-wider block font-mono">Portfolio Offline</span>
+          <span className="text-[12px] font-bold text-ivory/60 uppercase tracking-wider block font-mono">Revenue Mix Not Available</span>
           <p className="text-[11px] text-ivory/35 max-w-[200px] mt-1.5 leading-relaxed">
-            No subsidiary financial structures connected. Enable Demo Mode in Settings to simulate portfolio holdings.
+            No authoritative business-unit revenue records are available. No synthetic allocation is displayed.
           </p>
         </div>
       ) : (
@@ -56,8 +58,8 @@ export default function PortfolioBreakdown() {
               </PieChart>
             </ResponsiveContainer>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <p className="font-display text-[20px] font-bold text-ivory">${total.toLocaleString()}M</p>
-              <p className="text-[11px] text-ivory/40">Total AUM</p>
+              <p className="font-display text-[20px] font-bold text-ivory">{organization.locale.currencySymbol}{total.toLocaleString()}M</p>
+              <p className="text-[11px] text-ivory/40">Total ARR</p>
             </div>
           </div>
 
@@ -68,7 +70,7 @@ export default function PortfolioBreakdown() {
                   <span className="h-2 w-2 rounded-full" style={{ backgroundColor: d.color }} />
                   {d.name}
                 </span>
-                <span className="font-mono text-ivory/85">${d.value}M</span>
+                <span className="font-mono text-ivory/85">{organization.locale.currencySymbol}{d.value}M</span>
               </div>
             ))}
           </div>
