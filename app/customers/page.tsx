@@ -5,7 +5,7 @@ import InternalOnlyShield from "@/components/layout/InternalOnlyShield";
 
 export default function CustomersPage() {
   return (
-    <InternalOnlyShield>
+    <InternalOnlyShield requiredPermission="customer:read">
       <CustomersWorkspace />
     </InternalOnlyShield>
   );
