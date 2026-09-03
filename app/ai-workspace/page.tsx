@@ -1,12 +1,12 @@
 "use client";
 
-import AiWorkspace from "@/components/ai-workspace/AiWorkspace";
+import TrustedAiWorkspace from "@/components/ai-workspace/TrustedAiWorkspace";
 import InternalOnlyShield from "@/components/layout/InternalOnlyShield";
 
 export default function AIWorkspacePage() {
   return (
     <InternalOnlyShield>
-      <AiWorkspace />
+      <TrustedAiWorkspace />
     </InternalOnlyShield>
   );
 }
