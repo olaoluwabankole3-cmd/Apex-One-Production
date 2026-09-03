@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTenantContext } from "@/lib/backend/core/security";
 import { documentConsistencyService } from "@/lib/backend/domains/documents/documentConsistencyService";
-import { Validator } from "@/lib/backend/core/validation";
+import { ValidationError } from "@/lib/backend/core/errors";
 import {
   assertAllowedKeys,
   readJsonObject,
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     let limit = 20;
     if (body.limit !== undefined) {
       if (typeof body.limit !== "number" || !Number.isSafeInteger(body.limit) || body.limit < 1) {
-        throw new Error("limit must be a positive safe integer");
+        throw new ValidationError("limit must be a positive safe integer");
       }
       limit = Math.min(body.limit, 100);
     }
