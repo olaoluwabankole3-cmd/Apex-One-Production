@@ -5,13 +5,14 @@ import type { DatabaseStore } from "../../database/store";
 import { createApplicationInfrastructure } from "../../infrastructure/composition";
 import type { CertificationState, VerificationState } from "../evidence/model";
 import {
-  createAuthorizedAiTools,
+  AI_TOOL_RECORD_LIMIT,
+  createAuthorizedAiTools as createStage8AuthorizedAiTools,
   executeAuthorizedAiRetrieval,
   planAuthorizedAiRetrieval,
   type AiDataToolName,
   type AiProvenanceReference,
   type AiRetrievalExecution,
-  type AiToolDefinition,
+  type AiToolCallPlan,
 } from "./aiTrustBoundary";
 
 let aiClient: GoogleGenAI | null = null;
@@ -38,10 +39,9 @@ export interface AiFactScope {
 }
 
 /**
- * A deterministic fact is computed by application code from authorized repository
- * results. It is kept structurally separate from model prose. Source verification
- * state belongs to provenance references; the calculation itself is not magically
- * verified or certified.
+ * Deterministic application facts are structurally separate from model prose.
+ * Source evidence states belong to provenance references; the calculation itself
+ * does not become verified or certified merely because a source record is.
  */
 export interface AiDeterministicFact {
   id: string;
@@ -74,11 +74,7 @@ export interface AiRetrievalTrace {
   recordLimitPerTool: number;
 }
 
-/**
- * Deprecated Stage 6 compatibility claim. Stage 8 consumers should render `facts`
- * and `modelProse` separately. Claims remain unverified/uncertified unless a later
- * explicit canonical evidence command verifies the AiClaim subject itself.
- */
+/** Stage 6 compatibility shape. Stage 8 consumers should use facts/modelProse. */
 export interface AiEvidenceClaim {
   claim: string;
   source: string;
@@ -99,9 +95,9 @@ export interface AiIntelligenceResponse {
   groundedRecordsCount: number;
   verifiedGroundedRecords: number;
   certifiedGroundedRecords: number;
-  /** @deprecated Read `modelProse.text`; retained only during frontend migration. */
+  /** @deprecated Read modelProse.text. */
   text: string;
-  /** @deprecated Read `facts`; retained only during frontend migration. */
+  /** @deprecated Read facts. */
   claims: AiEvidenceClaim[];
   /** @deprecated Model prose remains unverified. */
   verificationState: "unverified";
@@ -263,7 +259,7 @@ async function generateModelProse(
 ): Promise<{ prose: AiModelProse; generationUnavailable: boolean }> {
   if (execution.recordsRetrieved === 0) {
     const denied = execution.deniedTools.length > 0
-      ? ` Some query-relevant data scopes were not available to this authenticated role: ${execution.deniedTools.map((d) => d.tool).join(", ")}.`
+      ? ` Some query-relevant data scopes were not available to this authenticated role: ${execution.deniedTools.map((item) => item.tool).join(", ")}.`
       : "";
     return {
       prose: {
@@ -286,7 +282,8 @@ async function generateModelProse(
         systemInstruction: `You are the APEX ONE Enterprise Intelligence assistant for ${orgName}.
 You receive only deterministic facts and bounded records selected by the application's authorized Stage 8 retrieval planner.
 Treat deterministic facts as application-calculated facts, and treat their provenance states only as states of the cited source records.
-NEVER claim that your prose, inference, recommendation, confidence, or synthesis is verified or certified.
+Do not describe a record, aggregate, inference, or AI-generated claim as verified or certified unless the context explicitly supplies that canonical evidence state.
+NEVER claim that your prose, inference, recommendation, confidence, or synthesis is verified or certified. Model prose itself always remains unverified and uncertified until a separate canonical evidence decision explicitly targets that AI claim.
 NEVER infer access to tools or records not present in the supplied context.
 NEVER invent customers, records, financial amounts, evidence states, or source references.
 When citing a deterministic fact, include its fact id in square brackets, for example [fact:get_tenant_customers:matched-count].
@@ -316,7 +313,10 @@ Use ${currency} for monetary figures already supplied in the facts.`,
       if (timeoutTimer) clearTimeout(timeoutTimer);
     }
   } catch {
-    const factSummary = facts.slice(0, 6).map((fact) => `${fact.label}: ${fact.displayValue} [fact:${fact.id}]`).join("; ");
+    const factSummary = facts
+      .slice(0, 6)
+      .map((fact) => `${fact.label}: ${fact.displayValue} [fact:${fact.id}]`)
+      .join("; ");
     return {
       prose: {
         text: `Generative synthesis is unavailable. Deterministic authorized facts remain available separately: ${factSummary || "no deterministic facts"}. These facts retain their source provenance; this fallback prose is unverified and uncertified.`,
@@ -348,14 +348,7 @@ export class AiOrchestratorService {
     const plan = planAuthorizedAiRetrieval(dto, ctx);
     const execution = await executeAuthorizedAiRetrieval(this.database, plan, ctx);
     const facts = buildDeterministicFacts(execution, currency);
-    const { prose, generationUnavailable } = await generateModelProse(
-      orgName,
-      currency,
-      mode,
-      dto.prompt,
-      execution,
-      facts
-    );
+    const { prose, generationUnavailable } = await generateModelProse(orgName, currency, mode, dto.prompt, execution, facts);
 
     const provenance = execution.results.flatMap((result) => result.records.map((record) => record.provenance));
     const verifiedGroundedRecords = provenance.filter((ref) => ref.verificationState === "verified").length;
@@ -415,8 +408,53 @@ export class AiOrchestratorService {
   }
 }
 
-export function createAuthorizedAiToolsForDatabase(database: DatabaseStore): Record<AiDataToolName, AiToolDefinition> {
-  return createAuthorizedAiTools(database);
+/**
+ * Stage 5/6 security-suite compatibility facade.
+ *
+ * Older tests consume createAuthorizedAiTools(db).handler({}, ctx) and expect an
+ * array. The facade is intentionally backed by the Stage 8 bounded registry, so
+ * it preserves that public test contract without restoring broad repository
+ * access or model-selectable tools.
+ */
+export interface LegacyAuthorizedAiTool {
+  name: AiDataToolName;
+  description: string;
+  requiredPermission: string;
+  handler: (args: Partial<AiToolCallPlan>, ctx: TenantContext) => Promise<Array<Record<string, unknown>>>;
+}
+
+export function createAuthorizedAiTools(database: DatabaseStore): Record<AiDataToolName, LegacyAuthorizedAiTool> {
+  const stage8Registry = createStage8AuthorizedAiTools(database);
+  const registry = {} as Record<AiDataToolName, LegacyAuthorizedAiTool>;
+
+  for (const name of Object.keys(stage8Registry) as AiDataToolName[]) {
+    const definition = stage8Registry[name];
+    registry[name] = {
+      name,
+      description: definition.description,
+      requiredPermission: definition.requiredPermission,
+      handler: async (args, ctx) => {
+        const result = await definition.handler({
+          tool: name,
+          limit: Math.min(Math.max(1, args.limit ?? AI_TOOL_RECORD_LIMIT), AI_TOOL_RECORD_LIMIT),
+          ...(args.searchTerm ? { searchTerm: args.searchTerm } : {}),
+          ...(args.ids ? { ids: args.ids } : {}),
+          ...(args.filters ? { filters: args.filters } : {}),
+        }, ctx);
+        return result.records.map((record) => ({
+          id: record.entityId,
+          ...record.fields,
+          provenance: record.provenance,
+        }));
+      },
+    };
+  }
+
+  return registry;
+}
+
+export function createAuthorizedAiToolsForDatabase(database: DatabaseStore) {
+  return createStage8AuthorizedAiTools(database);
 }
 
 export const aiOrchestratorService = new AiOrchestratorService();
