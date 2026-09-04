@@ -242,7 +242,7 @@ export default function LoginScreen() {
                 </div>
 
                 {formError && (
-                  <p role="alert" className="mt-4 rounded-xl border border-crimson/20 bg-crimson/[0.08] p-3 text-sm text-crimson">
+                  <p id="organization-selection-error" role="alert" className="mt-4 rounded-xl border border-crimson/20 bg-crimson/[0.08] p-3 text-sm text-crimson">
                     {formError}
                   </p>
                 )}
@@ -277,7 +277,7 @@ export default function LoginScreen() {
                 )}
 
                 {formError && (
-                  <p role="alert" className="mt-5 rounded-xl border border-crimson/20 bg-crimson/[0.08] p-3.5 text-sm leading-5 text-crimson">
+                  <p id="login-error" role="alert" className="mt-5 rounded-xl border border-crimson/20 bg-crimson/[0.08] p-3.5 text-sm leading-5 text-crimson">
                     {formError}
                   </p>
                 )}
