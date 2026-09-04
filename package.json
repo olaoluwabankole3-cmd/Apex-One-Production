@@ -37,7 +37,8 @@
     "infra:dev:destroy": "docker compose --env-file deploy/development/development.env -f deploy/development/docker-compose.infrastructure.yml down -v",
     "infra:verify": "tsx scripts/verifyDurableInfrastructure.ts",
     "infra:bootstrap-admin": "tsx scripts/bootstrapInitialAdministrator.ts",
-    "test:restart-persistence": "tsx scripts/runInfrastructureRestartPersistenceTests.ts"
+    "test:restart-persistence": "tsx scripts/runInfrastructureRestartPersistenceTests.ts",
+    "test:infra-connection": "tsx scripts/runInfrastructureConnectionTests.ts"
   },
   "dependencies": {
     "@google/genai": "^2.16.0",
