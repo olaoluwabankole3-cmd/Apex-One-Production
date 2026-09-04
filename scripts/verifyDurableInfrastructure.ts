@@ -137,8 +137,11 @@ async function main(): Promise<void> {
         endpoint,
       });
       const key = `infrastructure-verification/${randomUUID()}.txt`;
-      const payload = Buffer.from("APEX ONE durable infrastructure verification", "utf8");
-      await storage.putObject(key, payload, "text/plain");
+      const payload = Buffer.from(
+        JSON.stringify({ purpose: "durable-infrastructure-verification" }),
+        "utf8"
+      );
+      await storage.putObject(key, payload, "application/json");
       const restored = await storage.getObject(key);
       if (!restored || !Buffer.isBuffer(restored.data)) {
         throw new Error("S3 verification object could not be read");
