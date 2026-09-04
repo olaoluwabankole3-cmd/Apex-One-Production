@@ -26,6 +26,7 @@ export interface AuthSessionMetadataDto {
   organization: SafeAuthOrganization;
   availableOrganizations: SafeAuthOrganization[];
   expiresAt: string | null;
+  requiresPasswordChange: boolean;
 }
 
 export function sanitizeAvailableOrganizations(
@@ -60,7 +61,8 @@ export function sanitizeAvailableOrganizations(
 
 export function buildAuthSessionMetadata(
   session: AuthSession,
-  availableOrganizations: ReadonlyArray<{ id: string; name: string }>
+  availableOrganizations: ReadonlyArray<{ id: string; name: string }>,
+  requiresPasswordChange: boolean = false
 ): AuthSessionMetadataDto {
   const organizations = sanitizeAvailableOrganizations([
     ...availableOrganizations,
@@ -84,5 +86,6 @@ export function buildAuthSessionMetadata(
     },
     availableOrganizations: organizations,
     expiresAt: session.expiresAt || null,
+    requiresPasswordChange,
   };
 }
