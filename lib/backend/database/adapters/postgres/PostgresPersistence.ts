@@ -136,7 +136,7 @@ CREATE INDEX IF NOT EXISTS apex_audit_logs_tenant_time_idx
   ON apex_audit_logs (organization_id, occurred_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS apex_audit_logs_record_gin_idx
   ON apex_audit_logs USING GIN (record jsonb_path_ops);
-;
+`;
 
 export const PHASE2_AUTH_IDENTITY_MIGRATION_004 = `
 CREATE UNIQUE INDEX IF NOT EXISTS apex_users_username_normalized_unique_idx
