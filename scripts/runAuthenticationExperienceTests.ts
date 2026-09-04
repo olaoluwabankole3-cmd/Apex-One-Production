@@ -191,7 +191,7 @@ const checks: Check[] = [
       }
       requireCondition(error instanceof UnauthorizedError, "Disabled account did not fail with UnauthorizedError");
       requireCondition(
-        error.message === "Invalid email/username or password",
+        error.message === "Invalid email or password",
         "Disabled account leaked a distinct account-status response"
       );
     },
