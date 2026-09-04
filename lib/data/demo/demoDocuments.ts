@@ -31,7 +31,7 @@ export interface IntelDocument {
   name: string;
   fileType: "pdf" | "doc" | "xlsx";
   category: "Contract" | "Policy" | "Financial Document" | "Report" | "Compliance Document";
-  businessUnit: "Enterprise Operations" | "Commercial Operations" | "Strategic Accounts" | "Customer Operations";
+  businessUnit: "Enterprise Operations" | "Commercial Operations" | "Strategic Accounts" | "Customer Operations" | "Unassigned";
   uploadedBy: string;
   date: string;
   size: string;
