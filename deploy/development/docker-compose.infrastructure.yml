@@ -1,0 +1,61 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${APEX_DEV_POSTGRES_USER:-apex}
+      POSTGRES_PASSWORD: ${APEX_DEV_POSTGRES_PASSWORD:?Set APEX_DEV_POSTGRES_PASSWORD in deploy/development/development.env}
+      POSTGRES_DB: ${APEX_DEV_POSTGRES_DB:-apex_development}
+    ports:
+      - "${APEX_DEV_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - apex_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${APEX_DEV_POSTGRES_USER:-apex} -d ${APEX_DEV_POSTGRES_DB:-apex_development}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${APEX_DEV_REDIS_PASSWORD:?Set APEX_DEV_REDIS_PASSWORD in deploy/development/development.env}
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --appendfsync everysec --requirepass "$$REDIS_PASSWORD"
+    ports:
+      - "${APEX_DEV_REDIS_PORT:-6379}:6379"
+    volumes:
+      - apex_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  localstack:
+    image: localstack/localstack:3.8.1
+    restart: unless-stopped
+    environment:
+      SERVICES: s3
+      AWS_DEFAULT_REGION: ${APEX_DEV_S3_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${APEX_DEV_S3_ACCESS_KEY_ID:?Set APEX_DEV_S3_ACCESS_KEY_ID in deploy/development/development.env}
+      AWS_SECRET_ACCESS_KEY: ${APEX_DEV_S3_SECRET_ACCESS_KEY:?Set APEX_DEV_S3_SECRET_ACCESS_KEY in deploy/development/development.env}
+      APEX_DEV_S3_BUCKET: ${APEX_DEV_S3_BUCKET:-apex-development-documents}
+    ports:
+      - "${APEX_DEV_S3_PORT:-4566}:4566"
+    volumes:
+      - apex_localstack_data:/var/lib/localstack
+      - ./localstack/init-s3.sh:/etc/localstack/init/ready.d/10-apex-s3.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:4566/_localstack/health >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  apex_postgres_data:
+  apex_redis_data:
+  apex_localstack_data:
