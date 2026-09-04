@@ -344,25 +344,32 @@ const checks: Check[] = [
   },
 ];
 
-console.log("=".repeat(80));
-console.log("APEX ONE — PHASE 2 AUTHENTICATION EXPERIENCE");
-console.log("=".repeat(80));
+async function main(): Promise<void> {
+  console.log("=".repeat(80));
+  console.log("APEX ONE — PHASE 2 AUTHENTICATION EXPERIENCE");
+  console.log("=".repeat(80));
 
-let passed = 0;
-for (const [index, check] of checks.entries()) {
-  try {
-    await check.run();
-    passed += 1;
-    console.log(`✅ [PASS] ${index + 1}. ${check.name}`);
-  } catch (error) {
-    console.error(
-      `❌ [FAIL] ${index + 1}. ${check.name}: ${error instanceof Error ? error.message : String(error)}`
-    );
+  let passed = 0;
+  for (const [index, check] of checks.entries()) {
+    try {
+      await check.run();
+      passed += 1;
+      console.log(`✅ [PASS] ${index + 1}. ${check.name}`);
+    } catch (error) {
+      console.error(
+        `❌ [FAIL] ${index + 1}. ${check.name}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
+
+  const failed = checks.length - passed;
+  console.log("-".repeat(80));
+  console.log(`TOTAL: ${checks.length} | PASSED: ${passed} | FAILED: ${failed}`);
+  console.log("=".repeat(80));
+  if (failed > 0) process.exit(1);
 }
 
-const failed = checks.length - passed;
-console.log("-".repeat(80));
-console.log(`TOTAL: ${checks.length} | PASSED: ${passed} | FAILED: ${failed}`);
-console.log("=".repeat(80));
-if (failed > 0) process.exit(1);
+main().catch((error) => {
+  console.error("Phase 2 authentication experience gate crashed:", error);
+  process.exit(1);
+});
