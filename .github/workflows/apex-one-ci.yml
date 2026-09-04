@@ -43,6 +43,12 @@ jobs:
         run: bun run test:auth-experience
       - name: Run Phase 3 infrastructure connection contract gate
         run: bun run test:infra-connection
+      - name: Validate durable development Docker Compose configuration
+        run: >-
+          docker compose
+          --env-file deploy/development/development.env.example
+          -f deploy/development/docker-compose.infrastructure.yml
+          config >/dev/null
 
   production-composition:
     name: Production Composition Root
