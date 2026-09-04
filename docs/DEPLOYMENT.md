@@ -48,6 +48,40 @@ After the artifact is pushed, promotion authority is its registry-resolved immut
 
 Do not treat `latest`, a branch tag, or another mutable registry reference as release evidence.
 
+## Phase 3 environment connection gate
+
+Before an APEX ONE staging deployment is allowed to receive traffic, provision
+environment-isolated durable authorities and load their credentials from the
+deployment platform's protected secret store.
+
+The required staging authority set is:
+
+- PostgreSQL for application data, audit, and document search;
+- Redis for sessions and rate limiting;
+- S3-compatible object storage for encrypted document ciphertext;
+- Google Gemini for model generation.
+
+Use `deploy/environments/staging.env.example` as the variable-name contract and
+`deploy/environments/secret-contract.json` as the secret inventory. Real
+credentials must never be committed.
+
+The pre-traffic staging sequence is:
+
+1. create the isolated staging PostgreSQL database, Redis authority, and
+   S3-compatible bucket;
+2. inject environment-specific protected configuration/secrets;
+3. run `bun run db:migrate`;
+4. run the one-time `bun run infra:bootstrap-admin` operation;
+5. remove the bootstrap password and confirmation variables;
+6. run `bun run infra:verify`;
+7. start/restart the APEX ONE application;
+8. require `/api/v1/health/ready` to return `ready`; and
+9. proceed to staging UAT only after all checks pass.
+
+Production infrastructure is not created from the staging data plane. It must
+receive independent credentials and authorities after staging and pilot gates
+are complete.
+
 ## Database migrations
 
 The repository migration entry point is:
