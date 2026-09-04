@@ -16,6 +16,11 @@ const gitignore = source(".gitignore");
 const staging = source("deploy/environments/staging.env.example");
 const development = source("deploy/development/development.env.example");
 const compose = source("deploy/development/docker-compose.infrastructure.yml");
+const localstackInitPath = path.join(
+  process.cwd(),
+  "deploy/development/localstack/init-s3.sh"
+);
+const localstackInitMode = fs.statSync(localstackInitPath).mode;
 const bootstrap = source("scripts/bootstrapInitialAdministrator.ts");
 const verifier = source("scripts/verifyDurableInfrastructure.ts");
 const restartWorker = source("scripts/infrastructureRestartWorker.ts");
@@ -68,6 +73,11 @@ for (const required of [
     `Development durable stack is missing ${required}`
   );
 }
+
+assert(
+  (localstackInitMode & 0o111) !== 0,
+  "LocalStack development initialization hook must remain executable"
+);
 
 assert(
   development.includes("APEX_DATABASE_ADAPTER=postgres") &&
