@@ -122,8 +122,8 @@ async function write(marker: string): Promise<void> {
   const objectKey = `restart-persistence/${marker}.txt`;
   await infrastructure.objectStorage.putObject(
     objectKey,
-    Buffer.from(`APEX ONE restart marker ${marker}`, "utf8"),
-    "text/plain"
+    Buffer.from(JSON.stringify({ marker, purpose: "restart-persistence" }), "utf8"),
+    "application/json"
   );
 
   process.stdout.write(
@@ -190,8 +190,14 @@ async function verify(marker: string): Promise<void> {
   if (!object || !Buffer.isBuffer(object.data)) {
     throw new Error("S3 encrypted object state did not survive process restart");
   }
-  const expected = `APEX ONE restart marker ${marker}`;
-  if (object.data.toString("utf8") !== expected) {
+  const restored = JSON.parse(object.data.toString("utf8")) as {
+    marker?: string;
+    purpose?: string;
+  };
+  if (
+    restored.marker !== marker ||
+    restored.purpose !== "restart-persistence"
+  ) {
     throw new Error("S3 encrypted object changed across process restart");
   }
 
