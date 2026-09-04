@@ -56,7 +56,7 @@ try {
     const page = await context.newPage();
     try {
       await page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded" });
-      await page.fill("#login-identifier", "stage10.ceo@example.test");
+      await page.fill("#login-identifier", "stage10.invalid-login@example.test");
       await page.fill("#login-password", `${password}-invalid`);
       await page.click("#login-submit");
       const alert = page.locator('[role="alert"]');
