@@ -136,6 +136,12 @@ CREATE INDEX IF NOT EXISTS apex_audit_logs_tenant_time_idx
   ON apex_audit_logs (organization_id, occurred_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS apex_audit_logs_record_gin_idx
   ON apex_audit_logs USING GIN (record jsonb_path_ops);
+;
+
+export const PHASE2_AUTH_IDENTITY_MIGRATION_004 = `
+CREATE UNIQUE INDEX IF NOT EXISTS apex_users_username_normalized_unique_idx
+  ON apex_users ((LOWER(BTRIM(record->>'username'))))
+  WHERE NULLIF(BTRIM(record->>'username'), '') IS NOT NULL;
 `;
 
 interface TransactionState {
@@ -172,6 +178,10 @@ export class PostgresConnectionManager {
       await connection.query(STAGE4_POSTGRES_MIGRATION_001);
       await connection.query(
         `INSERT INTO apex_schema_migrations(version) VALUES ('001_stage4_core') ON CONFLICT (version) DO NOTHING`
+      );
+      await connection.query(PHASE2_AUTH_IDENTITY_MIGRATION_004);
+      await connection.query(
+        `INSERT INTO apex_schema_migrations(version) VALUES ('004_phase2_auth_identity') ON CONFLICT (version) DO NOTHING`
       );
       await connection.query("COMMIT");
     } catch (error) {
@@ -672,6 +682,22 @@ export class PostgresPersistence {
   public async getUserByEmail(email: string): Promise<UserRecord | undefined> {
     return this.manager.withConnection(async (connection) => parseRecord<UserRecord>((await connection.query(`SELECT record::text AS record FROM apex_users WHERE email_normalized = ${quotePostgresLiteral(email.trim().toLowerCase())} LIMIT 1`)).rows[0]));
   }
+  public async getUserByLoginIdentifier(identifier: string): Promise<UserRecord | undefined> {
+    const normalized = identifier.trim().toLowerCase();
+    return this.manager.withConnection(async (connection) =>
+      parseRecord<UserRecord>(
+        (
+          await connection.query(
+            `SELECT record::text AS record
+             FROM apex_users
+             WHERE email_normalized = ${quotePostgresLiteral(normalized)}
+                OR LOWER(BTRIM(record->>'username')) = ${quotePostgresLiteral(normalized)}
+             LIMIT 1`
+          )
+        ).rows[0]
+      )
+    );
+  }
   public async getUserById(id: string): Promise<UserRecord | undefined> {
     return this.manager.withConnection(async (connection) => parseRecord<UserRecord>((await connection.query(`SELECT record::text AS record FROM apex_users WHERE id = ${quotePostgresLiteral(id)} LIMIT 1`)).rows[0]));
   }
@@ -701,7 +727,7 @@ export class PostgresPersistence {
       if (membership.rows.length === 0) return undefined;
       const current = parseRecord<UserRecord>((await connection.query(`SELECT record::text AS record FROM apex_users WHERE id = ${quotePostgresLiteral(userId)} LIMIT 1`)).rows[0]);
       if (!current) return undefined;
-      const updated = { ...current, passwordHash, passwordSalt };
+      const updated = { ...current, passwordHash, passwordSalt, passwordChangeRequired: false };
       await connection.query(`UPDATE apex_users SET record = ${sqlJson(updated)}, updated_at = NOW() WHERE id = ${quotePostgresLiteral(userId)}`);
       return updated;
     });
