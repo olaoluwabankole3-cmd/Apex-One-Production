@@ -308,6 +308,19 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     return undefined;
   }
 
+  public getUserByLoginIdentifier(identifier: string): UserRecord | undefined {
+    if (this.postgresPersistence) {
+      throw new ValidationError("Use findUserByLoginIdentifier for PostgreSQL-backed identity state");
+    }
+    const normalized = identifier.trim().toLowerCase();
+    if (!normalized) return undefined;
+    for (const user of this.users.values()) {
+      if (user.email.trim().toLowerCase() === normalized) return user;
+      if (user.username?.trim().toLowerCase() === normalized) return user;
+    }
+    return undefined;
+  }
+
   public getUserMembership(userId: string, orgId: string): OrganizationMembershipRecord | undefined {
     if (this.postgresPersistence) throw new ValidationError("Use findUserMembership for PostgreSQL-backed identity state");
     for (const membership of this.memberships.values()) {
@@ -323,6 +336,11 @@ export class DatabaseStore implements IUnitOfWorkProvider {
   public async findUserByEmail(email: string): Promise<UserRecord | undefined> {
     if (this.postgresPersistence) return this.postgresPersistence.getUserByEmail(email);
     return this.getUserByEmail(email);
+  }
+
+  public async findUserByLoginIdentifier(identifier: string): Promise<UserRecord | undefined> {
+    if (this.postgresPersistence) return this.postgresPersistence.getUserByLoginIdentifier(identifier);
+    return this.getUserByLoginIdentifier(identifier);
   }
 
   public async findUserById(id: string): Promise<UserRecord | undefined> {
@@ -355,7 +373,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     if (!membership) return undefined;
     const user = this.users.get(userId);
     if (!user) return undefined;
-    const updated = { ...user, ...credentials };
+    const updated = { ...user, ...credentials, passwordChangeRequired: false };
     this.users.set(userId, updated);
     return updated;
   }
@@ -376,13 +394,27 @@ export class DatabaseStore implements IUnitOfWorkProvider {
   }
 
   public async createUserRecord(record: UserRecord): Promise<UserRecord> {
-    if (this.postgresPersistence) return this.postgresPersistence.createUser(record);
     const normalizedEmail = record.email.trim().toLowerCase();
+    const normalizedUsername = record.username?.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      throw new ValidationError("User email is required");
+    }
+    if (record.username !== undefined && !normalizedUsername) {
+      throw new ValidationError("Username must be non-empty when provided");
+    }
+
+    if (this.postgresPersistence) return this.postgresPersistence.createUser(record);
+
     const duplicate =
       this.users.has(record.id) ||
-      Array.from(this.users.values()).some(
-        (user) => user.email.trim().toLowerCase() === normalizedEmail
-      );
+      Array.from(this.users.values()).some((user) => {
+        if (user.email.trim().toLowerCase() === normalizedEmail) return true;
+        return Boolean(
+          normalizedUsername &&
+            user.username?.trim().toLowerCase() === normalizedUsername
+        );
+      });
     if (duplicate) {
       throw new ConflictError("User violates a uniqueness constraint", { resource: "User" });
     }

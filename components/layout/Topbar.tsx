@@ -8,18 +8,16 @@ import { AnimatePresence, motion } from "framer-motion";
 import clsx from "clsx";
 import RoleSwitcher from "./RoleSwitcher";
 import { useAuth } from "@/components/auth/AuthContext";
+import UserMenu from "@/components/auth/UserMenu";
 import { useOrganization } from "./OrganizationContext";
 import { primaryNavigation, valueNavigation, isNavigationItemActive } from "./navigation";
 
 export default function Topbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const pathname = usePathname();
-  const { user, hasPermission } = useAuth();
+  const { hasPermission } = useAuth();
   const { organization, isFeatureEnabled } = useOrganization();
 
-  const userInitials = user?.name
-    ? user.name.trim().split(/\s+/).slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join("")
-    : "--";
 
   const visiblePrimary = primaryNavigation.filter((item) => {
     if (!hasPermission(item.permission)) return false;
@@ -74,13 +72,7 @@ export default function Topbar() {
               <Bell size={16} strokeWidth={1.75} />
             </Link>
           )}
-          <div
-            className="flex h-9 w-9 items-center justify-center rounded-lg bg-gold-gradient font-display text-[12px] font-bold text-matte"
-            aria-label={user ? `Authenticated user: ${user.name}` : "Authenticated user"}
-            title={user?.name || "Authenticated user"}
-          >
-            {userInitials}
-          </div>
+          <UserMenu />
         </div>
       </header>
 

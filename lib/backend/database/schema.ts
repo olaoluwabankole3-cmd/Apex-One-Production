@@ -21,12 +21,14 @@ export interface OrganizationRecord {
 export interface UserRecord {
   id: string;
   email: string;
+  username?: string;
   name: string;
   title: string;
   avatarUrl?: string;
   status: "active" | "suspended" | "disabled" | "pending";
   passwordHash?: string;
   passwordSalt?: string;
+  passwordChangeRequired?: boolean;
   createdAt: string;
 }
 

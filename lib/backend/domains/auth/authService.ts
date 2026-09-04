@@ -32,7 +32,8 @@ import {
 } from "./authSessionContract";
 
 export interface LoginDto {
-  email: string;
+  identifier?: string;
+  email?: string;
   password: string;
   targetOrganizationId?: string;
 }
@@ -51,6 +52,7 @@ export interface LoginOptions {
 export interface AuthenticatedSessionResult {
   session: AuthSession;
   availableOrganizations: SafeAuthOrganization[];
+  requiresPasswordChange: boolean;
 }
 
 function sessionAuditFingerprint(token: string): string {
@@ -103,18 +105,24 @@ export class AuthService {
   }
 
   public async login(dto: LoginDto, requestId: string, options?: LoginOptions): Promise<AuthenticatedSessionResult> {
-    if (!dto.email || typeof dto.email !== "string" || dto.email.trim().length === 0) throw new ValidationError("Email address is required");
+    const rawIdentifier =
+      typeof dto.identifier === "string" && dto.identifier.trim().length > 0
+        ? dto.identifier
+        : dto.email;
+    if (!rawIdentifier || typeof rawIdentifier !== "string" || rawIdentifier.trim().length === 0) {
+      throw new ValidationError("Email or username is required");
+    }
     if (!dto.password || typeof dto.password !== "string" || dto.password.length === 0) throw new ValidationError("Password is required");
 
-    const normalizedEmail = dto.email.trim().toLowerCase();
-    const rateLimitKey = options?.ipAddress ? `${options.ipAddress}:${normalizedEmail}` : normalizedEmail;
+    const normalizedIdentifier = rawIdentifier.trim().toLowerCase();
+    const rateLimitKey = options?.ipAddress ? `${options.ipAddress}:${normalizedIdentifier}` : normalizedIdentifier;
     const rateLimitResult = await this.rateLimiter.isRateLimited(rateLimitKey);
 
     if (rateLimitResult.limited) {
       await this.database.recordAuditLog({
         organizationId: "system",
         actorId: "unauthenticated",
-        actorEmail: normalizedEmail.substring(0, 80),
+        actorEmail: normalizedIdentifier.includes("@") ? normalizedIdentifier.substring(0, 80) : "unauthenticated",
         action: "auth:rate_limited",
         resource: "Session",
         resourceId: "rate_limit_lockout",
@@ -126,7 +134,7 @@ export class AuthService {
     }
 
     try {
-      const authResult = await this.authProvider.authenticateCredentials(normalizedEmail, dto.password, dto.targetOrganizationId, options);
+      const authResult = await this.authProvider.authenticateCredentials(normalizedIdentifier, dto.password, dto.targetOrganizationId, options);
       await this.rateLimiter.recordAttempt(rateLimitKey, true);
       await this.database.recordAuditLog({
         organizationId: authResult.session.organizationId,
@@ -139,16 +147,18 @@ export class AuthService {
         status: "success",
         metadata: { role: authResult.session.role, organization: authResult.session.organizationName, ip: options?.ipAddress },
       });
+      const authenticatedUser = await this.database.findUserById(authResult.session.userId);
       return {
         session: authResult.session,
         availableOrganizations: sanitizeAvailableOrganizations(authResult.availableOrganizations),
+        requiresPasswordChange: authenticatedUser?.passwordChangeRequired === true,
       };
     } catch (err) {
       await this.rateLimiter.recordAttempt(rateLimitKey, false);
       await this.database.recordAuditLog({
         organizationId: "system",
         actorId: "unauthenticated",
-        actorEmail: normalizedEmail.substring(0, 80),
+        actorEmail: normalizedIdentifier.includes("@") ? normalizedIdentifier.substring(0, 80) : "unauthenticated",
         action: "auth:login_failed",
         resource: "Session",
         resourceId: "login_attempt",
@@ -210,7 +220,11 @@ export class AuthService {
       if (!session || session.userId !== ctx.userId || session.organizationId !== ctx.organizationId) {
         throw new UnauthorizedError("Authenticated session is no longer valid");
       }
-      return buildAuthSessionMetadata(session, availableOrganizations);
+      return buildAuthSessionMetadata(
+        session,
+        availableOrganizations,
+        user.passwordChangeRequired === true
+      );
     }
 
     return {
@@ -218,6 +232,7 @@ export class AuthService {
       organization: { id: organization.id, name: organization.name },
       availableOrganizations,
       expiresAt: null,
+      requiresPasswordChange: user.passwordChangeRequired === true,
     };
   }
 
@@ -273,7 +288,11 @@ export class AuthService {
       metadata: { previousOrg: ctx.organizationId, newRole: match.role },
     });
 
-    return { session, availableOrganizations: await this.getAvailableOrganizationsForUser(user.id) };
+    return {
+      session,
+      availableOrganizations: await this.getAvailableOrganizationsForUser(user.id),
+      requiresPasswordChange: user.passwordChangeRequired === true,
+    };
   }
 
   public async logout(token: string, ctx?: TenantContext): Promise<boolean> {

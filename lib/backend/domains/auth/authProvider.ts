@@ -568,7 +568,7 @@ export interface AuthenticateCredentialsOptions {
 
 export interface IAuthenticationProvider {
   authenticateCredentials(
-    email: string,
+    identifier: string,
     password?: string,
     targetOrganizationId?: string,
     options?: AuthenticateCredentialsOptions
@@ -585,7 +585,7 @@ export class LocalAuthenticationProvider implements IAuthenticationProvider {
   ) {}
 
   public async authenticateCredentials(
-    email: string,
+    identifier: string,
     password?: string,
     targetOrganizationId?: string,
     options?: AuthenticateCredentialsOptions
@@ -593,15 +593,17 @@ export class LocalAuthenticationProvider implements IAuthenticationProvider {
     session: AuthSession;
     availableOrganizations: { id: string; name: string; role: string }[];
   }> {
-    if (!email || typeof email !== "string" || email.trim().length === 0) {
+    if (!identifier || typeof identifier !== "string" || identifier.trim().length === 0) {
       throw new UnauthorizedError("Invalid email or password");
     }
     if (!password || typeof password !== "string" || password.length === 0) {
       throw new UnauthorizedError("Invalid email or password");
     }
 
-    const normalizedEmail = email.trim().toLowerCase();
-    const user = await this.database.findUserByEmail(normalizedEmail);
+    const normalizedIdentifier = identifier.trim().toLowerCase();
+    const user = normalizedIdentifier.includes("@")
+      ? await this.database.findUserByEmail(normalizedIdentifier)
+      : await this.database.findUserByLoginIdentifier(normalizedIdentifier);
 
     if (!user) {
       dummyPasswordVerification(password);

@@ -39,6 +39,8 @@ jobs:
         run: bun run test:security
       - name: Run product integrity regression gate
         run: bun run test:product-integrity
+      - name: Run authentication experience regression gate
+        run: bun run test:auth-experience
 
   production-composition:
     name: Production Composition Root

@@ -366,6 +366,10 @@ export class PostgresIntegrityPersistence {
     return this.persistence.getUserByEmail(email);
   }
 
+  public getUserByLoginIdentifier(identifier: string): Promise<UserRecord | undefined> {
+    return this.persistence.getUserByLoginIdentifier(identifier);
+  }
+
   public getUserById(id: string): Promise<UserRecord | undefined> {
     return this.persistence.getUserById(id);
   }

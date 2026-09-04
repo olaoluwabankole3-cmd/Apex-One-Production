@@ -39,7 +39,8 @@ export async function POST(req: NextRequest) {
 
     const metadata = buildAuthSessionMetadata(
       result.session,
-      result.availableOrganizations
+      result.availableOrganizations,
+      result.requiresPasswordChange
     );
 
     const response = NextResponse.json({
