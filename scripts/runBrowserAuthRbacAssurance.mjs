@@ -59,7 +59,7 @@ try {
       await page.fill("#login-identifier", "stage10.invalid-login@example.test");
       await page.fill("#login-password", `${password}-invalid`);
       await page.click("#login-submit");
-      const alert = page.locator('[role="alert"]');
+      const alert = page.locator("#login-error");
       await alert.waitFor({ state: "visible", timeout: 15_000 });
       const message = await alert.innerText();
       assert(message.includes("incorrect") || message.includes("unavailable"), "Invalid login disclosed an unexpected account-specific state");
