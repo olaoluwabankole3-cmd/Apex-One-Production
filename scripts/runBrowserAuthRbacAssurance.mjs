@@ -19,20 +19,13 @@ async function check(name, work) {
   }
 }
 
-async function browserLogin(page, email) {
-  await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
-  const response = await page.evaluate(
-    async ({ email, password }) => {
-      const result = await fetch("/api/v1/auth/login", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      return { status: result.status, body: await result.json() };
-    },
-    { email, password }
-  );
-  assert(response.status === 200, `Browser login failed for ${email}: HTTP ${response.status}`);
+async function browserLogin(page, identifier) {
+  await page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("#apex-login-screen", { state: "visible", timeout: 15_000 });
+  await page.fill("#login-identifier", identifier);
+  await page.fill("#login-password", password);
+  await page.click("#login-submit");
+  await page.waitForSelector("#apex-authenticated-shell", { state: "visible", timeout: 15_000 });
 }
 
 const browser = await chromium.launch({ headless: true });
@@ -40,19 +33,37 @@ try {
   let ceoContext;
   let ceoPage;
 
-  await check("0. unauthenticated root fails closed without prototype business data", async () => {
+  await check("0. unauthenticated root redirects to the secure APEX ONE login without business data", async () => {
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
       await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
-      await page.waitForSelector("#apex-authentication-required", { state: "visible", timeout: 15_000 });
+      await page.waitForURL((url) => url.pathname === "/login", { timeout: 15_000 });
+      await page.waitForSelector("#apex-login-screen", { state: "visible", timeout: 15_000 });
       const text = await page.locator("body").innerText();
-      assert(text.includes("APEX ONE"), "Unauthenticated root did not preserve APEX ONE identity");
-      assert(text.includes("A valid authenticated session is required"), "Unauthenticated root did not fail closed");
+      assert(text.includes("Sign in to APEX ONE"), "Unauthenticated root did not reach the APEX ONE login");
       assert(!text.includes("APEX CONNECT"), "Unauthenticated root leaked the retired client portal");
       assert(!text.includes("Welcome back"), "Unauthenticated root leaked a hard-coded user greeting");
       assert(!text.includes("$10.48M"), "Unauthenticated root leaked a fabricated wealth balance");
       assert((await page.locator("#apex-authenticated-shell").count()) === 0, "Unauthenticated browser rendered the enterprise shell");
+    } finally {
+      await context.close();
+    }
+  });
+
+  await check("0a. login form reports invalid credentials without revealing account status", async () => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      await page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded" });
+      await page.fill("#login-identifier", "stage10.ceo@example.test");
+      await page.fill("#login-password", `${password}-invalid`);
+      await page.click("#login-submit");
+      const alert = page.locator('[role="alert"]');
+      await alert.waitFor({ state: "visible", timeout: 15_000 });
+      const message = await alert.innerText();
+      assert(message.includes("incorrect") || message.includes("unavailable"), "Invalid login disclosed an unexpected account-specific state");
+      assert((await page.locator("#apex-authenticated-shell").count()) === 0, "Invalid login entered the enterprise shell");
     } finally {
       await context.close();
     }
@@ -114,11 +125,8 @@ try {
     const cookies = await ceoContext.cookies(baseUrl);
     assert(!cookies.some((cookie) => cookie.name === "apex_session"), "Logout did not clear apex_session");
     await ceoPage.goto(`${baseUrl}/settings`, { waitUntil: "domcontentloaded" });
-    await ceoPage.waitForFunction(
-      () => document.body.innerText.includes("A valid authenticated session is required"),
-      undefined,
-      { timeout: 15_000 }
-    );
+    await ceoPage.waitForURL((url) => url.pathname === "/login", { timeout: 15_000 });
+    await ceoPage.waitForSelector("#apex-login-screen", { state: "visible", timeout: 15_000 });
   });
 
   const failed = results.filter((result) => !result.passed);
