@@ -594,10 +594,10 @@ export class LocalAuthenticationProvider implements IAuthenticationProvider {
     availableOrganizations: { id: string; name: string; role: string }[];
   }> {
     if (!identifier || typeof identifier !== "string" || identifier.trim().length === 0) {
-      throw new UnauthorizedError("Invalid email/username or password");
+      throw new UnauthorizedError("Invalid email or password");
     }
     if (!password || typeof password !== "string" || password.length === 0) {
-      throw new UnauthorizedError("Invalid email/username or password");
+      throw new UnauthorizedError("Invalid email or password");
     }
 
     const normalizedIdentifier = identifier.trim().toLowerCase();
@@ -607,11 +607,11 @@ export class LocalAuthenticationProvider implements IAuthenticationProvider {
 
     if (!user) {
       dummyPasswordVerification(password);
-      throw new UnauthorizedError("Invalid email/username or password");
+      throw new UnauthorizedError("Invalid email or password");
     }
     if (user.status !== "active") {
       dummyPasswordVerification(password);
-      throw new UnauthorizedError("Invalid email/username or password");
+      throw new UnauthorizedError("Invalid email or password");
     }
     if (
       !user.passwordHash ||
@@ -622,10 +622,10 @@ export class LocalAuthenticationProvider implements IAuthenticationProvider {
       user.passwordSalt.trim().length === 0
     ) {
       dummyPasswordVerification(password);
-      throw new UnauthorizedError("Invalid email/username or password");
+      throw new UnauthorizedError("Invalid email or password");
     }
     if (!verifyPassword(password, user.passwordHash, user.passwordSalt)) {
-      throw new UnauthorizedError("Invalid email/username or password");
+      throw new UnauthorizedError("Invalid email or password");
     }
 
     const memberships = await this.database.findMembershipsForUser(user.id);
