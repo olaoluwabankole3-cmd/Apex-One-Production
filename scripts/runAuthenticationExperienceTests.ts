@@ -300,7 +300,7 @@ const checks: Check[] = [
         "Recovery limitation is not disclosed"
       );
       requireCondition(
-        recovery.includes("No password-reset request has been submitted"),
+        /No password-reset\s+request has been submitted/.test(recovery),
         "Recovery surface does not explicitly deny fake submission"
       );
       requireCondition(!recovery.includes("fetch("), "Recovery page contains an unbacked reset request");
