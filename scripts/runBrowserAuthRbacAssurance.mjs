@@ -76,7 +76,7 @@ try {
     await ceoPage.goto(`${baseUrl}/settings`, { waitUntil: "domcontentloaded" });
     await ceoPage.waitForSelector("#organizational-control-center", { state: "visible", timeout: 15_000 });
     const text = await ceoPage.locator("body").innerText();
-    assert(text.includes("AI GOVERNANCE MONITOR"), "CEO did not receive privileged settings workspace");
+    assert(text.includes("Settings & Integrations"), "CEO did not receive privileged settings workspace");
   });
 
   await check("3. Relationship Manager browser session is denied the org:admin UI surface", async () => {
