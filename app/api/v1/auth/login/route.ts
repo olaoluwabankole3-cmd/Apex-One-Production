@@ -15,8 +15,26 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
 
-    if (!body.email || typeof body.email !== "string" || body.email.trim().length === 0) {
-      return NextResponse.json({ error: "Email is required" }, { status: 400 });
+    const identifier =
+      typeof body.identifier === "string" && body.identifier.trim().length > 0
+        ? body.identifier.trim()
+        : typeof body.email === "string"
+          ? body.email.trim()
+          : "";
+
+    if (!identifier) {
+      return NextResponse.json({ error: "Email or username is required" }, { status: 400 });
+    }
+
+    if (
+      typeof body.identifier === "string" &&
+      typeof body.email === "string" &&
+      body.identifier.trim().toLowerCase() !== body.email.trim().toLowerCase()
+    ) {
+      return NextResponse.json(
+        { error: "Provide one login identifier", code: "VALIDATION_ERROR" },
+        { status: 400 }
+      );
     }
 
     if (!body.password || typeof body.password !== "string" || body.password.length === 0) {
@@ -31,7 +49,7 @@ export async function POST(req: NextRequest) {
 
     const result = await authService.login(
       {
-        email: body.email.trim(),
+        identifier,
         password: body.password,
         targetOrganizationId:
           typeof body.organizationId === "string" ? body.organizationId : undefined,
@@ -42,7 +60,8 @@ export async function POST(req: NextRequest) {
 
     const metadata = buildAuthSessionMetadata(
       result.session,
-      result.availableOrganizations
+      result.availableOrganizations,
+      result.requiresPasswordChange
     );
 
     const response = NextResponse.json({
