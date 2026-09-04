@@ -37,6 +37,7 @@ interface AuthContextValue {
   availableOrganizations: SafeOrganization[];
   isAuthenticated: boolean;
   isLoading: boolean;
+  isSessionLoading: boolean;
   error: string | null;
   requiresPasswordChange: boolean;
   organizationSelectionRequired: boolean;
@@ -62,7 +63,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [availableOrganizations, setAvailableOrganizations] = useState<
     SafeOrganization[]
   >([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isSessionLoading, setIsSessionLoading] = useState(true);
+  const [isActionLoading, setIsActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [requiresPasswordChange, setRequiresPasswordChange] = useState(false);
   const [organizationSelectionRequired, setOrganizationSelectionRequired] =
@@ -100,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshSession = useCallback(async () => {
-    setIsLoading(true);
+    setIsSessionLoading(true);
     setError(null);
     try {
       const session = await authClient.getCurrentSession();
@@ -113,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearSessionState();
       setError(err?.message || "Unable to verify authenticated session");
     } finally {
-      setIsLoading(false);
+      setIsSessionLoading(false);
     }
   }, [applySessionState, clearSessionState]);
 
@@ -124,7 +126,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const hadAuthenticatedSession = authenticatedRef.current;
       clearSessionState();
       setError(null);
-      setIsLoading(false);
+      setIsSessionLoading(false);
+      setIsActionLoading(false);
       if (hadAuthenticatedSession) {
         setNotice("session_expired");
       }
@@ -136,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (
     credentials: LoginCredentials
   ): Promise<AuthSessionMetadata> => {
-    setIsLoading(true);
+    setIsActionLoading(true);
     setError(null);
     setNotice(null);
     try {
@@ -148,12 +151,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(err?.message || "Login failed");
       throw err;
     } finally {
-      setIsLoading(false);
+      setIsActionLoading(false);
     }
   };
 
   const logout = async () => {
-    setIsLoading(true);
+    setIsActionLoading(true);
     setError(null);
     try {
       const confirmed = await authClient.logout();
@@ -163,7 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       clearSessionState();
       setNotice("signed_out");
-      setIsLoading(false);
+      setIsActionLoading(false);
     }
   };
 
@@ -171,7 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     currentPassword: string,
     newPassword: string
   ): Promise<string> => {
-    setIsLoading(true);
+    setIsActionLoading(true);
     setError(null);
 
     try {
@@ -197,14 +200,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(err?.message || "Failed to change password");
       throw err;
     } finally {
-      setIsLoading(false);
+      setIsActionLoading(false);
     }
   };
 
   const switchOrganization = async (
     targetOrgId: string
   ): Promise<AuthSessionMetadata> => {
-    setIsLoading(true);
+    setIsActionLoading(true);
     setError(null);
     try {
       const session = await authClient.switchOrganization(targetOrgId);
@@ -225,7 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       throw err;
     } finally {
-      setIsLoading(false);
+      setIsActionLoading(false);
     }
   };
 
@@ -247,7 +250,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         organization,
         availableOrganizations,
         isAuthenticated: Boolean(user && organization),
-        isLoading,
+        isLoading: isSessionLoading || isActionLoading,
+        isSessionLoading,
         error,
         requiresPasswordChange,
         organizationSelectionRequired,
