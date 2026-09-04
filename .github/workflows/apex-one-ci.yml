@@ -403,6 +403,16 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Run Stage 4G durability and recovery assurance
         run: bun run test:recovery
+      - name: Prove durable state survives a fresh application process
+        env:
+          APP_ENV: assurance
+          APEX_DATABASE_ADAPTER: postgres
+          APEX_SESSION_ADAPTER: redis
+          APEX_RATE_LIMIT_ADAPTER: redis
+          APEX_AUDIT_ADAPTER: postgres
+          APEX_OBJECT_STORAGE_ADAPTER: s3
+          APEX_SEARCH_INDEX_ADAPTER: postgres
+        run: bun run test:restart-persistence
 
   typecheck:
     name: TypeScript Verification
