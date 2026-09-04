@@ -1,34 +1,35 @@
 "use client";
 
 /**
- * APEX ONE — Authentication Context Provider
+ * APEX ONE — Authentication Context
  *
- * Provides safe frontend authentication state to UI components.
- *
- * Guarantees:
- * - NO raw session tokens stored or manipulated in JavaScript.
- * - Authenticated state hydrated via server /api/v1/auth/me using HttpOnly cookies.
- * - Automatic state reset on 401 Unauthorized responses.
- * - Login, refresh, organization switch, logout, password change, and expiry converge on one session shape.
- * - Permissions are UX rendering hints only; backend remains the security boundary.
+ * Security authority remains server-side. This provider only projects safe
+ * session metadata and drives UX state around the HttpOnly-cookie session.
  */
 
 import React, {
   createContext,
-  useContext,
-  useState,
-  useEffect,
   useCallback,
-  ReactNode,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
 } from "react";
 import {
   authClient,
-  AuthSessionMetadata,
-  SafeUser,
-  SafeOrganization,
-  LoginCredentials,
+  type AuthSessionMetadata,
+  type SafeUser,
+  type SafeOrganization,
+  type LoginCredentials,
 } from "@/lib/authClient";
 import { apiClient } from "@/lib/apiClient";
+
+export type AuthNotice =
+  | "session_expired"
+  | "signed_out"
+  | "password_changed"
+  | null;
 
 interface AuthContextValue {
   user: SafeUser | null;
@@ -37,11 +38,21 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  login: (credentials: LoginCredentials) => Promise<void>;
+  requiresPasswordChange: boolean;
+  organizationSelectionRequired: boolean;
+  notice: AuthNotice;
+  login: (credentials: LoginCredentials) => Promise<AuthSessionMetadata>;
   logout: () => Promise<void>;
-  changePassword: (currentPassword: string, newPassword: string) => Promise<string>;
-  switchOrganization: (targetOrgId: string) => Promise<void>;
+  changePassword: (
+    currentPassword: string,
+    newPassword: string
+  ) => Promise<string>;
+  switchOrganization: (
+    targetOrgId: string
+  ) => Promise<AuthSessionMetadata>;
+  confirmOrganizationSelection: () => void;
   refreshSession: () => Promise<void>;
+  dismissNotice: () => void;
   hasPermission: (permission: string) => boolean;
 }
 
@@ -49,32 +60,53 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SafeUser | null>(null);
-  const [organization, setOrganization] = useState<SafeOrganization | null>(null);
+  const [organization, setOrganization] =
+    useState<SafeOrganization | null>(null);
   const [availableOrganizations, setAvailableOrganizations] = useState<
     SafeOrganization[]
   >([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [requiresPasswordChange, setRequiresPasswordChange] = useState(false);
+  const [organizationSelectionRequired, setOrganizationSelectionRequired] =
+    useState(false);
+  const [notice, setNotice] = useState<AuthNotice>(null);
+  const authenticatedRef = useRef(false);
+
+  useEffect(() => {
+    authenticatedRef.current = Boolean(user && organization);
+  }, [user, organization]);
 
   const clearSessionState = useCallback(() => {
     setUser(null);
     setOrganization(null);
     setAvailableOrganizations([]);
+    setRequiresPasswordChange(false);
+    setOrganizationSelectionRequired(false);
   }, []);
 
-  const applySessionState = useCallback((session: AuthSessionMetadata) => {
-    setUser(session.user);
-    setOrganization(session.organization);
-    setAvailableOrganizations(session.availableOrganizations);
-  }, []);
+  const applySessionState = useCallback(
+    (
+      session: AuthSessionMetadata,
+      options?: { requireOrganizationSelection?: boolean }
+    ) => {
+      setUser(session.user);
+      setOrganization(session.organization);
+      setAvailableOrganizations(session.availableOrganizations);
+      setRequiresPasswordChange(session.requiresPasswordChange);
+      setOrganizationSelectionRequired(
+        options?.requireOrganizationSelection === true &&
+          session.availableOrganizations.length > 1
+      );
+    },
+    []
+  );
 
   const refreshSession = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-
     try {
       const session = await authClient.getCurrentSession();
-
       if (session) {
         applySessionState(session);
       } else {
@@ -92,26 +124,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshSession();
 
     const unsubscribe = apiClient.onUnauthorized(() => {
+      const hadAuthenticatedSession = authenticatedRef.current;
       clearSessionState();
       setError(null);
       setIsLoading(false);
+      if (hadAuthenticatedSession) {
+        setNotice("session_expired");
+      }
     });
 
-    return () => {
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, [clearSessionState, refreshSession]);
 
-  const login = async (credentials: LoginCredentials) => {
+  const login = async (
+    credentials: LoginCredentials
+  ): Promise<AuthSessionMetadata> => {
     setIsLoading(true);
     setError(null);
-
+    setNotice(null);
     try {
       const session = await authClient.login(credentials);
-      applySessionState(session);
+      applySessionState(session, { requireOrganizationSelection: true });
+      return session;
     } catch (err: any) {
       clearSessionState();
-      setError(err.message || "Login failed");
+      setError(err?.message || "Login failed");
       throw err;
     } finally {
       setIsLoading(false);
@@ -121,7 +158,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     setIsLoading(true);
     setError(null);
-
     try {
       const confirmed = await authClient.logout();
       if (!confirmed) {
@@ -129,6 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } finally {
       clearSessionState();
+      setNotice("signed_out");
       setIsLoading(false);
     }
   };
@@ -141,17 +178,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const result = await authClient.changePassword(currentPassword, newPassword);
-
-      // This context exposes the self-service password-change flow only. A
-      // successful change revokes this user's backend sessions and clears the
-      // HttpOnly cookie, so frontend identity must be cleared immediately too.
+      const result = await authClient.changePassword(
+        currentPassword,
+        newPassword
+      );
       clearSessionState();
+      setNotice("password_changed");
       return result.message;
     } catch (err: any) {
-      // A request can fail ambiguously after the server has already committed
-      // the password change. Re-read /auth/me so the UI converges on the actual
-      // browser cookie/session state rather than keeping stale authenticated data.
       try {
         const currentSession = await authClient.getCurrentSession();
         if (currentSession) {
@@ -170,16 +204,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const switchOrganization = async (targetOrgId: string) => {
+  const switchOrganization = async (
+    targetOrgId: string
+  ): Promise<AuthSessionMetadata> => {
     setIsLoading(true);
     setError(null);
-
     try {
       const session = await authClient.switchOrganization(targetOrgId);
       applySessionState(session);
+      setOrganizationSelectionRequired(false);
+      return session;
     } catch (err: any) {
-      setError(err.message || "Failed to switch organization");
-
+      setError(err?.message || "Failed to switch organization");
       try {
         const currentSession = await authClient.getCurrentSession();
         if (currentSession) {
@@ -190,12 +226,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         clearSessionState();
       }
-
       throw err;
     } finally {
       setIsLoading(false);
     }
   };
+
+  const confirmOrganizationSelection = () => {
+    setOrganizationSelectionRequired(false);
+  };
+
+  const dismissNotice = () => setNotice(null);
 
   const hasPermission = (permission: string): boolean => {
     if (!user || !user.permissions) return false;
@@ -208,14 +249,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         organization,
         availableOrganizations,
-        isAuthenticated: !!user && !!organization,
+        isAuthenticated: Boolean(user && organization),
         isLoading,
         error,
+        requiresPasswordChange,
+        organizationSelectionRequired,
+        notice,
         login,
         logout,
         changePassword,
         switchOrganization,
+        confirmOrganizationSelection,
         refreshSession,
+        dismissNotice,
         hasPermission,
       }}
     >
