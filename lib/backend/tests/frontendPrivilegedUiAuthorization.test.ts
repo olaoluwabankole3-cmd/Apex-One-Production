@@ -118,17 +118,28 @@ export async function runFrontendPrivilegedUiAuthorizationTestSuite(): Promise<T
     }
   });
 
-  await testCase("5. Root staff dashboard selection uses session capability, not RoleContext", () => {
-    const source = readSource("app/page.tsx");
+  await testCase("5. Global application shell gates the root workspace with authenticated session capability", () => {
+    const root = readSource("app/page.tsx");
+    const shell = readSource("components/layout/AppShell.tsx");
+    const layout = readSource("app/layout.tsx");
 
-    if (!source.includes("useAuth")) {
-      throw new Error("Root dashboard does not consume authenticated session state");
+    if (!layout.includes("<AppShell>{children}</AppShell>")) {
+      throw new Error("Root layout does not route all product UI through AppShell");
     }
-    if (!source.includes('hasPermission("org:read")')) {
-      throw new Error("Root dashboard does not require org:read before rendering the staff experience");
+    if (!shell.includes("useAuth")) {
+      throw new Error("Global application shell does not consume authenticated session state");
     }
-    if (importsRoleContext(source) || /\buseRole\s*\(/.test(source)) {
-      throw new Error("Root dashboard still selects privileged UI through RoleContext");
+    if (!shell.includes("!isAuthenticated")) {
+      throw new Error("Global application shell does not deny unauthenticated access");
+    }
+    if (!shell.includes('!hasPermission("org:read")')) {
+      throw new Error("Global application shell does not require org:read before rendering the internal workspace");
+    }
+    if (importsRoleContext(shell) || /\buseRole\s*\(/.test(shell)) {
+      throw new Error("Global application shell selects privileged UI through RoleContext");
+    }
+    if (importsRoleContext(root) || /\buseRole\s*\(/.test(root)) {
+      throw new Error("Root dashboard contains role-based authorization logic");
     }
   });
 
@@ -163,6 +174,7 @@ export async function runFrontendPrivilegedUiAuthorizationTestSuite(): Promise<T
   await testCase("8. Privileged boundary source files contain no role-string authorization checks", () => {
     const boundaryFiles = [
       "components/layout/InternalOnlyShield.tsx",
+      "components/layout/AppShell.tsx",
       "app/page.tsx",
       "app/settings/page.tsx",
       "app/value-intelligence/layout.tsx",

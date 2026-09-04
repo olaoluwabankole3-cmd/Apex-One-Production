@@ -228,6 +228,7 @@ export async function runFrontendCanonicalConsumersTestSuite(): Promise<TestSuit
     const signal = source("lib/frontendApiFailure.ts");
     const banner = source("components/layout/ApiFailureBanner.tsx");
     const layout = source("app/layout.tsx");
+    const shell = source("components/layout/AppShell.tsx");
 
     if (!client.includes("publishFrontendApiFailure")) {
       throw new Error("Canonical API client does not publish nonfatal frontend failures");
@@ -238,8 +239,11 @@ export async function runFrontendCanonicalConsumersTestSuite(): Promise<TestSuit
     if (!banner.includes("FRONTEND_API_FAILURE_EVENT") || !banner.includes('role="alert"')) {
       throw new Error("Frontend does not expose a visible nonfatal API failure surface");
     }
-    if (!layout.includes("<ApiFailureBanner />")) {
-      throw new Error("Global application shell does not render the API failure surface");
+    if (!layout.includes("<AppShell>{children}</AppShell>")) {
+      throw new Error("Root layout does not route product UI through the global application shell");
+    }
+    if (!shell.includes("<ApiFailureBanner />")) {
+      throw new Error("Global authenticated application shell does not render the API failure surface");
     }
   });
 

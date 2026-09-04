@@ -15,7 +15,9 @@ export default function InternalOnlyShield({
 }: InternalOnlyShieldProps) {
   const { isAuthenticated, isLoading, hasPermission } = useAuth();
 
-  if (isLoading) return null;
+  if (isLoading) {
+    return null;
+  }
 
   const hasInternalAccess = isAuthenticated && hasPermission("org:read");
   const hasRequiredCapability = requiredPermission ? hasPermission(requiredPermission) : true;

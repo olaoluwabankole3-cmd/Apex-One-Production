@@ -96,11 +96,15 @@ const checks: Check[] = [
     },
   },
   {
-    name: "Captured-value UI explicitly labels demo totals as recorded or modeled",
+    name: "Captured-value UI labels totals as recorded and disclaims verification authority",
     run: () => {
-      requireIncludes(capturedPage, "Recorded Value Captured", "Captured-value hero must use recorded terminology");
-      requireIncludes(capturedPage, "MODELED RETURN:", "Demo ROI ratio must be labeled modeled");
-      requireIncludes(capturedPage, "not a canonical verification or certification decision", "Demo ROI must disclaim canonical verification/certification");
+      requireIncludes(capturedPage, "Recorded captured value", "Captured-value hero must use recorded terminology");
+      requireIncludes(
+        capturedPage,
+        "is not presented as independent verification or certification",
+        "Captured-value UI must disclaim verification/certification authority"
+      );
+      requireExcludes(capturedPage, "MODELED RETURN:", "Retired demo ROI copy must not return");
     },
   },
   {
