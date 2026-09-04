@@ -82,7 +82,7 @@ function safeNextPath(pathname: string): string {
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const {
-    isLoading,
+    isSessionLoading,
     isAuthenticated,
     hasPermission,
     requiresPasswordChange,
@@ -98,7 +98,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isAccessDeniedPath = pathname === "/access-denied";
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isSessionLoading) return;
 
     if (!isAuthenticated) {
       if (!isPublicAuthPath) {
@@ -140,7 +140,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [
     hasPermission,
     isAccessDeniedPath,
-    isLoading,
+    isSessionLoading,
     isLoginPath,
     isPasswordSecurityPath,
     isPublicAuthPath,
@@ -151,7 +151,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     router,
   ]);
 
-  if (isLoading) {
+  if (isSessionLoading) {
     return (
       <div
         id="apex-session-loading"
