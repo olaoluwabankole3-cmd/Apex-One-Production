@@ -40,6 +40,24 @@ try {
   let ceoContext;
   let ceoPage;
 
+  await check("0. unauthenticated root fails closed without prototype business data", async () => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      await page.goto(baseUrl, { waitUntil: "domcontentloaded" });
+      await page.waitForSelector("#apex-authentication-required", { state: "visible", timeout: 15_000 });
+      const text = await page.locator("body").innerText();
+      assert(text.includes("APEX ONE"), "Unauthenticated root did not preserve APEX ONE identity");
+      assert(text.includes("A valid authenticated session is required"), "Unauthenticated root did not fail closed");
+      assert(!text.includes("APEX CONNECT"), "Unauthenticated root leaked the retired client portal");
+      assert(!text.includes("Welcome back"), "Unauthenticated root leaked a hard-coded user greeting");
+      assert(!text.includes("$10.48M"), "Unauthenticated root leaked a fabricated wealth balance");
+      assert((await page.locator("#apex-authenticated-shell").count()) === 0, "Unauthenticated browser rendered the enterprise shell");
+    } finally {
+      await context.close();
+    }
+  });
+
   await check("1. browser stores hardened HttpOnly session while JavaScript cannot read it", async () => {
     ceoContext = await browser.newContext();
     ceoPage = await ceoContext.newPage();
@@ -58,7 +76,7 @@ try {
     await ceoPage.goto(`${baseUrl}/settings`, { waitUntil: "domcontentloaded" });
     await ceoPage.waitForSelector("#organizational-control-center", { state: "visible", timeout: 15_000 });
     const text = await ceoPage.locator("body").innerText();
-    assert(text.includes("AI GOVERNANCE MONITOR"), "CEO did not receive privileged settings workspace");
+    assert(text.includes("Settings & Integrations"), "CEO did not receive privileged settings workspace");
   });
 
   await check("3. Relationship Manager browser session is denied the org:admin UI surface", async () => {

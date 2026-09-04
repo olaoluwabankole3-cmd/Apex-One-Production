@@ -29,28 +29,22 @@ export interface TestSuiteSummary {
 const ROLE_CONTEXT_PATH = "components/layout/RoleContext.tsx";
 
 const AUDITED_ROLE_CONTEXT_CONSUMERS = [
-  "app/analytics/page.tsx",
-  "app/operations/page.tsx",
   "components/ai-workspace/AiWorkspace.tsx",
   "components/ai-workspace/SuggestedPrompts.tsx",
   "components/ai-workspace/WorkspaceHeader.tsx",
   "components/analytics/AnalyticsHeader.tsx",
   "components/customers/CustomersHeader.tsx",
-  "components/dashboard/ApexConnectDashboard.tsx",
   "components/dashboard/DashboardHeader.tsx",
   "components/dashboard/ExecutiveSummary.tsx",
   "components/dashboard/KpiGrid.tsx",
   "components/dashboard/QuickActions.tsx",
   "components/dashboard/RecentActivity.tsx",
   "components/documents/DocumentsHeader.tsx",
-  "components/layout/Sidebar.tsx",
-  "components/layout/Topbar.tsx",
   "components/operations/OperationsHeader.tsx",
   "components/workflows/WorkflowsHeader.tsx",
 ].sort();
 
 const STATE_ONLY_ROLE_CONTEXT_CONSUMERS = [
-  "components/dashboard/ApexConnectDashboard.tsx",
   "components/dashboard/RecentActivity.tsx",
 ].sort();
 
@@ -125,8 +119,12 @@ export async function runFrontendRoleAuthorityTestSuite(): Promise<TestSuiteSumm
     if (!source.includes("useAuth")) {
       throw new Error("RoleContext presentation role is not sourced from AuthContext");
     }
-    if (!/const\s+role\s*:\s*Role\s*=\s*user\s*&&\s*ALL_ROLES\.includes/.test(source)) {
-      throw new Error("RoleContext role is not visibly derived from authenticated user.role");
+    const derivesSupportedRoleFromSession =
+      source.includes('user?.role === "Administrator"') &&
+      source.includes("ALL_ROLES.includes(user.role as Role)") &&
+      source.includes("(user.role as Role)");
+    if (!derivesSupportedRoleFromSession) {
+      throw new Error("RoleContext presentation role is not visibly derived from authenticated user.role");
     }
     if (/useState\s*<\s*Role\s*>/.test(source) || /useState\s*\(\s*["']CEO["']\s*\)/.test(source)) {
       throw new Error("RoleContext contains independent mutable/default privileged role state");

@@ -19,57 +19,67 @@ export class ApiIntelligenceRepository implements IntelligenceRepository {
       apiClient.getData<ValueSummaryResponse>("/api/v1/value/summary"),
     ]);
 
-    const totalArrUSD = customers.reduce((sum, c) => sum + (c.arr || 0), 0);
-    const totalArrM = (totalArrUSD / 1000000).toFixed(1);
-    const atRiskCount = customers.filter((c) => c.status === "at-risk" || c.healthScore < 70).length;
-    const totalCaptured = valueSummary.totalCapturedValue
-      ? (valueSummary.totalCapturedValue / 1000000).toFixed(1)
-      : "0.0";
+    const atRiskCount = customers.filter(
+      (customer) => customer.status === "at-risk" || customer.healthScore < 70
+    ).length;
+    const hasCapturedValue = Number(valueSummary.totalCapturedValue || 0) > 0;
 
     if (role === "CEO") {
-      return `Enterprise portfolio ARR stands at $${totalArrM}M across ${customers.length} accounts. ₦${totalCaptured}M in verified captured value recorded.`;
+      return `Authorized enterprise records currently include ${customers.length} customer accounts; ${atRiskCount} are flagged for review. ${
+        hasCapturedValue
+          ? "Captured-value records are present in the authoritative value lifecycle."
+          : "No captured value is currently recorded."
+      }`;
     }
+
+    if (role === "Relationship Manager") {
+      return `Your authorized relationship scope currently includes ${customers.length} customer accounts; ${atRiskCount} are flagged for review.`;
+    }
+
+    if (role === "Customer Service") {
+      return `${customers.length} authorized customer accounts are available to this workspace; ${atRiskCount} currently require attention based on account status or health score.`;
+    }
+
     if (role === "Operations") {
-      return "Workflow pipelines and system telemetry active across organizational infrastructure.";
+      return "No authoritative operations briefing is connected to this summary yet. Operational facts will appear here only when the corresponding source records are available.";
     }
+
     if (role === "Compliance") {
-      return "Multi-tenant security boundaries and immutable audit logs active.";
+      return "No authoritative compliance briefing is connected to this summary yet. Compliance conclusions will not be inferred from infrastructure status alone.";
     }
-    return `Relationship portfolio monitoring ${customers.length} active enterprise accounts with ${atRiskCount} accounts flagged for review.`;
+
+    return "This internal executive briefing is not available for the current session role.";
   }
 
   async getSuggestedPrompts(role: Role, _organizationId?: string): Promise<string[]> {
     const promptMap: Record<Role, string[]> = {
       CEO: [
-        "Summarize enterprise ARR and top revenue risks",
-        "What are the biggest value recovery opportunities this quarter?",
-        "Review subsidiary performance against annual targets",
+        "Summarize authorized customer risk and value records",
+        "What verified value opportunities are currently available?",
+        "Which decisions require executive attention?",
       ],
       Operations: [
-        "Analyze workflow capacity bottlenecks across subsidiaries",
-        "Review SLA compliance reports and incident logs",
-        "Check automated task execution error rates",
+        "Summarize currently available workflow and action records",
+        "Which operational records need follow-up?",
+        "Show unresolved execution items with supporting evidence",
       ],
       "Relationship Manager": [
-        "Show all at-risk enterprise accounts with renewal in 90 days",
-        "Generate retention strategy briefing for top accounts",
-        "Review expansion pipelines across commercial operations",
+        "Show authorized at-risk customer accounts",
+        "Summarize customer records that need follow-up",
+        "Review available relationship evidence for my accounts",
       ],
       Compliance: [
-        "Audit uncollected receivables and float leakage",
-        "Review cryptographic tenant isolation proofs",
-        "Generate audit compliance report for regulatory inspection",
+        "Show available audit evidence for my authorized scope",
+        "Summarize compliance-relevant records without inferring missing facts",
+        "List evidence requiring human validation",
       ],
       "Customer Service": [
-        "Review urgent customer support escalation queue",
-        "Check account health trend for newly onboarded clients",
+        "Show customer records currently flagged for review",
+        "Summarize available service-related customer evidence",
       ],
-      "Customer / Investor": [
-        "View portfolio performance and ESG compliance metrics",
-        "Review institutional governance disclosures",
-      ],
+      "Customer / Investor": [],
     };
-    return promptMap[role] || promptMap.CEO;
+    return promptMap[role] || [];
   }
 }
 

@@ -5,7 +5,7 @@ import InternalOnlyShield from "@/components/layout/InternalOnlyShield";
 
 export default function DocumentsPage() {
   return (
-    <InternalOnlyShield>
+    <InternalOnlyShield requiredPermission="document:read">
       <DocumentsWorkspace />
     </InternalOnlyShield>
   );

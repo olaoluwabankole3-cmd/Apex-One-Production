@@ -5,7 +5,7 @@ import InternalOnlyShield from "@/components/layout/InternalOnlyShield";
 
 export default function WorkflowsPage() {
   return (
-    <InternalOnlyShield>
+    <InternalOnlyShield requiredPermission="workflow:read">
       <WorkflowsWorkspace />
     </InternalOnlyShield>
   );

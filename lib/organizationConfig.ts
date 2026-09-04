@@ -51,14 +51,21 @@ export interface OrganizationConfig {
   };
 }
 
-// safe default fictional configuration using APEX DEMO and APEX ONE
+/**
+ * Neutral presentation defaults only.
+ *
+ * Authenticated organization identity is projected from the server session.
+ * Business units, departments, integrations, and operating facts must come from
+ * authoritative organization configuration or connected systems; the frontend
+ * must not invent them.
+ */
 export const defaultOrganizationConfig: OrganizationConfig = {
-  id: "apex-demo",
-  name: "Apex Demo Group",
-  displayName: "Apex Demo",
-  shortName: "Apex",
-  industry: "financial_services",
-  description: "Advanced analytics, treasury operations, and strategic advisory services powered by Apex Sync Intelligence.",
+  id: "apex-one-workspace",
+  name: "APEX ONE Workspace",
+  displayName: "APEX ONE Workspace",
+  shortName: "APEX ONE",
+  industry: "enterprise",
+  description: "Enterprise intelligence workspace powered by Apex Sync Intelligence.",
 
   branding: {
     primaryColor: "#0a0a0b",
@@ -66,6 +73,8 @@ export const defaultOrganizationConfig: OrganizationConfig = {
     accentColor: "#c9a961",
   },
 
+  // Locale is a UI fallback until organization-specific locale configuration
+  // is exposed by the authenticated organization contract.
   locale: {
     country: "Nigeria",
     currency: "NGN",
@@ -78,31 +87,20 @@ export const defaultOrganizationConfig: OrganizationConfig = {
   terminology: {
     customer: "Customer",
     customers: "Customers",
-    employee: "Relationship Manager",
-    employees: "Relationship Managers",
+    employee: "Team Member",
+    employees: "Team Members",
     account: "Account",
     accounts: "Accounts",
     revenue: "Revenue",
     department: "Department",
     departments: "Departments",
-    subsidiary: "Subsidiary",
-    subsidiaries: "Subsidiaries",
+    subsidiary: "Business Unit",
+    subsidiaries: "Business Units",
   },
 
   organizationStructure: {
-    businessUnits: [
-      "Enterprise Operations",
-      "Commercial Operations",
-      "Strategic Accounts",
-      "Customer Operations"
-    ],
-    departments: [
-      "Treasury Management",
-      "Risk Division",
-      "Customer Success",
-      "Custody",
-      "Operations Engineering"
-    ]
+    businessUnits: [],
+    departments: [],
   },
 
   features: {
@@ -112,15 +110,13 @@ export const defaultOrganizationConfig: OrganizationConfig = {
     capacityIntelligence: true,
     valueIntelligence: true,
     workflowIntelligence: true,
-  }
+  },
 };
 
 export const company = {
-  name: "Apex Sync",
+  name: "Apex Sync Intelligence",
   subsidiaries: defaultOrganizationConfig.organizationStructure.businessUnits,
 };
-
-// Centralized formatting utilities
 
 export function formatCurrency(
   value: number,
@@ -128,7 +124,7 @@ export function formatCurrency(
   isCompact: boolean = false
 ): string {
   if (isNaN(value)) return `${currencySymbol}0`;
-  
+
   if (isCompact) {
     if (value >= 1000000000) {
       return `${currencySymbol}${(value / 1000000000).toFixed(1)}B`;
@@ -158,17 +154,11 @@ export function formatNumber(
   isCompact: boolean = false
 ): string {
   if (isNaN(value)) return "0";
-  
+
   if (isCompact) {
-    if (value >= 1000000000) {
-      return `${(value / 1000000000).toFixed(1)}B`;
-    }
-    if (value >= 1000000) {
-      return `${(value / 1000000).toFixed(1)}M`;
-    }
-    if (value >= 1000) {
-      return `${(value / 1000).toFixed(0)}K`;
-    }
+    if (value >= 1000000000) return `${(value / 1000000000).toFixed(1)}B`;
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+    if (value >= 1000) return `${(value / 1000).toFixed(0)}K`;
   }
 
   return value.toLocaleString(undefined, {
@@ -178,7 +168,5 @@ export function formatNumber(
 }
 
 export function formatDate(dateStr: string): string {
-  // Fallback if empty
-  if (!dateStr) return "";
-  return dateStr;
+  return dateStr || "";
 }

@@ -1,6 +1,19 @@
-import { ValueOpportunity, LeakageEvent, CustomerValueMetric, CapacityMetric, ExecutionPlay, CapturedLedgerEntry, PipelineStatus } from "@/components/value-engine/ValueEngineContext";
+import {
+  ValueOpportunity,
+  LeakageEvent,
+  CustomerValueMetric,
+  CapacityMetric,
+  ExecutionPlay,
+  CapturedLedgerEntry,
+  PipelineStatus,
+} from "@/components/value-engine/ValueEngineContext";
 import { apiClient } from "@/lib/apiClient";
-import { ValueOpportunityRecord, ValueCapturedRecord, ActionRecord, CustomerRecord } from "@/lib/backend/database/schema";
+import {
+  ValueOpportunityRecord,
+  ValueCapturedRecord,
+  ActionRecord,
+  CustomerRecord,
+} from "@/lib/backend/database/schema";
 import { collectAllCollectionData } from "./httpCollection";
 
 export interface ValueRepository {
@@ -15,7 +28,8 @@ export interface ValueRepository {
 
 export class ApiValueRepository implements ValueRepository {
   async getOpportunities(_organizationId?: string): Promise<ValueOpportunity[]> {
-    const records = await collectAllCollectionData<ValueOpportunityRecord>("/api/v1/value/opportunities");
+    const records =
+      await collectAllCollectionData<ValueOpportunityRecord>("/api/v1/value/opportunities");
     const statusMap: Record<string, PipelineStatus> = {
       Identified: "discovered",
       Validated: "validated",
@@ -24,97 +38,122 @@ export class ApiValueRepository implements ValueRepository {
       Captured: "captured",
     };
 
-    return records.map((o) => ({
-      id: o.id,
-      title: o.title,
-      category: o.category,
-      description: o.evidence || o.expectedOutcome || "AI identified potential value optimization.",
-      sourceSystem: o.sourceEntityType || "System Telemetry",
-      valueAmount: o.potentialValue,
-      status: statusMap[o.status] || "discovered",
-      confidence: o.confidence,
-      probability: o.confidence,
-      businessReason: o.evidence || o.expectedOutcome || "Strategic optimization opportunity.",
-      recommendedAction: o.recommendedAction,
-      responsibleDepartment: o.sourceEntityType ? `${o.sourceEntityType} Operations` : "Strategic Operations",
-      expectedCaptureDate: "2026-Q3",
-      impactTier: (o.strategicImportance || "High") as "High" | "Medium" | "Low",
+    return records.map((record) => ({
+      id: record.id,
+      title: record.title,
+      category: record.category,
+      description:
+        record.evidence || record.expectedOutcome || "No evidence summary recorded.",
+      sourceSystem: record.sourceEntityType || "Not specified",
+      valueAmount: record.potentialValue,
+      status: statusMap[record.status] || "discovered",
+      confidence: record.confidence,
+      // The current backend record has confidence but no separate probability field.
+      probability: 0,
+      businessReason:
+        record.evidence || record.expectedOutcome || "No business rationale recorded.",
+      recommendedAction: record.recommendedAction,
+      responsibleDepartment: "Unassigned",
+      expectedCaptureDate: "Not recorded",
+      impactTier: record.strategicImportance,
     }));
   }
 
   async getLeakageEvents(_organizationId?: string): Promise<LeakageEvent[]> {
     const opportunities = await this.getOpportunities();
     return opportunities
-      .filter((o) => o.category === "Revenue recovery" || o.category === "Contract optimization" || o.category === "Process optimization")
-      .map((l) => ({
-        id: l.id,
-        title: l.title,
-        description: l.businessReason,
-        category: l.category,
-        leakAmount: l.valueAmount,
-        occurrence: "Recurring Monthly",
-        riskScore: l.confidence,
-        status: (l.status === "captured" ? "plugged" : l.status === "in_execution" ? "monitoring" : "unplugged") as "unplugged" | "monitoring" | "plugged",
-        systemAffected: l.sourceSystem,
-        recommendedAction: l.recommendedAction,
+      .filter((opportunity) =>
+        ["Revenue recovery", "Contract optimization", "Process optimization"].includes(
+          opportunity.category
+        )
+      )
+      .map((record) => ({
+        id: record.id,
+        title: record.title,
+        description: record.businessReason,
+        category: record.category,
+        leakAmount: record.valueAmount,
+        occurrence: "Not recorded",
+        riskScore: record.confidence,
+        status:
+          record.status === "captured"
+            ? "plugged"
+            : record.status === "in_execution"
+              ? "monitoring"
+              : "unplugged",
+        systemAffected: record.sourceSystem,
+        recommendedAction: record.recommendedAction,
       }));
   }
 
   async getCustomerValues(_organizationId?: string): Promise<CustomerValueMetric[]> {
     const records = await collectAllCollectionData<CustomerRecord>("/api/v1/customers");
-    return records.map((c) => {
-      const isAtRisk = c.status === "at-risk" || c.healthScore < 70;
-      const currentRev = c.arr;
-
+    return records.map((customer) => {
+      const isAtRisk = customer.status === "at-risk" || customer.healthScore < 70;
       return {
-        id: c.id,
-        name: c.name,
-        tier: c.tier,
-        contractValue: currentRev,
-        potentialValue: currentRev,
-        expansionOpportunity: 0,
-        confidence: c.healthScore,
-        recommended: isAtRisk
-          ? "Review account churn signals and SLA compliance."
-          : "Account operating within normal health parameters.",
-        churnRisk: (isAtRisk ? "High" : c.healthScore < 85 ? "Medium" : "Low") as "High" | "Medium" | "Low",
-        lastAuditDate: new Date(c.updatedAt || Date.now()).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        id: customer.id,
+        name: customer.name,
+        tier: customer.tier,
+        contractValue: customer.arr,
+        // No separate potential-value source exists in the current customer contract.
+        potentialValue: 0,
+        expansionOpportunity: customer.opportunityNaira || 0,
+        // Legacy field name retained; value is the authoritative customer health score.
+        confidence: customer.healthScore,
+        recommended: customer.recommendedAction || "No recommended action recorded.",
+        churnRisk: (isAtRisk
+          ? "High"
+          : customer.healthScore < 85
+            ? "Medium"
+            : "Low") as "High" | "Medium" | "Low",
+        lastAuditDate: new Date(customer.updatedAt).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        }),
       };
     });
   }
 
   async getCapacityMetrics(_organizationId?: string): Promise<CapacityMetric[]> {
-    // BACKEND CAPABILITY REQUIRED: People, Tech, and Capital utilization telemetry service.
+    // BACKEND CAPABILITY REQUIRED: utilization telemetry service.
     return [];
   }
 
   async getPlays(_organizationId?: string): Promise<ExecutionPlay[]> {
     const records = await collectAllCollectionData<ActionRecord>("/api/v1/actions");
-    return records.map((p) => ({
-      id: p.id,
-      title: p.recommendation,
-      description: p.decisionDetail || p.insightSource || "Action item",
-      targetId: p.id,
+    return records.map((record) => ({
+      id: record.id,
+      title: record.recommendation,
+      description:
+        record.decisionDetail || record.insightSource || "No decision detail recorded.",
+      targetId: record.id,
       type: "opportunity" as const,
-      estimatedGain: p.expectedValue,
-      status: p.status === "Completed" || p.status === "Measured" ? "completed" : p.status === "In Progress" ? "in_progress" : "available",
-      stepsCompleted: p.status === "Completed" || p.status === "Measured" ? 3 : p.status === "In Progress" ? 1 : 0,
-      totalSteps: 3,
-      logs: p.logs || [`Action initialized: ${p.recommendation}`],
+      estimatedGain: record.expectedValue,
+      status:
+        record.status === "Completed" || record.status === "Measured"
+          ? "completed"
+          : record.status === "In Progress"
+            ? "in_progress"
+            : "available",
+      stepsCompleted: 0,
+      totalSteps: 0,
+      logs: record.logs || [],
     }));
   }
 
-  async getCapturedLedger(_organizationId?: string): Promise<CapturedLedgerEntry[]> {
-    const records = await collectAllCollectionData<ValueCapturedRecord>("/api/v1/value/captured");
-    return records.map((c) => ({
-      id: c.id,
-      date: c.realizationDate,
-      playTitle: c.opportunityTitle || "Captured Value Record",
-      category: c.category,
-      amountCaptured: c.capturedValue,
-      impactMetrics: c.evidenceDescription,
-      // Legacy ValueCaptured.certifiedBy is intentionally not projected here.
-      // Verification/certification attribution must come from canonical evidence history.
+  async getCapturedLedger(
+    _organizationId?: string
+  ): Promise<CapturedLedgerEntry[]> {
+    const records =
+      await collectAllCollectionData<ValueCapturedRecord>("/api/v1/value/captured");
+    return records.map((record) => ({
+      id: record.id,
+      date: record.realizationDate,
+      playTitle: record.opportunityTitle || "Captured value record",
+      category: record.category,
+      amountCaptured: record.capturedValue,
+      impactMetrics: record.evidenceDescription,
     }));
   }
 

@@ -166,7 +166,7 @@ export default function NodeInspector({ node, status, onDelete, onUpdateNode }: 
             <div>
               <label className="text-[10px] text-ivory/40">Approval Stakeholder Group</label>
               <select className="mt-1 w-full rounded-lg border border-white/[0.08] bg-charcoal/90 px-2 py-1.5 text-[11.5px] text-ivory outline-none">
-                <option>Account Executive & RM (Elena Cho)</option>
+                <option>Assigned Relationship Manager</option>
                 <option>Compliance Desk Check</option>
                 <option>Operations Audit Committee</option>
                 <option>Strategic Accounts Lead</option>
@@ -178,7 +178,7 @@ export default function NodeInspector({ node, status, onDelete, onUpdateNode }: 
               <label className="text-[10px] text-ivory/40">Recipient / Target</label>
               <input
                 type="text"
-                defaultValue="elena.cho@apexsync.com"
+                placeholder="Select or enter an authorized recipient"
                 className="mt-1 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-2 py-1.5 text-[11.5px] text-ivory outline-none"
               />
             </div>

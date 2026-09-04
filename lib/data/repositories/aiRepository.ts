@@ -71,14 +71,10 @@ export class ApiAIRepository implements AIRepository {
     return defaultPrompts.filter((p) => p.roles.includes(role));
   }
 
-  async getQuickActions(role?: Role): Promise<QuickAction[]> {
-    const defaultActions: QuickAction[] = [
-      { id: "qa-1", label: "Generate Board Briefing", description: "Compile executive governance summary", icon: "FileText", roles: ["CEO"] },
-      { id: "qa-2", label: "Audit Float Sweep", description: "Review end-of-day treasury settlement evidence", icon: "Activity", roles: ["CEO", "Operations"] },
-      { id: "qa-3", label: "Review Compliance Ledger", description: "Inspect multi-tenant isolation evidence", icon: "ShieldCheck", roles: ["Compliance", "Operations"] },
-    ];
-    if (!role) return defaultActions;
-    return defaultActions.filter((q) => q.roles.includes(role));
+  async getQuickActions(_role?: Role): Promise<QuickAction[]> {
+    // No authoritative command endpoint currently backs dashboard quick actions.
+    // Return no executable-looking actions rather than presenting inert or simulated controls.
+    return [];
   }
 
   async getReportSections(): Promise<ReportSection[]> {

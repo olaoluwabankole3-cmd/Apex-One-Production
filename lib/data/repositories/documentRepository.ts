@@ -36,47 +36,66 @@ function mapRecordToIntelDocument(d: DocumentRecord): IntelDocument {
     Other: "Report",
   };
 
+  const exposure =
+    d.extractedFields?.find((field) =>
+      /exposure|amount/i.test(field.label)
+    )?.value || "Not available";
+  const action =
+    d.extractedFields?.find((field) => /action/i.test(field.label))?.value ||
+    "Not available";
+
   return {
     id: d.id,
     name: d.name,
     fileType: fileTypeMap[d.fileType] || "pdf",
     category: categoryMap[d.category] || "Report",
-    businessUnit: "Strategic Accounts",
+    businessUnit: "Unassigned",
     uploadedBy: d.uploadedBy,
-    date: new Date(d.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    date: new Date(d.createdAt).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }),
     size: d.size,
-    pages: d.metadata?.pageCount || 1,
+    pages: d.metadata?.pageCount || 0,
     status: d.status === "indexed" ? "processed" : "processing",
     usefulSummary: {
       keyFinding: d.aiSummary || "",
       obligations: [],
       risksDetail: [],
       datesDetail: [
-        { event: "Record Created", date: new Date(d.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) }
+        {
+          event: "Record Created",
+          date: new Date(d.createdAt).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+          }),
+        },
       ],
-      financialExposure: d.extractedFields?.find((f) => f.label.toLowerCase().includes("exposure") || f.label.toLowerCase().includes("amount"))?.value || "Not available",
-      recommendedAction: d.extractedFields?.find((f) => f.label.toLowerCase().includes("action"))?.value || "Not available"
+      financialExposure: exposure,
+      recommendedAction: action,
     },
     entities: {
       customers: d.tags || [],
       contracts: [],
-      financialValues: d.extractedFields?.map((f) => f.value) || [],
+      financialValues: d.extractedFields?.map((field) => field.value) || [],
       risks: [],
-      importantDates: [new Date(d.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })],
+      importantDates: [],
       actions: [],
-      relatedDocs: [d.name]
+      relatedDocs: [],
     },
     relationships: {
       relatedCustomer: {
-        name: d.tags?.[0] || d.customerId || "Unassigned",
+        name: d.customerId || "Not linked",
         id: d.customerId || "none",
       },
-      relatedContract: "None",
-      relatedWorkflow: "None",
-      relatedEmployee: d.uploadedBy || "System",
-      relatedTransaction: "None",
-      relatedDecision: "None",
-    }
+      relatedContract: "Not linked",
+      relatedWorkflow: "Not linked",
+      relatedEmployee: d.uploadedBy || "Not recorded",
+      relatedTransaction: "Not linked",
+      relatedDecision: "Not linked",
+    },
   };
 }
 
@@ -93,16 +112,9 @@ function mapRecordToDocumentItem(d: DocumentRecord): DocumentItem {
     size: d.size,
     pages: intel.pages,
     status: intel.status,
-    aiSummary: intel.usefulSummary.keyFinding,
-    extractedFields: [
-      { label: "Financial Exposure", value: intel.usefulSummary.financialExposure },
-      { label: "Recommended Action", value: intel.usefulSummary.recommendedAction }
-    ],
-    suggestedQuestions: [
-      `What are the key obligations in ${d.name}?`,
-      `What financial risks are outlined in this document?`,
-      `When is the next renewal or audit date?`
-    ]
+    aiSummary: d.aiSummary || "",
+    extractedFields: d.extractedFields || [],
+    suggestedQuestions: [],
   };
 }
 
@@ -127,31 +139,26 @@ export class ApiDocumentRepository implements DocumentRepository {
     }
   }
 
-  async getDocumentAnswer(question: string, doc: DocumentItem | IntelDocument): Promise<string> {
+  async getDocumentAnswer(
+    question: string,
+    doc: DocumentItem | IntelDocument
+  ): Promise<string> {
     const q = question.toLowerCase();
-    const extractedFields = (doc as any).extractedFields;
-    const match = extractedFields?.find((f: any) => q.includes(f.label.toLowerCase().split(" ")[0]));
-    if (match) {
-      return `${match.label}: ${match.value}.`;
+    const extractedFields = (doc as any).extractedFields as
+      | Array<{ label: string; value: string }>
+      | undefined;
+    const match = extractedFields?.find((field) =>
+      q.includes(field.label.toLowerCase().split(" ")[0])
+    );
+    if (match) return `${match.label}: ${match.value}.`;
+
+    const storedSummary =
+      (doc as any).aiSummary || (doc as any).usefulSummary?.keyFinding;
+    if ((q.includes("summar") || q.includes("about") || q.includes("key")) && storedSummary) {
+      return storedSummary;
     }
 
-    const aiSummary = (doc as any).aiSummary || (doc as any).usefulSummary?.keyFinding;
-
-    if (q.includes("summar") || q.includes("about") || q.includes("key")) {
-      return aiSummary || "This document outlines strategic operational benchmarks and obligations.";
-    }
-
-    if (q.includes("exposure") || q.includes("financial") || q.includes("risk")) {
-      const exposure = (doc as any).usefulSummary?.financialExposure || extractedFields?.find((f: any) => f.label.toLowerCase().includes("exposure") || f.label.toLowerCase().includes("risk"))?.value;
-      if (exposure) return `Financial Exposure: ${exposure}.`;
-    }
-
-    if (q.includes("action") || q.includes("recommend")) {
-      const action = (doc as any).usefulSummary?.recommendedAction || extractedFields?.find((f: any) => f.label.toLowerCase().includes("action"))?.value;
-      if (action) return `Recommended Action: ${action}.`;
-    }
-
-    return `Based on ${doc.name}, ${aiSummary || "this record contains operational verification and governance terms."}`;
+    return "No authoritative extracted answer is available for this question.";
   }
 
   async createDocument(data: Partial<DocumentRecord>): Promise<DocumentItem> {
@@ -160,7 +167,9 @@ export class ApiDocumentRepository implements DocumentRepository {
   }
 
   async deleteDocument(id: string): Promise<boolean> {
-    const result = await apiClient.deleteData<{ deleted: boolean; id: string }>(`/api/v1/documents/${id}`);
+    const result = await apiClient.deleteData<{ deleted: boolean; id: string }>(
+      `/api/v1/documents/${id}`
+    );
     return result.deleted === true && result.id === id;
   }
 }

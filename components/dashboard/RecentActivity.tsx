@@ -30,9 +30,9 @@ export default function RecentActivity() {
       <div className="mt-4 space-y-1">
         {visibleActivities.length === 0 ? (
           <div className="rounded-xl border border-dashed border-white/[0.05] bg-white/[0.002] py-14 flex flex-col items-center justify-center text-center">
-            <span className="text-[12px] font-bold text-ivory/60 uppercase tracking-wider block font-mono">No Systemic Activities</span>
+            <span className="text-[12px] font-bold text-ivory/60 uppercase tracking-wider block font-mono">No Activity Records</span>
             <p className="text-[11px] text-ivory/35 max-w-xs mt-1.5 leading-relaxed">
-              System telemetry is quiet. Action-driven activities will compile as ecosystem operations run.
+              No authoritative activity records are available for this session yet.
             </p>
           </div>
         ) : (

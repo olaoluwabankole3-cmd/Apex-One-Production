@@ -46,7 +46,7 @@ export default function KpiGrid() {
               </h4>
             </div>
             <span className="text-[10px] font-mono text-ivory/30">
-              Systemic Loss Recovery Active
+              Authoritative lifecycle records
             </span>
           </div>
 
@@ -72,16 +72,16 @@ export default function KpiGrid() {
                 />
               </div>
               <p className="mt-2 text-[11px] font-mono text-gold/60 font-semibold">
-                {opportunities.filter(o => o.status !== "captured").length} active risk nodes detected
+                {opportunities.filter(o => o.status !== "captured").length} recorded opportunities not yet captured
               </p>
             </GlassCard>
 
-            {/* KPI 2: Certified Value Captured */}
+            {/* KPI 2: Recorded Value Captured */}
             <GlassCard className="p-5 border-emerald/20 bg-emerald/[0.01] relative overflow-hidden">
               <div className="absolute top-0 right-0 h-16 w-16 bg-emerald/5 blur-xl rounded-full animate-pulse-slow" />
               <div className="flex items-start justify-between">
                 <p className="text-[12px] font-medium uppercase tracking-[0.08em] text-ivory/45">
-                  Verified Capital Recaptured
+                  Recorded Value Captured
                 </p>
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald/15 text-emerald border border-emerald/25 animate-pulse-slow">
                   <Trophy size={12} />
@@ -97,7 +97,7 @@ export default function KpiGrid() {
                 />
               </div>
               <p className="mt-2 text-[11.5px] text-ivory/35">
-                Reflected in Group Treasury ledger
+                Recorded by the authoritative value lifecycle
               </p>
             </GlassCard>
 
@@ -124,30 +124,25 @@ export default function KpiGrid() {
               </p>
             </GlassCard>
 
-            {/* KPI 4: Security Shield Rate */}
+            {/* KPI 4: Active execution records */}
             <GlassCard className="p-5 relative overflow-hidden">
               <div className="flex items-start justify-between">
                 <p className="text-[12px] font-medium uppercase tracking-[0.08em] text-ivory/45">
-                  Loss Intervention Index
+                  Active Value Execution
                 </p>
-                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald/10 text-emerald border border-emerald-25">
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-white/[0.05] text-ivory/60 border border-white/[0.05]">
                   <ShieldCheck size={12} />
                 </span>
               </div>
               <div className="mt-3 flex items-baseline">
-                {opportunities.length === 0 ? (
-                  <span className="font-display text-[26px] font-bold text-ivory/30 tracking-tight">—</span>
-                ) : (
-                  <AnimatedNumber
-                    value={94.8}
-                    decimals={1}
-                    suffix="%"
-                    className="font-display text-[26px] font-bold tabular-nums tracking-tight text-emerald"
-                  />
-                )}
+                <AnimatedNumber
+                  value={opportunities.filter((opportunity) => opportunity.status === "in_execution").length}
+                  decimals={0}
+                  className="font-display text-[26px] font-bold tabular-nums tracking-tight text-ivory"
+                />
               </div>
               <p className="mt-2 text-[11.5px] text-ivory/35">
-                Automated playbook accuracy rating
+                Authoritative opportunity records currently in execution
               </p>
             </GlassCard>
           </div>
@@ -170,7 +165,7 @@ export default function KpiGrid() {
           </div>
           <span className="text-[13px] font-bold text-ivory/80 uppercase tracking-wider block font-mono">Consolidated KPIs Not Connected</span>
           <p className="text-[11.5px] text-ivory/40 max-w-sm mt-1.5 leading-relaxed">
-            There are no active organizational performance records. Go to Settings and enable Demo Mode to populate evaluation data, or configure cloud data streams.
+            There are no authoritative organizational KPI records to display yet. Connect the required data sources before presenting performance values.
           </p>
         </div>
       ) : (

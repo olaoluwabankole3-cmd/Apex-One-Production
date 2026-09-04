@@ -45,8 +45,8 @@ export default function QuickActions() {
 
   return (
     <GlassCard delay={0.25} className="p-5 lg:p-6">
-      <p className="font-display text-[15px] font-bold text-ivory">Quick Actions</p>
-      <p className="mt-0.5 text-[12px] text-ivory/40">Tailored to your role</p>
+      <p className="font-display text-[15px] font-bold text-ivory">Executable Actions</p>
+      <p className="mt-0.5 text-[12px] text-ivory/40">Only actions backed by authoritative command endpoints</p>
 
       <div className="mt-4 space-y-2">
         {loading ? (
@@ -56,7 +56,7 @@ export default function QuickActions() {
           </div>
         ) : items.length === 0 ? (
           <div className="py-6 text-center text-xs text-ivory/40">
-            No quick actions available.
+            No executable dashboard actions are connected yet.
           </div>
         ) : (
           items.map((action) => {
