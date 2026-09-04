@@ -41,6 +41,8 @@ jobs:
         run: bun run test:product-integrity
       - name: Run authentication experience regression gate
         run: bun run test:auth-experience
+      - name: Run Phase 3 infrastructure connection contract gate
+        run: bun run test:infra-connection
 
   production-composition:
     name: Production Composition Root
