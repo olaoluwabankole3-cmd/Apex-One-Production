@@ -43,10 +43,7 @@ interface AuthContextValue {
   notice: AuthNotice;
   login: (credentials: LoginCredentials) => Promise<AuthSessionMetadata>;
   logout: () => Promise<void>;
-  changePassword: (
-    currentPassword: string,
-    newPassword: string
-  ) => Promise<string>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<string>;
   switchOrganization: (
     targetOrgId: string
   ) => Promise<AuthSessionMetadata>;
