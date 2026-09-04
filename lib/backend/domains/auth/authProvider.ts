@@ -601,7 +601,9 @@ export class LocalAuthenticationProvider implements IAuthenticationProvider {
     }
 
     const normalizedIdentifier = identifier.trim().toLowerCase();
-    const user = await this.database.findUserByLoginIdentifier(normalizedIdentifier);
+    const user = normalizedIdentifier.includes("@")
+      ? await this.database.findUserByEmail(normalizedIdentifier)
+      : await this.database.findUserByLoginIdentifier(normalizedIdentifier);
 
     if (!user) {
       dummyPasswordVerification(password);
