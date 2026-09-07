@@ -247,10 +247,11 @@ export class RedisSessionStore implements ISessionStore {
     namespace: string = "apex-one:auth:sessions"
   ) {
     this.redis = new RedisWireClient(redisUrl);
-    this.sessionPrefix = `${namespace}:session:`;
-    this.userPrefix = `${namespace}:user:`;
-    this.orgPrefix = `${namespace}:org:`;
-    this.expirationIndexKey = `${namespace}:expirations`;
+    const slot = "{session-state}";
+    this.sessionPrefix = `${namespace}:${slot}:session:`;
+    this.userPrefix = `${namespace}:${slot}:user:`;
+    this.orgPrefix = `${namespace}:${slot}:org:`;
+    this.expirationIndexKey = `${namespace}:${slot}:expirations`;
   }
 
   private tokenDigest(token: string): string {
