@@ -166,9 +166,10 @@ export class RedisRateLimiter implements IRateLimiter {
 
   private keys(key: string): { attempts: string; lock: string } {
     const digest = this.digestKey(key);
+    const slot = `{${digest}}`;
     return {
-      attempts: `${this.attemptsPrefix}${digest}`,
-      lock: `${this.lockPrefix}${digest}`,
+      attempts: `${this.attemptsPrefix}${slot}`,
+      lock: `${this.lockPrefix}${slot}`,
     };
   }
 

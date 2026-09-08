@@ -30,6 +30,10 @@ LABEL io.apex.release.id=$APEX_RELEASE_ID
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 
+# @google/genai loads ws dynamically at runtime; Next standalone tracing
+# does not reliably include it, so carry the production package explicitly.
+COPY --from=builder --chown=node:node /app/node_modules/ws ./node_modules/ws
+
 USER node
 EXPOSE 3000
 

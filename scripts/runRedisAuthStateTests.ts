@@ -244,7 +244,7 @@ async function main(): Promise<void> {
     }
 
     const sessionKeys = replyStrings(
-      await redis.execute(["KEYS", "stage4c:privacy-session:session:*"]),
+      await redis.execute(["KEYS", "stage4c:privacy-session:{session-state}:session:*"]),
       "session key scan"
     );
     if (sessionKeys.length !== 1) throw new Error(`Expected exactly one stored session payload, found ${sessionKeys.length}`);

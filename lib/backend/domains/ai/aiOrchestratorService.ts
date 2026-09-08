@@ -296,7 +296,7 @@ Use ${currency} for monetary figures already supplied in the facts.`,
     let timeoutTimer: NodeJS.Timeout | undefined;
     try {
       const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutTimer = setTimeout(() => reject(new Error("AI generation timeout")), 3000);
+        timeoutTimer = setTimeout(() => reject(new Error("AI generation timeout")), 45_000);
       });
       const response = await Promise.race([aiPromise, timeoutPromise]);
       return {

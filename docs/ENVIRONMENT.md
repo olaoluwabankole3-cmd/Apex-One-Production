@@ -8,23 +8,33 @@ Do not commit real credentials. `.env.example` contains names and safe defaults 
 
 ### Local development
 
-A minimal local setup may use the in-memory adapters from `.env.example`:
+Phase 3 makes durable providers the normal application-development profile.
+`.env.example` now selects PostgreSQL, Redis and S3-compatible storage rather
+than process-local memory.
 
-```env
-APP_ENV=development
-DEMO_MODE=false
+Use the disposable durable development stack documented in
+[`INFRASTRUCTURE-CONNECTION.md`](INFRASTRUCTURE-CONNECTION.md):
 
-APEX_DATABASE_ADAPTER=memory
-APEX_SESSION_ADAPTER=memory
-APEX_RATE_LIMIT_ADAPTER=memory
-APEX_AUDIT_ADAPTER=memory
-APEX_OBJECT_STORAGE_ADAPTER=memory
-APEX_SEARCH_INDEX_ADAPTER=memory
+```bash
+cp deploy/development/development.env.example deploy/development/development.env
+bun run infra:dev:up
+bun run db:migrate
+bun run infra:verify
 ```
 
-Set `DEMO_MODE=true` only when you explicitly want the built-in unauthenticated development demo identity. The security layer ignores demo mode when either `NODE_ENV=production` or `APP_ENV=production`.
+The copied `deploy/development/development.env` file is ignored by Git. Replace
+all placeholder credentials and generate a unique document encryption key.
 
-`GEMINI_API_KEY` is required when the Gemini-backed AI generation path is used.
+Memory adapters remain supported for isolated unit/assurance tests that
+explicitly select them. They are no longer the recommended normal application
+development configuration.
+
+`DEMO_MODE` should remain `false` for ordinary product development.
+Production security ignores demo mode whenever either `NODE_ENV=production`
+or `APP_ENV=production`.
+
+`GEMINI_API_KEY` is required when the Gemini-backed generation path is actively
+verified or used.
 
 ### Staging and production
 
@@ -42,7 +52,13 @@ APEX_OBJECT_STORAGE_ADAPTER=s3
 APEX_SEARCH_INDEX_ADAPTER=postgres
 ```
 
-For a staging deployment that should exercise the same production safeguards, keep `APP_ENV=production` and set `APEX_DEPLOYMENT_ENVIRONMENT=staging`.
+For staging, keep `APP_ENV=production` and set
+`APEX_DEPLOYMENT_ENVIRONMENT=staging` so the same durable-provider and secure
+transport validation used by production is exercised before production exists.
+
+The variable-name contract is committed at
+`deploy/environments/staging.env.example`. Real values belong in the deployment
+platform's protected environment/secret store.
 
 ## Variable reference
 
@@ -144,6 +160,35 @@ openssl rand -base64 32
 
 Treat this key as high-value secret material. Loss of the key can make stored ciphertext unrecoverable; disclosure compromises the confidentiality boundary for data encrypted with that key. Store and rotate it using your deployment platform’s secret-management process rather than Git history.
 
+## One-time initial administrator bootstrap
+
+After the target PostgreSQL database is migrated, the controlled bootstrap
+command is:
+
+```bash
+bun run infra:bootstrap-admin
+```
+
+It requires the `APEX_BOOTSTRAP_*` values and the explicit confirmation
+`APEX_BOOTSTRAP_CONFIRM=CREATE_INITIAL_ADMIN`. New bootstrap administrators are
+created with `passwordChangeRequired=true`, so Phase 2 forces a password update
+on first login.
+
+Remove the bootstrap password and confirmation from the environment immediately
+after successful creation.
+
+## Active external-service verification
+
+Run:
+
+```bash
+bun run infra:verify
+```
+
+This actively checks PostgreSQL, durable audit controls, PostgreSQL search,
+Redis, encrypted S3 write/read/delete, and Gemini generation without printing
+raw connection strings or secret values.
+
 ## Immutable release identity
 
 Production readiness requires a complete release identity:
@@ -173,6 +218,8 @@ Do not write either value into `release-plan.json`, application configuration co
 ## Secret-handling rules
 
 - Commit variable names and safe examples only.
+- Use `deploy/environments/secret-contract.json` as the provider-neutral inventory of secret material.
+- Never commit `deploy/development/development.env` or real files under `deploy/environments/*.env`.
 - Keep database, Redis, S3, Gemini and deployment-controller credentials in the deployment platform’s protected secret store.
 - Do not place credentials in image tags, release IDs, request IDs, telemetry attributes, readiness URLs, or repository variables that are intended to be public/non-secret.
 - Rotate a secret if it is ever committed or emitted to a log; removing it from the latest revision is not sufficient remediation.
