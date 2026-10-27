@@ -134,6 +134,26 @@ function workflow(id: string): Omit<WorkflowRecord, "organizationId"> {
   };
 }
 
+function approvalWorkflow(id: string): Omit<WorkflowRecord, "organizationId"> {
+  const timestamp = now();
+  return {
+    ...workflow(id),
+    name: `Stage 7 approval workflow ${id}`,
+    description: "Trigger, explicit human approval, and completion",
+    nodes: [
+      { id: `${id}-trigger`, type: "trigger", title: "Approval trigger", configuration: {} },
+      { id: `${id}-approval`, type: "human_approval", title: "Review proposed action", configuration: {} },
+      { id: `${id}-finish`, type: "action", title: "Complete approved action", configuration: {} },
+    ],
+    connections: [
+      { id: `${id}-c1`, fromNodeId: `${id}-trigger`, toNodeId: `${id}-approval` },
+      { id: `${id}-c2`, fromNodeId: `${id}-approval`, toNodeId: `${id}-finish` },
+    ],
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
+}
+
 async function seedIdentity(store: DatabaseStore, organizationId: string, userId: string, email: string): Promise<TenantContext> {
   await store.createOrganizationRecord(organization(organizationId));
   await store.createUserRecord(user(userId, email));
@@ -348,6 +368,55 @@ async function main() {
       throw new Error("Next pending workflow step was not promoted to executing");
     }
     await driveRunToCompletion(memory, workflowService, runId, memoryCtx);
+  });
+
+  await check("9. Human-approval workflow runs wait for an explicit decision and resume in order", async () => {
+    const definition = await memory.workflowsRepo.create(
+      approvalWorkflow("wf-stage7-human-approval"),
+      memoryCtx
+    );
+    let approvalRun = await workflowService.triggerWorkflowRun({
+      workflowId: definition.id,
+      triggerType: "manual",
+    }, memoryCtx);
+
+    if (approvalRun.status !== "waiting_approval") {
+      throw new Error(`Human-approval workflow should wait for approval, received '${approvalRun.status}'`);
+    }
+    const approvalStep = approvalRun.steps.find((step) => step.status === "executing");
+    if (!approvalStep || approvalStep.nodeId !== `${definition.id}-approval`) {
+      throw new Error("The human-approval node was not selected as the active step");
+    }
+    await expectRejects(() => workflowService.advanceWorkflowStep({
+      runId: approvalRun.id,
+      stepId: approvalStep.stepId,
+      decision: "completed",
+    }, memoryCtx), ValidationError);
+
+    approvalRun = await workflowService.advanceWorkflowStep({
+      runId: approvalRun.id,
+      stepId: approvalStep.stepId,
+      decision: "approved",
+      comments: "Reviewed by authorized operator",
+    }, memoryCtx);
+    if (approvalRun.status !== "running") {
+      throw new Error("Approved human review did not return the workflow to running");
+    }
+    const finishStep = approvalRun.steps.find((step) => step.status === "executing");
+    if (!finishStep || finishStep.nodeId !== `${definition.id}-finish`) {
+      throw new Error("Approval did not promote the next workflow step");
+    }
+    if (approvalRun.steps.find((step) => step.stepId === approvalStep.stepId)?.output?.comments !== "Reviewed by authorized operator") {
+      throw new Error("The human decision note was not retained in the execution record");
+    }
+    approvalRun = await workflowService.advanceWorkflowStep({
+      runId: approvalRun.id,
+      stepId: finishStep.stepId,
+      decision: "completed",
+    }, memoryCtx);
+    if (approvalRun.status !== "completed") {
+      throw new Error("Workflow did not complete after all recorded steps completed");
+    }
   });
 
   await check("9. complete_execution requires a completed linked WorkflowRun", async () => {
