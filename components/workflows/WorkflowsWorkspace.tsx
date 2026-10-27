@@ -16,6 +16,7 @@ interface RunReceipt {
 export default function WorkflowsWorkspace() {
   const { hasPermission } = useAuth();
   const [workflows, setWorkflows] = useState<WorkflowDef[]>([]);
+  const [runsByWorkflow, setRunsByWorkflow] = useState<Record<string, WorkflowRunRecord[]>>({});
   const [loading, setLoading] = useState(true);
   const [runningId, setRunningId] = useState<string | null>(null);
   const [advancingStep, setAdvancingStep] = useState(false);
@@ -27,9 +28,22 @@ export default function WorkflowsWorkspace() {
     setLoading(true);
     setError(null);
     try {
-      setWorkflows(await workflowRepository.getWorkflows());
+      const loadedWorkflows = await workflowRepository.getWorkflows();
+      setWorkflows(loadedWorkflows);
+      const runEntries = await Promise.all(
+        loadedWorkflows.map(async (workflow) => {
+          try {
+            const runs = await workflowRepository.getWorkflowRuns(workflow.id);
+            return [workflow.id, runs] as const;
+          } catch {
+            return [workflow.id, [] as WorkflowRunRecord[]] as const;
+          }
+        })
+      );
+      setRunsByWorkflow(Object.fromEntries(runEntries));
     } catch (cause) {
       setWorkflows([]);
+      setRunsByWorkflow({});
       setError(cause instanceof Error ? cause.message : "Workflow request failed");
     } finally {
       setLoading(false);
@@ -48,12 +62,25 @@ export default function WorkflowsWorkspace() {
     try {
       const result = await workflowRepository.runWorkflow(workflowId);
       setReceipt({ workflowId, run: result });
+      setRunsByWorkflow((current) => ({
+        ...current,
+        [workflowId]: [
+          result,
+          ...(current[workflowId] || []).filter((existing) => existing.id !== result.id),
+        ],
+      }));
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Workflow execution failed");
     } finally {
       setRunningId(null);
     }
+  };
+
+  const openRun = (workflowId: string, run: WorkflowRunRecord) => {
+    setReceipt({ workflowId, run });
+    setReviewNote("");
+    setError(null);
   };
 
   const advanceActiveStep = async (
@@ -76,6 +103,13 @@ export default function WorkflowsWorkspace() {
         reviewNote.trim() || undefined
       );
       setReceipt({ workflowId: receipt.workflowId, run: updated });
+      setRunsByWorkflow((current) => ({
+        ...current,
+        [receipt.workflowId]: [
+          updated,
+          ...(current[receipt.workflowId] || []).filter((existing) => existing.id !== updated.id),
+        ],
+      }));
       setReviewNote("");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Workflow step advancement failed");
@@ -144,14 +178,42 @@ export default function WorkflowsWorkspace() {
                 <span>Nodes: {workflow.nodes?.length || 0}</span>
               </div>
 
+              {(() => {
+                const latestRun = [...(runsByWorkflow[workflow.id] || [])].sort(
+                  (a, b) => b.startedAt.localeCompare(a.startedAt)
+                )[0];
+                const canResume = latestRun && (latestRun.status === "running" || latestRun.status === "waiting_approval");
+                return latestRun ? (
+                  <div className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[10px] uppercase tracking-[0.12em] text-ivory/35">Latest execution</span>
+                      <span className={`text-[10px] uppercase tracking-wider ${canResume ? "text-gold" : latestRun.status === "completed" ? "text-emerald" : latestRun.status === "failed" ? "text-crimson" : "text-ivory/45"}`}>
+                        {latestRun.status.replace("_", " ")}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-ivory/35">
+                      Started {new Date(latestRun.startedAt).toLocaleString()}
+                    </p>
+                    {canResume && (
+                      <button
+                        onClick={() => openRun(workflow.id, latestRun)}
+                        className="mt-2 text-xs font-semibold text-gold/80 transition-colors hover:text-gold"
+                      >
+                        Resume this run →
+                      </button>
+                    )}
+                  </div>
+                ) : null;
+              })()}
+
               {hasPermission("workflow:execute") && (
                 <button
                   onClick={() => run(workflow.id)}
                   disabled={runningId !== null}
-                  className="mt-5 flex items-center gap-2 rounded-lg bg-gold px-4 py-2 text-xs font-bold text-matte disabled:opacity-50"
+                  className="mt-4 flex items-center gap-2 rounded-lg bg-gold px-4 py-2 text-xs font-bold text-matte disabled:opacity-50"
                 >
                   <Play size={13} />
-                  {runningId === workflow.id ? "Executing…" : "Run workflow"}
+                  {runningId === workflow.id ? "Starting…" : "Start a new run"}
                 </button>
               )}
             </GlassCard>
