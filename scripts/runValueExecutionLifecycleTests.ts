@@ -417,9 +417,29 @@ async function main() {
     if (approvalRun.status !== "completed") {
       throw new Error("Workflow did not complete after all recorded steps completed");
     }
+
+    const rejectedDefinition = await memory.workflowsRepo.create(
+      approvalWorkflow("wf-stage7-human-rejection"),
+      memoryCtx
+    );
+    let rejectedRun = await workflowService.triggerWorkflowRun({
+      workflowId: rejectedDefinition.id,
+      triggerType: "manual",
+    }, memoryCtx);
+    const rejectedStep = rejectedRun.steps.find((step) => step.status === "executing");
+    if (!rejectedStep) throw new Error("Rejection scenario has no active approval step");
+    rejectedRun = await workflowService.advanceWorkflowStep({
+      runId: rejectedRun.id,
+      stepId: rejectedStep.stepId,
+      decision: "rejected",
+      comments: "Rejected for further review",
+    }, memoryCtx);
+    if (rejectedRun.status !== "failed") {
+      throw new Error("A rejected human-approval decision must fail the workflow run");
+    }
   });
 
-  await check("9. complete_execution requires a completed linked WorkflowRun", async () => {
+  await check("10. complete_execution requires a completed linked WorkflowRun", async () => {
     const result = await lifecycle.completeExecution({
       command: "complete_execution",
       opportunityId: memoryScenario.opportunityRecord.id,
@@ -430,7 +450,7 @@ async function main() {
   });
 
   let measurementProvenanceId = "";
-  await check("10. record_measurement records provenance without implying verification or Measured state", async () => {
+  await check("11. record_measurement records provenance without implying verification or Measured state", async () => {
     const result = await lifecycle.recordMeasurement({
       command: "record_measurement",
       opportunityId: memoryScenario.opportunityRecord.id,
@@ -445,7 +465,7 @@ async function main() {
     if (status.verificationState !== "unverified") throw new Error("Measurement record presence incorrectly implied verification");
   });
 
-  await check("11. verify_measurement accepts only Stage 7 measurement provenance", async () => {
+  await check("12. verify_measurement accepts only Stage 7 measurement provenance", async () => {
     const actionProvenance = await collectAllPages((cursor) => memory.provenanceRepo.findBySubject({
       subjectType: "Action", subjectId: actionId, limit: MAX_PAGE_SIZE, cursor,
     }, memoryCtx));
@@ -460,7 +480,7 @@ async function main() {
     }, memoryCtx), ValidationError);
   });
 
-  await check("12. verify_measurement atomically records canonical verification and marks Action Measured", async () => {
+  await check("13. verify_measurement atomically records canonical verification and marks Action Measured", async () => {
     const result = await lifecycle.verifyMeasurement({
       command: "verify_measurement",
       opportunityId: memoryScenario.opportunityRecord.id,
@@ -475,7 +495,7 @@ async function main() {
   });
 
   let capturedId = "";
-  await check("13. capture_value creates the ledger entry and provenance chain without auto-verifying the new capture", async () => {
+  await check("14. capture_value creates the ledger entry and provenance chain without auto-verifying the new capture", async () => {
     const result = await lifecycle.captureValue({
       command: "capture_value",
       opportunityId: memoryScenario.opportunityRecord.id,
@@ -500,7 +520,7 @@ async function main() {
     }
   });
 
-  await check("14. Terminal capture cannot be replayed or skipped", async () => {
+  await check("15. Terminal capture cannot be replayed or skipped", async () => {
     await expectRejects(() => lifecycle.captureValue({
       command: "capture_value",
       opportunityId: memoryScenario.opportunityRecord.id,
@@ -512,7 +532,7 @@ async function main() {
     }, memoryCtx), ConflictError);
   });
 
-  await check("15. Every lifecycle command remains tenant scoped", async () => {
+  await check("16. Every lifecycle command remains tenant scoped", async () => {
     await expectRejects(() => lifecycle.completeExecution({
       command: "complete_execution",
       opportunityId: memoryScenario.opportunityRecord.id,
@@ -527,13 +547,13 @@ async function main() {
   const pgCtx = await seedIdentity(pg, "org-stage7-pg", "user-stage7-pg", "stage7-pg@example.test");
 
   let pgChain!: Awaited<ReturnType<typeof runFullLifecycle>>;
-  await check("16. Full Stage 7 lifecycle executes against PostgreSQL authority", async () => {
+  await check("17. Full Stage 7 lifecycle executes against PostgreSQL authority", async () => {
     pgChain = await runFullLifecycle(pg, pgCtx, "pg-main");
     const capture = await pg.valueCapturedRepo.findById(pgChain.valueCapturedId, pgCtx, "ValueCaptured");
     if (capture.opportunityId !== pgChain.opportunityId) throw new Error("PostgreSQL capture lost opportunity linkage");
   });
 
-  await check("17. Lifecycle state and measurement evidence survive application restart", async () => {
+  await check("18. Lifecycle state and measurement evidence survive application restart", async () => {
     const restarted = DatabaseStore.createPostgresStore(databaseUrl());
     await restarted.bootstrapPersistence();
     const opportunityRecord = await restarted.opportunitiesRepo.findById(pgChain.opportunityId, pgCtx, "ValueOpportunity");
@@ -549,7 +569,7 @@ async function main() {
     }
   });
 
-  await check("18. PostgreSQL fault after ledger insert rolls back capture and opportunity transition atomically", async () => {
+  await check("19. PostgreSQL fault after ledger insert rolls back capture and opportunity transition atomically", async () => {
     const lifecyclePg = new ValueExecutionLifecycleService(pg);
     const chain = await runFullLifecycleUpToVerified(pg, pgCtx, "pg-fault");
     const originalCreate = pg.provenanceRepo.create.bind(pg.provenanceRepo);
