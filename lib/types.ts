@@ -301,6 +301,9 @@ export type WorkflowNodeType =
   | "ai_recommend"
   | "ai_generate"
   | "ai_decide_approval"
+  | "ai_agent"
+  | "human_approval"
+  | "notification"
   | "context";
 export type WorkflowNodeStatus = "idle" | "running" | "success" | "skipped";
 export type WorkflowStatus = "active" | "draft" | "paused";
