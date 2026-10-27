@@ -15,7 +15,9 @@ import {
   ThumbsUp,
   FileText,
   UserCheck,
-  Database
+  Database,
+  ShieldCheck,
+  Bell
 } from "lucide-react";
 import clsx from "clsx";
 import { WorkflowNode, WorkflowNodeStatus, WorkflowNodeType } from "@/lib/types";
@@ -36,6 +38,9 @@ export const nodeMeta: Record<WorkflowNodeType, { icon: typeof Zap; color: strin
   ai_recommend: { icon: ThumbsUp, color: "#34D399", label: "AI Recommend" },
   ai_generate: { icon: FileText, color: "#FB923C", label: "AI Generate" },
   ai_decide_approval: { icon: UserCheck, color: "#F59E0B", label: "AI Decide with Approval" },
+  ai_agent: { icon: Sparkles, color: "#8A7EE8", label: "AI Agent" },
+  human_approval: { icon: ShieldCheck, color: "#F59E0B", label: "Human Approval" },
+  notification: { icon: Bell, color: "#60A5FA", label: "Notification" },
   context: { icon: Database, color: "#2DD4BF", label: "Context" },
 };
 

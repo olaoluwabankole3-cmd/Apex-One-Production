@@ -156,6 +156,10 @@ export class WorkflowService {
         completedAt: index < firstExecutableIndex ? startedAt : undefined,
       }));
       const immediatelyCompleted = steps.every((step) => step.status === "completed");
+      const initialActiveStep = steps.find((step) => step.status === "executing");
+      const initialActiveNode = initialActiveStep
+        ? wf.nodes.find((node) => node.id === initialActiveStep.nodeId)
+        : undefined;
 
       const runId = `run-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
       const runRecord: WorkflowRunRecord = {
@@ -165,7 +169,11 @@ export class WorkflowService {
         workflowVersion: wf.version,
         triggeredBy: uow.context.userEmail,
         triggerType: dto.triggerType || "manual",
-        status: immediatelyCompleted ? "completed" : "running",
+        status: immediatelyCompleted
+          ? "completed"
+          : initialActiveNode?.type === "human_approval"
+            ? "waiting_approval"
+            : "running",
         steps,
         contextData: dto.contextData || {},
         startedAt,
@@ -198,6 +206,7 @@ export class WorkflowService {
       if (run.status !== "running" && run.status !== "waiting_approval") {
         throw new ConflictError(`WorkflowRun '${run.id}' cannot advance from terminal status '${run.status}'`);
       }
+      const workflow = await uow.workflows.findById(run.workflowId, uow.context, "Workflow");
 
       const targetIndex = run.steps.findIndex((step) => step.stepId === dto.stepId);
       if (targetIndex < 0) throw new ValidationError(`Workflow step '${dto.stepId}' was not found`);
@@ -206,6 +215,15 @@ export class WorkflowService {
         throw new ConflictError(
           `Workflow step '${target.stepId}' cannot advance from status '${target.status}'; only the executing step may advance`
         );
+      }
+
+      const currentNode = workflow.nodes.find((node) => node.id === target.nodeId);
+      if (currentNode?.type === "human_approval") {
+        if (dto.decision !== "approved" && dto.decision !== "rejected") {
+          throw new ValidationError("Human approval steps require an explicit approved or rejected decision");
+        }
+      } else if (dto.decision === "approved" || dto.decision === "rejected") {
+        throw new ValidationError("Approval decisions can only be applied to human approval steps");
       }
 
       const completedAt = new Date().toISOString();
@@ -238,8 +256,17 @@ export class WorkflowService {
 
       const hasFailed = updatedSteps.some((step) => step.status === "failed");
       const isAllCompleted = updatedSteps.every((step) => step.status === "completed");
-      const nextStatus = hasFailed ? "failed" : isAllCompleted ? "completed" : "running";
       const promotedStep = updatedSteps.find((step, index) => index > targetIndex && step.status === "executing");
+      const promotedNode = promotedStep
+        ? workflow.nodes.find((node) => node.id === promotedStep.nodeId)
+        : undefined;
+      const nextStatus = hasFailed
+        ? "failed"
+        : isAllCompleted
+          ? "completed"
+          : promotedNode?.type === "human_approval"
+            ? "waiting_approval"
+            : "running";
 
       const updated = await uow.workflowRuns.update(
         run.id,
