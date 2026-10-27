@@ -6,6 +6,7 @@ import { collectAllCollectionData, isApiNotFound } from "./httpCollection";
 
 export interface WorkflowRepository {
   getWorkflows(organizationId?: string): Promise<WorkflowDef[]>;
+  getWorkflowRuns(workflowId: string): Promise<WorkflowRunRecord[]>;
   getCustomWorkflows(organizationId?: string): Promise<CustomWorkflowDef[]>;
   getWorkflow(id: string): Promise<CustomWorkflowDef | undefined>;
   getIntegrations(organizationId?: string): Promise<IntegrationItem[]>;
@@ -55,6 +56,10 @@ export class ApiWorkflowRepository implements WorkflowRepository {
   async getWorkflows(_organizationId?: string): Promise<WorkflowDef[]> {
     const records = await collectAllCollectionData<WorkflowRecord>("/api/v1/workflows");
     return records.map(mapRecordToCustomWorkflow);
+  }
+
+  async getWorkflowRuns(workflowId: string): Promise<WorkflowRunRecord[]> {
+    return collectAllCollectionData<WorkflowRunRecord>(`/api/v1/workflows/${workflowId}/run`);
   }
 
   async getCustomWorkflows(_organizationId?: string): Promise<CustomWorkflowDef[]> {
