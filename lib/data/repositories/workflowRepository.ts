@@ -9,7 +9,13 @@ export interface WorkflowRepository {
   getCustomWorkflows(organizationId?: string): Promise<CustomWorkflowDef[]>;
   getWorkflow(id: string): Promise<CustomWorkflowDef | undefined>;
   getIntegrations(organizationId?: string): Promise<IntegrationItem[]>;
-  runWorkflow(id: string): Promise<{ success: boolean; runId: string; logs: string[] }>;
+  runWorkflow(id: string): Promise<WorkflowRunRecord>;
+  advanceWorkflowStep(
+    runId: string,
+    stepId: string,
+    decision: "approved" | "rejected" | "completed",
+    comments?: string
+  ): Promise<WorkflowRunRecord>;
   createWorkflow(data: Partial<WorkflowRecord>): Promise<WorkflowDef>;
   updateWorkflow(id: string, data: Partial<WorkflowRecord>): Promise<WorkflowDef>;
 }
@@ -66,13 +72,20 @@ export class ApiWorkflowRepository implements WorkflowRepository {
     }
   }
 
-  async runWorkflow(id: string): Promise<{ success: boolean; runId: string; logs: string[] }> {
-    const run = await apiClient.postData<WorkflowRunRecord>(`/api/v1/workflows/${id}/run`, {});
-    return {
-      success: true,
-      runId: run.id,
-      logs: run.steps.map((step) => `${step.nodeTitle}: ${step.status}`),
-    };
+  async runWorkflow(id: string): Promise<WorkflowRunRecord> {
+    return apiClient.postData<WorkflowRunRecord>(`/api/v1/workflows/${id}/run`, {});
+  }
+
+  async advanceWorkflowStep(
+    runId: string,
+    stepId: string,
+    decision: "approved" | "rejected" | "completed",
+    comments?: string
+  ): Promise<WorkflowRunRecord> {
+    return apiClient.postData<WorkflowRunRecord>(
+      `/api/v1/workflow-runs/${runId}/advance`,
+      { stepId, decision, ...(comments ? { comments } : {}) }
+    );
   }
 
   async getIntegrations(_organizationId?: string): Promise<IntegrationItem[]> {
