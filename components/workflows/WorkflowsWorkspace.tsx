@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Play, RefreshCw, Workflow as WorkflowIcon } from "lucide-react";
+import { CheckCircle2, Circle, Loader2, Play, RefreshCw, ShieldCheck, Workflow as WorkflowIcon, XCircle } from "lucide-react";
 import GlassCard from "@/components/ui/GlassCard";
 import { workflowRepository } from "@/lib/data/repositories";
 import type { WorkflowDef } from "@/lib/types";
+import type { WorkflowRunRecord } from "@/lib/backend/database/schema";
 import { useAuth } from "@/components/auth/AuthContext";
 
 interface RunReceipt {
-  runId: string;
-  logs: string[];
+  workflowId: string;
+  run: WorkflowRunRecord;
 }
 
 export default function WorkflowsWorkspace() {
@@ -17,6 +18,8 @@ export default function WorkflowsWorkspace() {
   const [workflows, setWorkflows] = useState<WorkflowDef[]>([]);
   const [loading, setLoading] = useState(true);
   const [runningId, setRunningId] = useState<string | null>(null);
+  const [advancingStep, setAdvancingStep] = useState(false);
+  const [reviewNote, setReviewNote] = useState("");
   const [receipt, setReceipt] = useState<RunReceipt | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,15 +43,44 @@ export default function WorkflowsWorkspace() {
   const run = async (workflowId: string) => {
     setRunningId(workflowId);
     setReceipt(null);
+    setReviewNote("");
     setError(null);
     try {
       const result = await workflowRepository.runWorkflow(workflowId);
-      setReceipt({ runId: result.runId, logs: result.logs });
+      setReceipt({ workflowId, run: result });
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Workflow execution failed");
     } finally {
       setRunningId(null);
+    }
+  };
+
+  const advanceActiveStep = async (
+    decision: "approved" | "rejected" | "completed"
+  ) => {
+    if (!receipt || advancingStep) return;
+    const activeStep = receipt.run.steps.find((step) => step.status === "executing");
+    if (!activeStep) {
+      setError("This run has no active step to advance.");
+      return;
+    }
+
+    setAdvancingStep(true);
+    setError(null);
+    try {
+      const updated = await workflowRepository.advanceWorkflowStep(
+        receipt.run.id,
+        activeStep.stepId,
+        decision,
+        reviewNote.trim() || undefined
+      );
+      setReceipt({ workflowId: receipt.workflowId, run: updated });
+      setReviewNote("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Workflow step advancement failed");
+    } finally {
+      setAdvancingStep(false);
     }
   };
 
@@ -127,26 +159,149 @@ export default function WorkflowsWorkspace() {
         </div>
       )}
 
-      {receipt && (
-        <GlassCard className="p-6">
-          <p className="font-display text-lg font-bold text-ivory">Execution receipt</p>
-          <p className="mt-1 font-mono text-[11px] text-gold/70">Run ID: {receipt.runId}</p>
-          <div className="mt-4 space-y-2">
-            {receipt.logs.length === 0 ? (
-              <p className="text-sm text-ivory/45">No step logs were returned.</p>
-            ) : (
-              receipt.logs.map((log, index) => (
-                <p
-                  key={`${receipt.runId}-${index}`}
-                  className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 font-mono text-[11px] text-ivory/55"
-                >
-                  {log}
-                </p>
-              ))
+      {receipt && (() => {
+        const activeStep = receipt.run.steps.find((step) => step.status === "executing");
+        const workflow = workflows.find((item) => item.id === receipt.workflowId);
+        const activeNode = activeStep
+          ? workflow?.nodes.find((node) => node.id === activeStep.nodeId)
+          : undefined;
+        const isHumanApproval = activeNode?.type === "human_approval";
+        const isTerminal = receipt.run.status === "completed" || receipt.run.status === "failed" || receipt.run.status === "cancelled";
+
+        return (
+          <GlassCard className="p-6">
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+              <div>
+                <p className="font-display text-lg font-bold text-ivory">Execution receipt</p>
+                <p className="mt-1 font-mono text-[11px] text-gold/70">Run ID: {receipt.run.id}</p>
+              </div>
+              <span className="rounded-full border border-white/[0.1] bg-white/[0.03] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-ivory/60">
+                {receipt.run.status.replace("_", " ")}
+              </span>
+            </div>
+
+            <div className="mt-5 space-y-2">
+              {receipt.run.steps.map((step, index) => {
+                const StepIcon = step.status === "completed"
+                  ? CheckCircle2
+                  : step.status === "failed"
+                    ? XCircle
+                    : step.status === "executing"
+                      ? Loader2
+                      : Circle;
+                const statusClass = step.status === "completed"
+                  ? "text-emerald"
+                  : step.status === "failed"
+                    ? "text-crimson"
+                    : step.status === "executing"
+                      ? "text-gold"
+                      : "text-ivory/30";
+
+                return (
+                  <div
+                    key={step.stepId}
+                    className="flex items-start gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3.5 py-3"
+                  >
+                    <StepIcon size={16} className={`mt-0.5 shrink-0 ${statusClass} ${step.status === "executing" && !advancingStep ? "animate-pulse" : ""}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-ivory/85">{step.nodeTitle}</p>
+                      <p className="mt-0.5 text-[11px] text-ivory/40">Step {index + 1} of {receipt.run.steps.length}</p>
+                      {step.errorMessage && <p className="mt-2 text-xs text-crimson/80">{step.errorMessage}</p>}
+                    </div>
+                    <span className={`shrink-0 text-[10px] uppercase tracking-wider ${statusClass}`}>
+                      {step.status}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {activeStep && !isTerminal && hasPermission("workflow:execute") && (
+              <div className="mt-5 rounded-xl border border-gold/20 bg-gold/[0.035] p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gold/20 bg-gold/10 text-gold">
+                    {isHumanApproval ? <ShieldCheck size={17} /> : <Play size={16} />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-ivory">
+                      {isHumanApproval ? "Human decision required" : "Active workflow step"}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-ivory/45">
+                      {isHumanApproval
+                        ? "Review this step and record an explicit approval decision. Your choice advances or rejects the workflow and is written to the audit trail."
+                        : "When the work represented by this step is complete, record its completion to advance the workflow. This does not claim that an external system action happened automatically."}
+                    </p>
+                  </div>
+                </div>
+
+                <label className="mt-4 block text-xs font-medium text-ivory/55">
+                  Decision note <span className="text-ivory/30">(optional; recorded with the step)</span>
+                  <textarea
+                    value={reviewNote}
+                    onChange={(event) => setReviewNote(event.target.value)}
+                    maxLength={2000}
+                    rows={2}
+                    placeholder={isHumanApproval ? "Add context for this decision…" : "Add a completion note…"}
+                    className="mt-2 w-full resize-y rounded-lg border border-white/[0.09] bg-black/15 px-3 py-2.5 text-sm text-ivory outline-none placeholder:text-ivory/25 focus:border-gold/35"
+                    disabled={advancingStep}
+                  />
+                </label>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {isHumanApproval ? (
+                    <>
+                      <button
+                        onClick={() => advanceActiveStep("approved")}
+                        disabled={advancingStep}
+                        className="flex items-center gap-2 rounded-lg bg-gold px-4 py-2.5 text-xs font-bold text-matte disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {advancingStep ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                        Approve step
+                      </button>
+                      <button
+                        onClick={() => advanceActiveStep("rejected")}
+                        disabled={advancingStep}
+                        className="flex items-center gap-2 rounded-lg border border-crimson/25 bg-crimson/[0.08] px-4 py-2.5 text-xs font-semibold text-crimson disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <XCircle size={14} />
+                        Reject step
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => advanceActiveStep("completed")}
+                      disabled={advancingStep}
+                      className="flex items-center gap-2 rounded-lg bg-gold px-4 py-2.5 text-xs font-bold text-matte disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {advancingStep ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                      Mark step complete
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
-          </div>
-        </GlassCard>
-      )}
+
+            {receipt.run.status === "completed" && (
+              <div className="mt-5 flex items-start gap-3 rounded-lg border border-emerald/20 bg-emerald/[0.04] p-4">
+                <CheckCircle2 size={17} className="mt-0.5 shrink-0 text-emerald" />
+                <div>
+                  <p className="text-sm font-semibold text-emerald">Workflow run completed</p>
+                  <p className="mt-1 text-xs leading-5 text-ivory/45">Every recorded workflow step is marked complete. Any business outcome still needs its own evidence-backed result record.</p>
+                </div>
+              </div>
+            )}
+            {receipt.run.status === "failed" && (
+              <div className="mt-5 flex items-start gap-3 rounded-lg border border-crimson/20 bg-crimson/[0.04] p-4">
+                <XCircle size={17} className="mt-0.5 shrink-0 text-crimson" />
+                <div>
+                  <p className="text-sm font-semibold text-crimson">Workflow run rejected or failed</p>
+                  <p className="mt-1 text-xs leading-5 text-ivory/45">The run is terminal. Review the step statuses and start a new run only after addressing the rejection or failure.</p>
+                </div>
+              </div>
+            )}
+          </GlassCard>
+        );
+      })()}
 
       {error && <p className="text-sm text-crimson/80">{error}</p>}
     </div>
