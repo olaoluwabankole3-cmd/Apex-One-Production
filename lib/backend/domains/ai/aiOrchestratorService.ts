@@ -250,6 +250,62 @@ function buildDeterministicFacts(execution: AiRetrievalExecution, currency: stri
     }
   }
 
+  // Assemble explicit cross-domain relationships from canonical customer IDs.
+  // This is a bounded join over the records already authorized and retrieved above;
+  // it does not broaden repository access or infer relationships from names.
+  const customerResult = execution.results.find((result) => result.tool === "get_tenant_customers");
+  const contractResult = execution.results.find((result) => result.tool === "get_tenant_contracts");
+  const transactionResult = execution.results.find((result) => result.tool === "get_tenant_transactions");
+
+  if (customerResult && (contractResult || transactionResult)) {
+    for (const customer of customerResult.records) {
+      const linkedContracts = (contractResult?.records || []).filter(
+        (record) => record.fields.customerId === customer.entityId
+      );
+      const linkedTransactions = (transactionResult?.records || []).filter(
+        (record) => record.fields.customerId === customer.entityId
+      );
+      if (linkedContracts.length === 0 && linkedTransactions.length === 0) continue;
+
+      const transactionTotals = new Map<string, number>();
+      for (const transaction of linkedTransactions) {
+        const code = typeof transaction.fields.currency === "string" && transaction.fields.currency.trim()
+          ? transaction.fields.currency.trim().toUpperCase()
+          : "UNKNOWN_CURRENCY";
+        transactionTotals.set(code, (transactionTotals.get(code) || 0) + numericField(transaction, "amount"));
+      }
+      const amounts = Array.from(transactionTotals.entries())
+        .map(([code, amount]) => `${code} ${amount.toLocaleString()}`)
+        .join("; ");
+      const relatedProvenance = [
+        customer.provenance,
+        ...linkedContracts.map((record) => record.provenance),
+        ...linkedTransactions.map((record) => record.provenance),
+      ];
+
+      facts.push({
+        id: `customer-relationship:${customer.entityId}`,
+        label: `Retrieved cross-functional records linked to ${String(customer.fields.name || customer.entityId)}`,
+        value: `${linkedContracts.length} contracts; ${linkedTransactions.length} transactions`,
+        displayValue: [
+          linkedContracts.length ? `${linkedContracts.length} contract(s)` : null,
+          linkedTransactions.length ? `${linkedTransactions.length} transaction(s)` : null,
+          amounts ? `transaction amounts: ${amounts}` : null,
+        ].filter(Boolean).join(" • "),
+        calculation: "Relationship established only by exact customerId equality across bounded, tenant-authorized customer, contract and transaction records. Transaction amounts remain separated by currency. This is not a complete customer history unless every contributing retrieval scope is complete.",
+        scope: {
+          tool: "get_tenant_customers",
+          totalMatched: customerResult.totalMatched,
+          recordsRetrieved: 1 + linkedContracts.length + linkedTransactions.length,
+          complete: customerResult.scopeComplete
+            && (contractResult?.scopeComplete ?? true)
+            && (transactionResult?.scopeComplete ?? true),
+        },
+        provenance: relatedProvenance,
+      });
+    }
+  }
+
   return facts;
 }
 
