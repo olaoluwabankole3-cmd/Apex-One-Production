@@ -219,6 +219,26 @@ async function main() {
     assert(plan.deniedTools.some((item) => item.tool === "get_tenant_customers" && item.requiredPermission === "customer:read"), "Missing customer denial trace");
   });
 
+  await check("4. Transaction retrieval is permission-gated, bounded and provenance-backed", async () => {
+    const plan = planAuthorizedAiRetrieval({
+      prompt: "Show customer payment transactions",
+      mode: "Revenue",
+    }, fullCtx);
+    assert(plan.requestedTools.includes("get_tenant_transactions"), "Transaction tool not selected");
+    const execution = await executeAuthorizedAiRetrieval(store, plan, fullCtx);
+    const result = execution.results.find((item) => item.tool === "get_tenant_transactions");
+    assert(result && result.records.length === 1, "Transaction record was not retrieved");
+    assert(result.records[0].fields.currency === "USD", "Transaction currency was not preserved");
+    assert(result.records[0].provenance.entityType === "Transaction", "Transaction provenance missing");
+
+    const restrictedPlan = planAuthorizedAiRetrieval({
+      prompt: "Show customer payment transactions",
+      mode: "Revenue",
+    }, aiOnlyCtx);
+    assert(!restrictedPlan.calls.some((call) => call.tool === "get_tenant_transactions"), "Transaction access bypassed financial:read");
+    assert(restrictedPlan.deniedTools.some((item) => item.tool === "get_tenant_transactions"), "Denied transaction access was not traced");
+  });
+
   await check("4. Tool executor independently rejects a tampered unauthorized plan", async () => {
     const tampered: AiRetrievalPlan = {
       requestedTools: ["get_tenant_customers"],
