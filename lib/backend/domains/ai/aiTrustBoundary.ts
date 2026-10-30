@@ -460,6 +460,7 @@ export function createAuthorizedAiTools(database: DatabaseStore): Record<AiDataT
           entityType: "Contract" as const,
           entityId: record.id,
           fields: {
+            customerId: record.customerId,
             title: record.title,
             contractValue: record.contractValue,
             status: record.status,
