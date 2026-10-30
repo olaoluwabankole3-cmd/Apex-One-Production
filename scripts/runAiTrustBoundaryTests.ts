@@ -166,12 +166,12 @@ async function main() {
     await store.customersRepo.create(customer(index), fullCtx);
   }
   await store.transactionsRepo.create({
-    id: "txn-stage8-usd", customerId: "customer-stage8-01", type: "revenue", amount: 12500,
+    id: "txn-stage8-usd", customerId: "customer-stage8-30", type: "revenue", amount: 12500,
     currency: "USD", status: "cleared", reference: "INV-USD-001", category: "subscription",
     date: "2026-10-01", createdAt: now(),
   }, fullCtx);
   await store.transactionsRepo.create({
-    id: "txn-stage8-ngn", customerId: "customer-stage8-02", type: "revenue", amount: 9000000,
+    id: "txn-stage8-ngn", customerId: "customer-stage8-29", type: "revenue", amount: 9000000,
     currency: "NGN", status: "pending", reference: "INV-NGN-001", category: "subscription",
     date: "2026-10-02", createdAt: now(),
   }, fullCtx);
@@ -251,7 +251,7 @@ async function main() {
       prompt: "Show customer payment transactions and revenue exposure",
       mode: "Revenue",
     }, fullCtx);
-    const relationship = response.facts.find((fact) => fact.id === "customer-relationship:customer-stage8-01");
+    const relationship = response.facts.find((fact) => fact.id === "customer-relationship:customer-stage8-30");
     assert(relationship, "Customer-to-transaction relationship fact missing");
     assert(relationship.displayValue.includes("1 transaction"), "Linked transaction count missing");
     assert(relationship.provenance.some((source) => source.entityType === "Customer"), "Customer provenance missing from relationship");
