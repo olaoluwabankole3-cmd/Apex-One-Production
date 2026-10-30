@@ -248,7 +248,7 @@ async function main() {
 
   await check("4b. Revenue intelligence assembles customer-linked transaction evidence by canonical ID", async () => {
     const response = await new AiOrchestratorService(store).processIntelligencePrompt({
-      prompt: "Show customer payment transactions and revenue exposure",
+      prompt: "Show Stage 8 Customer 30 payment transactions and revenue exposure",
       mode: "Revenue",
     }, fullCtx);
     const relationship = response.facts.find((fact) => fact.id === "customer-relationship:customer-stage8-30");
