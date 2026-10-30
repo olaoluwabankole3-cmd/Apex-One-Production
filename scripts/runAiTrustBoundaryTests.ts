@@ -170,6 +170,11 @@ async function main() {
     currency: "USD", status: "cleared", reference: "INV-USD-001", category: "subscription",
     date: "2026-10-01", createdAt: now(),
   }, fullCtx);
+  await store.transactionsRepo.create({
+    id: "txn-stage8-ngn", customerId: "customer-2", type: "revenue", amount: 9000000,
+    currency: "NGN", status: "pending", reference: "INV-NGN-001", category: "subscription",
+    date: "2026-10-02", createdAt: now(),
+  }, fullCtx);
   await store.memoryRepo.create(memory("mem-stage8-verified", false), fullCtx);
   await store.memoryRepo.create(memory("mem-stage8-legacy-true", true), fullCtx);
   await store.memoryRepo.create(memory("mem-stage8-other", false), fullCtx);
@@ -227,7 +232,9 @@ async function main() {
     assert(plan.requestedTools.includes("get_tenant_transactions"), "Transaction tool not selected");
     const execution = await executeAuthorizedAiRetrieval(store, plan, fullCtx);
     const result = execution.results.find((item) => item.tool === "get_tenant_transactions");
-    assert(result && result.records.length === 1, "Transaction record was not retrieved");
+    assert(result && result.records.length === 2, "Transaction records were not retrieved");
+    assert(result.records.some((record) => record.fields.currency === "USD"), "USD currency missing");
+    assert(result.records.some((record) => record.fields.currency === "NGN"), "NGN currency missing");
     assert(result.records[0].fields.currency === "USD", "Transaction currency was not preserved");
     assert(result.records[0].provenance.entityType === "Transaction", "Transaction provenance missing");
 
