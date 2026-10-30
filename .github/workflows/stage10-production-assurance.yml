@@ -15,7 +15,9 @@ concurrency:
 jobs:
   runtime-assurance:
     name: HTTP / Browser / Fault / Recovery Assurance
-    runs-on: ubuntu-latest
+    # Playwright 1.55.0 Chromium does not support the ubuntu-26.04 image
+    # currently selected by ubuntu-latest. Pin this browser job explicitly.
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     services:
       postgres:

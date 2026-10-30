@@ -252,10 +252,35 @@ async function main() {
       mode: "Revenue",
     }, fullCtx);
     const relationship = response.facts.find((fact) => fact.id === "customer-relationship:customer-stage8-30");
+    assert(response.retrieval.executedTools.includes("get_tenant_customers"), "Customer retrieval was not executed");
+    assert(response.retrieval.executedTools.includes("get_tenant_transactions"), "Transaction retrieval was not executed");
     assert(relationship, "Customer-to-transaction relationship fact missing");
     assert(relationship.displayValue.includes("1 transaction"), "Linked transaction count missing");
     assert(relationship.provenance.some((source) => source.entityType === "Customer"), "Customer provenance missing from relationship");
     assert(relationship.provenance.some((source) => source.entityType === "Transaction"), "Transaction provenance missing from relationship");
+    assert(relationship.displayValue.includes("USD 12,500"), "Related USD transaction evidence missing");
+    assert(!response.facts.some((fact) => fact.id === "customer-relationship:customer-stage8-29"), "Unrelated customer's transaction relationship leaked");
+  });
+
+  await check("4c. Linked financial retrieval remains tenant-scoped and permission-gated", async () => {
+    const restricted = context(["ai:execute", "customer:read"]);
+    const response = await new AiOrchestratorService(store).processIntelligencePrompt({
+      prompt: "Show Stage 8 Customer 30 payment transactions and revenue exposure",
+      mode: "Revenue",
+    }, restricted);
+    assert(response.retrieval.deniedTools.some((entry) => entry.tool === "get_tenant_transactions"), "Financial permission denial missing");
+    assert(!response.facts.some((fact) => fact.id.startsWith("customer-relationship:")), "Linked financial fact leaked without permission");
+    assert(!response.facts.some((fact) => fact.id.startsWith("get_tenant_transactions:")), "Transaction facts leaked without permission");
+  });
+
+  await check("4d. Linked customer transaction scope keeps other currencies separate", async () => {
+    const response = await new AiOrchestratorService(store).processIntelligencePrompt({
+      prompt: "Show Stage 8 Customer 29 payment transactions",
+      mode: "Revenue",
+    }, fullCtx);
+    const relationship = response.facts.find((fact) => fact.id === "customer-relationship:customer-stage8-29");
+    assert(relationship && relationship.displayValue.includes("NGN 9,000,000"), "Customer 29 NGN relationship not linked");
+    assert(!relationship.displayValue.includes("USD"), "Unrelated USD amount leaked into customer 29 relationship");
   });
 
   await check("4a. Legacy claim confidence remains unassessed rather than inferred from retrieval completeness", async () => {

@@ -146,6 +146,12 @@ function extractSearchTerm(prompt: string): string | undefined {
   const quoted = prompt.match(/["“']([^"”']{2,80})["”']/)?.[1]?.trim();
   if (quoted) return quoted;
 
+  // Preserve an explicitly named numbered customer as a targeted lookup.
+  // Domain stop-words alone would turn "Customer 30" into an unhelpful
+  // generic search and truncate the target out of a bounded result set.
+  const numberedCustomer = prompt.match(/\bcustomer\s+\d{1,8}\b/i)?.[0];
+  if (numberedCustomer) return numberedCustomer.trim();
+
   const words = prompt
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, " ")
@@ -445,10 +451,12 @@ export function createAuthorizedAiTools(database: DatabaseStore): Record<AiDataT
       requiredPermission: "financial:read",
       handler: async (call, ctx) => {
         requirePermission(ctx, "financial:read");
-        const where = call.filters?.status ? { status: call.filters.status as any } : undefined;
+        const where: Record<string, any> = {};
+        if (call.filters?.status) where.status = call.filters.status;
+        if (call.filters?.customerId) where.customerId = call.filters.customerId;
         const query: QuerySpecification<any> = {
           ...baseQuery<any>(call),
-          ...(where ? { where } : {}),
+          ...(Object.keys(where).length ? { where } : {}),
           ...(call.searchTerm ? { search: { fields: ["title", "status"], term: call.searchTerm } } : {}),
         };
         const countQuery = { ...(where ? { where } : {}), ...(query.search ? { search: query.search } : {}) };
@@ -483,6 +491,7 @@ export function createAuthorizedAiTools(database: DatabaseStore): Record<AiDataT
         const where: Record<string, any> = {};
         if (call.filters?.status) where.status = call.filters.status;
         if (call.filters?.type) where.type = call.filters.type;
+        if (call.filters?.customerId) where.customerId = call.filters.customerId;
         const hasWhere = Object.keys(where).length > 0;
         const query: QuerySpecification<any> = {
           ...baseQuery<any>(call),
@@ -567,7 +576,26 @@ export async function executeAuthorizedAiRetrieval(
     }
     const definition = registry[call.tool];
     requirePermission(ctx, definition.requiredPermission);
-    results.push(await definition.handler(call, ctx));
+
+    // If an authorized customer search resolves to exactly one customer,
+    // bind related financial retrieval to that canonical tenant-scoped ID.
+    // Do not apply the customer name as an unrelated transaction/contract
+    // text search, and never widen retrieval when the customer is ambiguous
+    // or missing. Financial permissions are independently enforced above
+    // and by the downstream handler.
+    const customer = results.find((result) => result.tool === "get_tenant_customers");
+    const uniqueCustomer = customer?.scopeComplete && customer.totalMatched === 1
+      && customer.records.length === 1 ? customer.records[0] : undefined;
+    const relatedFinancialTool = call.tool === "get_tenant_transactions" || call.tool === "get_tenant_contracts";
+    const scopedCall: AiToolCallPlan = relatedFinancialTool && call.searchTerm && uniqueCustomer
+      ? {
+          ...call,
+          searchTerm: undefined,
+          filters: { ...call.filters, customerId: uniqueCustomer.entityId },
+        }
+      : call;
+
+    results.push(await definition.handler(scopedCall, ctx));
   }
 
   const recordsRetrieved = results.reduce((sum, result) => sum + result.records.length, 0);
