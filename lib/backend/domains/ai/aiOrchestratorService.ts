@@ -258,7 +258,9 @@ function compatibilityClaims(facts: AiDeterministicFact[]): AiEvidenceClaim[] {
     claim: `${fact.label}: ${fact.displayValue}`,
     source: fact.scope.tool,
     evidence: fact.calculation,
-    confidence: fact.scope.complete ? 100 : 90,
+    // Legacy compatibility field only: no calibrated confidence model exists.
+    // Zero is the established unassessed sentinel; completeness is not confidence.
+    confidence: 0,
     verificationState: "unverified",
     certificationState: "uncertified",
   }));
