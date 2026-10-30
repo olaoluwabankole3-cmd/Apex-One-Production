@@ -175,7 +175,7 @@ export class ValueService {
       label: "Revenue Leakage Total",
       value: totalLeakage,
       calculationMethod:
-        "SUM(Signal.estimatedImpact WHERE category='revenue') + SUM(Contract.value * 0.12 WHERE !volatilityIndexationClause)",
+        "SUM(Signal.estimatedFinancialImpact WHERE category='revenue' AND status='active')",
       sourceRecords: leakageSources,
       evidence:
         leakageSources.length > 0
@@ -191,7 +191,7 @@ export class ValueService {
       metricId: "unused_capacity_value",
       label: "Unused Capacity Waste",
       value: totalCapacityWaste,
-      calculationMethod: "SUM(Signal.estimatedImpact WHERE category='capacity' AND status='active')",
+      calculationMethod: "SUM(Signal.estimatedFinancialImpact WHERE category='capacity' AND status='active')",
       sourceRecords: capacitySignals.map((s) => ({
         type: "Signal",
         id: s.id,
