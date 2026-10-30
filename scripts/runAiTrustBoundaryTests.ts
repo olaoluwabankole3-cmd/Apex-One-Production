@@ -166,12 +166,12 @@ async function main() {
     await store.customersRepo.create(customer(index), fullCtx);
   }
   await store.transactionsRepo.create({
-    id: "txn-stage8-usd", customerId: "customer-1", type: "revenue", amount: 12500,
+    id: "txn-stage8-usd", customerId: "customer-stage8-01", type: "revenue", amount: 12500,
     currency: "USD", status: "cleared", reference: "INV-USD-001", category: "subscription",
     date: "2026-10-01", createdAt: now(),
   }, fullCtx);
   await store.transactionsRepo.create({
-    id: "txn-stage8-ngn", customerId: "customer-2", type: "revenue", amount: 9000000,
+    id: "txn-stage8-ngn", customerId: "customer-stage8-02", type: "revenue", amount: 9000000,
     currency: "NGN", status: "pending", reference: "INV-NGN-001", category: "subscription",
     date: "2026-10-02", createdAt: now(),
   }, fullCtx);
@@ -244,6 +244,18 @@ async function main() {
     }, aiOnlyCtx);
     assert(!restrictedPlan.calls.some((call) => call.tool === "get_tenant_transactions"), "Transaction access bypassed financial:read");
     assert(restrictedPlan.deniedTools.some((item) => item.tool === "get_tenant_transactions"), "Denied transaction access was not traced");
+  });
+
+  await check("4b. Revenue intelligence assembles customer-linked transaction evidence by canonical ID", async () => {
+    const response = await new AiOrchestratorService(store).processIntelligencePrompt({
+      prompt: "Show customer payment transactions and revenue exposure",
+      mode: "Revenue",
+    }, fullCtx);
+    const relationship = response.facts.find((fact) => fact.id === "customer-relationship:customer-stage8-01");
+    assert(relationship, "Customer-to-transaction relationship fact missing");
+    assert(relationship.displayValue.includes("1 transaction"), "Linked transaction count missing");
+    assert(relationship.provenance.some((source) => source.entityType === "Customer"), "Customer provenance missing from relationship");
+    assert(relationship.provenance.some((source) => source.entityType === "Transaction"), "Transaction provenance missing from relationship");
   });
 
   await check("4a. Legacy claim confidence remains unassessed rather than inferred from retrieval completeness", async () => {
