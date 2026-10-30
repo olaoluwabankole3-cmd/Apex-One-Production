@@ -47,7 +47,7 @@ export default function LeakagePage() {
               </div>
               <div className="mt-4 flex flex-wrap gap-3 text-[11px] text-ivory/35">
                 <span>Status: {event.status}</span>
-                <span>Recorded confidence: {event.riskScore}%</span>
+                <span>Risk score: {event.riskScore}</span>
                 <span>Source: {event.systemAffected}</span>
               </div>
             </GlassCard>
