@@ -165,6 +165,11 @@ async function main() {
   for (let index = 1; index <= 30; index += 1) {
     await store.customersRepo.create(customer(index), fullCtx);
   }
+  await store.transactionsRepo.create({
+    id: "txn-stage8-usd", customerId: "customer-1", type: "revenue", amount: 12500,
+    currency: "USD", status: "cleared", reference: "INV-USD-001", category: "subscription",
+    date: "2026-10-01", createdAt: now(),
+  }, fullCtx);
   await store.memoryRepo.create(memory("mem-stage8-verified", false), fullCtx);
   await store.memoryRepo.create(memory("mem-stage8-legacy-true", true), fullCtx);
   await store.memoryRepo.create(memory("mem-stage8-other", false), fullCtx);
