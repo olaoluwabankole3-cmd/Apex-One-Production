@@ -246,6 +246,15 @@ async function main() {
     assert(restrictedPlan.deniedTools.some((item) => item.tool === "get_tenant_transactions"), "Denied transaction access was not traced");
   });
 
+  await check("4a. Legacy claim confidence remains unassessed rather than inferred from retrieval completeness", async () => {
+    const response = await new AiOrchestratorService(store).processIntelligencePrompt({
+      prompt: "Show customer health",
+      mode: "Customers",
+    }, fullCtx);
+    assert(response.claims.length > 0, "Expected compatibility claims for retrieved customer facts");
+    assert(response.claims.every((claim) => claim.confidence === 0), "Retrieval completeness must not be represented as calibrated confidence");
+  });
+
   await check("4. Tool executor independently rejects a tampered unauthorized plan", async () => {
     const tampered: AiRetrievalPlan = {
       requestedTools: ["get_tenant_customers"],
