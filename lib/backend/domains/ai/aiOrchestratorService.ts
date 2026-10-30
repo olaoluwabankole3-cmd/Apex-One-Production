@@ -177,6 +177,51 @@ function buildDeterministicFacts(execution: AiRetrievalExecution, currency: stri
       });
     }
 
+    if (result.tool === "get_tenant_transactions") {
+      const byCurrency = new Map<string, { amount: number; count: number; clearedRevenue: number; pendingOrDisputed: number }>();
+      for (const record of result.records) {
+        const currencyCode = typeof record.fields.currency === "string" && record.fields.currency.trim()
+          ? record.fields.currency.trim().toUpperCase()
+          : "UNKNOWN_CURRENCY";
+        const current = byCurrency.get(currencyCode) || { amount: 0, count: 0, clearedRevenue: 0, pendingOrDisputed: 0 };
+        const amount = numericField(record, "amount");
+        current.amount += amount;
+        current.count += 1;
+        if (record.fields.type === "revenue" && record.fields.status === "cleared") current.clearedRevenue += amount;
+        if (record.fields.status === "pending" || record.fields.status === "disputed") current.pendingOrDisputed += amount;
+        byCurrency.set(currencyCode, current);
+      }
+      for (const [currencyCode, totals] of byCurrency) {
+        facts.push({
+          id: `${result.tool}:gross-amount:${currencyCode}`,
+          label: `Retrieved transaction amount (${currencyCode})`,
+          value: totals.amount,
+          displayValue: `${currencyCode} ${totals.amount.toLocaleString()}`,
+          calculation: `Gross sum of amount across ${totals.count} bounded retrieved transaction records denominated in ${currencyCode}; this is not net revenue and is not a whole-tenant total unless the retrieval scope is complete.`,
+          scope,
+          provenance,
+        });
+        facts.push({
+          id: `${result.tool}:cleared-revenue:${currencyCode}`,
+          label: `Cleared revenue in retrieved transactions (${currencyCode})`,
+          value: totals.clearedRevenue,
+          displayValue: `${currencyCode} ${totals.clearedRevenue.toLocaleString()}`,
+          calculation: `Sum of amount only for retrieved transaction records with type revenue and status cleared, in ${currencyCode}; bounded by retrieval scope.`,
+          scope,
+          provenance,
+        });
+        facts.push({
+          id: `${result.tool}:pending-disputed:${currencyCode}`,
+          label: `Pending or disputed transaction amount (${currencyCode})`,
+          value: totals.pendingOrDisputed,
+          displayValue: `${currencyCode} ${totals.pendingOrDisputed.toLocaleString()}`,
+          calculation: `Sum of amount only for retrieved transaction records with status pending or disputed, in ${currencyCode}; not an assertion of confirmed loss.`,
+          scope,
+          provenance,
+        });
+      }
+    }
+
     if (result.tool === "get_operational_signals") {
       const impact = result.records.reduce((sum, record) => sum + numericField(record, "estimatedFinancialImpact"), 0);
       facts.push({
