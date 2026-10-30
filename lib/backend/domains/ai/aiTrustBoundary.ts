@@ -26,6 +26,7 @@ export type AiDataToolName =
   | "get_organizational_memory"
   | "get_tenant_documents"
   | "get_tenant_contracts"
+  | "get_tenant_transactions"
   | "get_operational_signals";
 
 export interface AiTrustQuery {
@@ -105,6 +106,7 @@ const TOOL_PERMISSIONS: Record<AiDataToolName, PermissionCapability> = {
   get_organizational_memory: "knowledge:read",
   get_tenant_documents: "document:read",
   get_tenant_contracts: "financial:read",
+  get_tenant_transactions: "financial:read",
   get_operational_signals: "workflow:read",
 };
 
@@ -122,7 +124,8 @@ const STOP_WORDS = new Set([
   "pricing", "indexation", "agreement", "agreements", "opportunity", "opportunities", "value", "leakage", "leakages",
   "recovery", "expansion", "capture", "captured", "revenue", "memory", "memories", "decision", "decisions", "policy",
   "policies", "history", "historical", "institutional", "document", "documents", "file", "files", "report", "reports",
-  "invoice", "audit", "operation", "operations", "operational", "capacity", "signal", "signals", "incident", "incidents",
+  "invoice", "payment", "payments", "paid", "unpaid", "transaction", "transactions", "cashflow", "cash", "billing", "receivable", "receivables",
+  "audit", "operation", "operations", "operational", "capacity", "signal", "signals", "incident", "incidents",
   "compliance", "risk", "strategy", "executive",
 ]);
 
@@ -162,6 +165,7 @@ function requestedToolsForQuery(query: AiTrustQuery): AiDataToolName[] {
   const keywordGroups: Array<[AiDataToolName, RegExp]> = [
     ["get_tenant_customers", /\b(customer|customers|account|accounts|client|clients|arr|retention|churn|health)\b/],
     ["get_tenant_contracts", /\b(contract|contracts|sla|renewal|renewals|pricing|indexation|agreement|agreements)\b/],
+    ["get_tenant_transactions", /\b(transaction|transactions|payment|payments|paid|unpaid|cashflow|cash flow|billing|invoice|invoices|receivable|receivables|revenue exposure)\b/],
     ["get_value_opportunities", /\b(opportunity|opportunities|value|leakage|leakages|recovery|expansion|captur|revenue)\b/],
     ["get_organizational_memory", /\b(memory|memories|decision|decisions|policy|policies|history|historical|institutional)\b/],
     ["get_tenant_documents", /\b(document|documents|file|files|report|reports|board paper|invoice|audit report)\b/],
@@ -175,7 +179,7 @@ function requestedToolsForQuery(query: AiTrustQuery): AiDataToolName[] {
   if (tools.length === 0) {
     switch ((query.mode || "Executive").toLowerCase()) {
       case "revenue":
-        tools.push("get_tenant_customers", "get_tenant_contracts", "get_value_opportunities");
+        tools.push("get_tenant_customers", "get_tenant_contracts", "get_tenant_transactions");
         break;
       case "customers":
         tools.push("get_tenant_customers");
@@ -464,6 +468,45 @@ export function createAuthorizedAiTools(database: DatabaseStore): Record<AiDataT
             renewalDaysRemaining: record.renewalDaysRemaining,
           },
           provenance: await evidenceRef(evidence, "Contract", record.id, `apex://Contract/${record.id}`, ctx),
+        })));
+        return { tool: call.tool, requiredPermission: "financial:read", totalMatched, records, scopeComplete: totalMatched <= records.length };
+      },
+    },
+
+    get_tenant_transactions: {
+      name: "get_tenant_transactions",
+      description: "Bounded tenant-scoped financial transactions with individual currency and canonical evidence provenance",
+      requiredPermission: "financial:read",
+      handler: async (call, ctx) => {
+        requirePermission(ctx, "financial:read");
+        const where: Record<string, any> = {};
+        if (call.filters?.status) where.status = call.filters.status;
+        if (call.filters?.type) where.type = call.filters.type;
+        const hasWhere = Object.keys(where).length > 0;
+        const query: QuerySpecification<any> = {
+          ...baseQuery<any>(call),
+          ...(hasWhere ? { where } : {}),
+          ...(call.searchTerm ? { search: { fields: ["reference", "category", "type", "status"], term: call.searchTerm } } : {}),
+        };
+        const countQuery = { ...(hasWhere ? { where } : {}), ...(query.search ? { search: query.search } : {}) };
+        const [page, totalMatched] = await Promise.all([
+          database.transactionsRepo.findMany(ctx, query),
+          database.transactionsRepo.count(ctx, countQuery),
+        ]);
+        const records = await Promise.all(page.items.map(async (record) => ({
+          entityType: "Transaction" as const,
+          entityId: record.id,
+          fields: {
+            customerId: record.customerId,
+            type: record.type,
+            amount: record.amount,
+            currency: record.currency,
+            status: record.status,
+            reference: record.reference,
+            category: record.category,
+            date: record.date,
+          },
+          provenance: await evidenceRef(evidence, "Transaction", record.id, `apex://Transaction/${record.id}`, ctx),
         })));
         return { tool: call.tool, requiredPermission: "financial:read", totalMatched, records, scopeComplete: totalMatched <= records.length };
       },
