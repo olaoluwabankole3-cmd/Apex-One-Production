@@ -30,9 +30,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "APEX ONE — Executive Intelligence Operating System",
+  title: "CORTEX — Executive Intelligence Operating System",
   description:
-    "A secure enterprise intelligence and execution operating system by Apex Sync Intelligence.",
+    "A secure enterprise intelligence and execution operating system by QORVEX.",
 };
 
 export default function RootLayout({
