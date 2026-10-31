@@ -384,7 +384,7 @@ async function main(): Promise<void> {
 
   await check("13a. Unassessed legacy claims are not searchable or readable as content evidence", async () => {
     const id = "doc-search-unsafe-legacy";
-    const doc = document(id, ctxA, { name: "legacytitle.pdf", summary: "inventedlegacyclause", extractedValue: "inventedlegacyamount" });
+    const doc = document(id, ctxA, { name: "archival safe document.pdf", summary: "inventedlegacyclause", extractedValue: "inventedlegacyamount" });
     delete doc.metadata.extractionPolicyVersion;
     await store.documentsRepo.create(doc, ctxA);
     const index = new PostgresDocumentSearchIndex(databaseUrl);
@@ -392,7 +392,7 @@ async function main(): Promise<void> {
         || (await index.search(ctxA.organizationId, "inventedlegacyamount")).includes(id)) {
       throw new Error("Untrusted historical extraction contaminated PostgreSQL search");
     }
-    if (!(await index.search(ctxA.organizationId, "legacytitle")).includes(id)) {
+    if (!(await index.search(ctxA.organizationId, "archival")).includes(id)) {
       throw new Error("Historical document metadata became unsearchable");
     }
     const exposed = await new DocumentService(store, undefined, index).getDocumentById(id, ctxA);
