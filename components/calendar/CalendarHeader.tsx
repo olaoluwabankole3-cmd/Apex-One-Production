@@ -12,7 +12,7 @@ export default function CalendarHeader() {
       className="mb-6"
     >
       <p className="text-[12px] font-mono font-medium uppercase tracking-[0.15em] text-gold/70">
-        APEX ONE — APEX SYNC
+        CORTEX — QORVEX
       </p>
       <h1 className="mt-2 font-display text-[28px] font-bold tracking-tight text-ivory lg:text-[34px] uppercase">
         DECISION & COORDINATION INTELLIGENCE
