@@ -1,5 +1,5 @@
 /**
- * APEX ONE — Canonical HTTP Response Serialization
+ * CORTEX — Canonical HTTP Response Serialization
  *
  * Pure response helpers. Next.js routes adapt these values into NextResponse;
  * clients consume the same shared contract types from lib/contracts/http.ts.
