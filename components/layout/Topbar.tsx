@@ -51,7 +51,7 @@ export default function Topbar() {
           </button>
 
           <Link href="/" className="flex items-center gap-2 lg:hidden" aria-label="CORTEX home">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-gold/30 bg-gold/10 font-display text-[11px] font-bold text-gold">A1</span>
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-gold/30 bg-gold/10 font-display text-[11px] font-bold text-gold">C</span>
             <span className="font-display text-sm font-bold text-ivory">CORTEX</span>
           </Link>
 
