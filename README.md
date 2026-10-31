@@ -163,3 +163,16 @@ Operational documentation intentionally follows the implemented architecture:
 - `docs/DEPLOYMENT.md` — deployment, migration, probes, promotion and rollback procedure.
 
 When documentation and executable safeguards disagree, treat the executable validation as authoritative and update the documentation in the same change rather than weakening the runtime boundary.
+## Brand and compatibility migration
+
+**Public product identity:** **CORTEX** — Enterprise Intelligence Operating System, developed by **QORVEX**. All customer-facing UI strings, browser metadata, AI identity, README and deployment documentation must use these names. `scripts/runProductIntegrityTests.ts` enforces the legacy-brand gate.
+
+The following **non-customer-facing compatibility identifiers deliberately retain their existing values** until a separately approved migration is implemented:
+
+- GitHub repository URL `Apex-One-Production` and workflow filename `.github/workflows/apex-one-ci.yml` (the visible GitHub Actions workflow title is CORTEX).
+- Existing authenticated session cookie `apex_session`, `apex-*` DOM hooks relied upon by browser tests, and historical fixture identifiers.
+- Telemetry and deployment service identifiers (`apex-one`), S3/Redis/PostgreSQL resource references, Docker image tags, CI concurrency groups and relevant deployment tooling.
+
+**Migration sequence:** first inventory live users, deployed consumers, observability dashboards, environment secrets and image registries; then introduce a documented dual-read/dual-write or alias compatibility window where applicable; test session continuity, exact-main release attestations, deployment fail-closed startup and rollback; update providers and clients; retire old identifiers only after the staged migration is verified. Renaming a repository or service identifier without coordinated integration checks is **not** a safe substitute for a branding release.
+
+This PR does not rename cloud resources, alter existing data, invalidate user sessions, or deploy to production.
