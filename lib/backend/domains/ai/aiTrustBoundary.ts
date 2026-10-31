@@ -26,6 +26,7 @@ export type AiDataToolName =
   | "get_organizational_memory"
   | "get_tenant_documents"
   | "get_tenant_contracts"
+  | "get_tenant_transactions"
   | "get_operational_signals";
 
 export interface AiTrustQuery {
@@ -105,6 +106,7 @@ const TOOL_PERMISSIONS: Record<AiDataToolName, PermissionCapability> = {
   get_organizational_memory: "knowledge:read",
   get_tenant_documents: "document:read",
   get_tenant_contracts: "financial:read",
+  get_tenant_transactions: "financial:read",
   get_operational_signals: "workflow:read",
 };
 
@@ -122,7 +124,8 @@ const STOP_WORDS = new Set([
   "pricing", "indexation", "agreement", "agreements", "opportunity", "opportunities", "value", "leakage", "leakages",
   "recovery", "expansion", "capture", "captured", "revenue", "memory", "memories", "decision", "decisions", "policy",
   "policies", "history", "historical", "institutional", "document", "documents", "file", "files", "report", "reports",
-  "invoice", "audit", "operation", "operations", "operational", "capacity", "signal", "signals", "incident", "incidents",
+  "invoice", "payment", "payments", "paid", "unpaid", "transaction", "transactions", "cashflow", "cash", "billing", "receivable", "receivables",
+  "audit", "operation", "operations", "operational", "capacity", "signal", "signals", "incident", "incidents",
   "compliance", "risk", "strategy", "executive",
 ]);
 
@@ -143,6 +146,12 @@ function extractSearchTerm(prompt: string): string | undefined {
   const quoted = prompt.match(/["“']([^"”']{2,80})["”']/)?.[1]?.trim();
   if (quoted) return quoted;
 
+  // Preserve an explicitly named numbered customer as a targeted lookup.
+  // Domain stop-words alone would turn "Customer 30" into an unhelpful
+  // generic search and truncate the target out of a bounded result set.
+  const numberedCustomer = prompt.match(/\bcustomer\s+\d{1,8}\b/i)?.[0];
+  if (numberedCustomer) return numberedCustomer.trim();
+
   const words = prompt
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, " ")
@@ -162,6 +171,7 @@ function requestedToolsForQuery(query: AiTrustQuery): AiDataToolName[] {
   const keywordGroups: Array<[AiDataToolName, RegExp]> = [
     ["get_tenant_customers", /\b(customer|customers|account|accounts|client|clients|arr|retention|churn|health)\b/],
     ["get_tenant_contracts", /\b(contract|contracts|sla|renewal|renewals|pricing|indexation|agreement|agreements)\b/],
+    ["get_tenant_transactions", /\b(transaction|transactions|payment|payments|paid|unpaid|cashflow|cash flow|billing|invoice|invoices|receivable|receivables|revenue exposure)\b/],
     ["get_value_opportunities", /\b(opportunity|opportunities|value|leakage|leakages|recovery|expansion|captur|revenue)\b/],
     ["get_organizational_memory", /\b(memory|memories|decision|decisions|policy|policies|history|historical|institutional)\b/],
     ["get_tenant_documents", /\b(document|documents|file|files|report|reports|board paper|invoice|audit report)\b/],
@@ -175,7 +185,7 @@ function requestedToolsForQuery(query: AiTrustQuery): AiDataToolName[] {
   if (tools.length === 0) {
     switch ((query.mode || "Executive").toLowerCase()) {
       case "revenue":
-        tools.push("get_tenant_customers", "get_tenant_contracts", "get_value_opportunities");
+        tools.push("get_tenant_customers", "get_tenant_contracts", "get_tenant_transactions");
         break;
       case "customers":
         tools.push("get_tenant_customers");
@@ -441,10 +451,12 @@ export function createAuthorizedAiTools(database: DatabaseStore): Record<AiDataT
       requiredPermission: "financial:read",
       handler: async (call, ctx) => {
         requirePermission(ctx, "financial:read");
-        const where = call.filters?.status ? { status: call.filters.status as any } : undefined;
+        const where: Record<string, any> = {};
+        if (call.filters?.status) where.status = call.filters.status;
+        if (call.filters?.customerId) where.customerId = call.filters.customerId;
         const query: QuerySpecification<any> = {
           ...baseQuery<any>(call),
-          ...(where ? { where } : {}),
+          ...(Object.keys(where).length ? { where } : {}),
           ...(call.searchTerm ? { search: { fields: ["title", "status"], term: call.searchTerm } } : {}),
         };
         const countQuery = { ...(where ? { where } : {}), ...(query.search ? { search: query.search } : {}) };
@@ -456,6 +468,7 @@ export function createAuthorizedAiTools(database: DatabaseStore): Record<AiDataT
           entityType: "Contract" as const,
           entityId: record.id,
           fields: {
+            customerId: record.customerId,
             title: record.title,
             contractValue: record.contractValue,
             status: record.status,
@@ -464,6 +477,46 @@ export function createAuthorizedAiTools(database: DatabaseStore): Record<AiDataT
             renewalDaysRemaining: record.renewalDaysRemaining,
           },
           provenance: await evidenceRef(evidence, "Contract", record.id, `apex://Contract/${record.id}`, ctx),
+        })));
+        return { tool: call.tool, requiredPermission: "financial:read", totalMatched, records, scopeComplete: totalMatched <= records.length };
+      },
+    },
+
+    get_tenant_transactions: {
+      name: "get_tenant_transactions",
+      description: "Bounded tenant-scoped financial transactions with individual currency and canonical evidence provenance",
+      requiredPermission: "financial:read",
+      handler: async (call, ctx) => {
+        requirePermission(ctx, "financial:read");
+        const where: Record<string, any> = {};
+        if (call.filters?.status) where.status = call.filters.status;
+        if (call.filters?.type) where.type = call.filters.type;
+        if (call.filters?.customerId) where.customerId = call.filters.customerId;
+        const hasWhere = Object.keys(where).length > 0;
+        const query: QuerySpecification<any> = {
+          ...baseQuery<any>(call),
+          ...(hasWhere ? { where } : {}),
+          ...(call.searchTerm ? { search: { fields: ["reference", "category", "type", "status"], term: call.searchTerm } } : {}),
+        };
+        const countQuery = { ...(hasWhere ? { where } : {}), ...(query.search ? { search: query.search } : {}) };
+        const [page, totalMatched] = await Promise.all([
+          database.transactionsRepo.findMany(ctx, query),
+          database.transactionsRepo.count(ctx, countQuery),
+        ]);
+        const records = await Promise.all(page.items.map(async (record) => ({
+          entityType: "Transaction" as const,
+          entityId: record.id,
+          fields: {
+            customerId: record.customerId,
+            type: record.type,
+            amount: record.amount,
+            currency: record.currency,
+            status: record.status,
+            reference: record.reference,
+            category: record.category,
+            date: record.date,
+          },
+          provenance: await evidenceRef(evidence, "Transaction", record.id, `apex://Transaction/${record.id}`, ctx),
         })));
         return { tool: call.tool, requiredPermission: "financial:read", totalMatched, records, scopeComplete: totalMatched <= records.length };
       },
@@ -523,7 +576,26 @@ export async function executeAuthorizedAiRetrieval(
     }
     const definition = registry[call.tool];
     requirePermission(ctx, definition.requiredPermission);
-    results.push(await definition.handler(call, ctx));
+
+    // If an authorized customer search resolves to exactly one customer,
+    // bind related financial retrieval to that canonical tenant-scoped ID.
+    // Do not apply the customer name as an unrelated transaction/contract
+    // text search, and never widen retrieval when the customer is ambiguous
+    // or missing. Financial permissions are independently enforced above
+    // and by the downstream handler.
+    const customer = results.find((result) => result.tool === "get_tenant_customers");
+    const uniqueCustomer = customer?.scopeComplete && customer.totalMatched === 1
+      && customer.records.length === 1 ? customer.records[0] : undefined;
+    const relatedFinancialTool = call.tool === "get_tenant_transactions" || call.tool === "get_tenant_contracts";
+    const scopedCall: AiToolCallPlan = relatedFinancialTool && call.searchTerm && uniqueCustomer
+      ? {
+          ...call,
+          searchTerm: undefined,
+          filters: { ...call.filters, customerId: uniqueCustomer.entityId },
+        }
+      : call;
+
+    results.push(await definition.handler(scopedCall, ctx));
   }
 
   const recordsRetrieved = results.reduce((sum, result) => sum + result.records.length, 0);
