@@ -10,7 +10,7 @@ import RoleSwitcher from "./RoleSwitcher";
 import { useAuth } from "@/components/auth/AuthContext";
 import UserMenu from "@/components/auth/UserMenu";
 import { useOrganization } from "./OrganizationContext";
-import { primaryNavigation, valueNavigation, isNavigationItemActive } from "./navigation";
+import { primaryNavigation, isNavigationItemActive } from "./navigation";
 
 export default function Topbar() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -24,10 +24,6 @@ export default function Topbar() {
     return item.feature ? isFeatureEnabled(item.feature) : true;
   });
 
-  const visibleValue = valueNavigation.filter((item) => {
-    if (!hasPermission(item.permission)) return false;
-    return item.feature ? isFeatureEnabled(item.feature) : true;
-  });
 
   useEffect(() => setIsMobileMenuOpen(false), [pathname]);
 
@@ -56,7 +52,7 @@ export default function Topbar() {
           </Link>
 
           <div className="hidden lg:block">
-            <p className="font-display text-sm font-semibold text-ivory/80">Enterprise Intelligence Workspace</p>
+            <p className="font-display text-sm font-semibold text-ivory/80">Financial Institution Intelligence</p>
             <p className="mt-0.5 text-[11px] text-ivory/35">{organization.displayName}</p>
           </div>
         </div>
@@ -97,7 +93,7 @@ export default function Topbar() {
               <div className="mb-5 flex items-center justify-between border-b border-white/[0.06] pb-6">
                 <div>
                   <p className="font-display text-[17px] font-bold text-ivory">CORTEX</p>
-                  <p className="mt-0.5 text-[9px] uppercase tracking-[0.14em] text-gold">Executive Intelligence OS</p>
+                  <p className="mt-0.5 text-[9px] uppercase tracking-[0.14em] text-gold">Financial Intelligence Workspace</p>
                 </div>
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
@@ -127,30 +123,7 @@ export default function Topbar() {
                   );
                 })}
 
-                {visibleValue.length > 0 && isFeatureEnabled("valueIntelligence") && (
-                  <>
-                    <div className="px-3 pb-2 pt-5 font-mono text-[9.5px] font-bold uppercase tracking-[0.14em] text-gold/60">
-                      Value Intelligence
-                    </div>
-                    {visibleValue.map((item) => {
-                      const active = isNavigationItemActive(pathname, item.href);
-                      const Icon = item.icon;
-                      return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          className={clsx(
-                            "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13.5px] font-medium transition-colors",
-                            active ? "bg-white/[0.04] text-ivory" : "text-ivory/50 hover:bg-white/[0.02] hover:text-ivory/90"
-                          )}
-                        >
-                          <Icon size={17} strokeWidth={1.75} className={active ? "text-gold" : "text-ivory/40"} />
-                          {item.label}
-                        </Link>
-                      );
-                    })}
-                  </>
-                )}
+
               </nav>
             </motion.aside>
           </div>

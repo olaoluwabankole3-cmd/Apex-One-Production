@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building2, ChevronDown, KeyRound, Loader2, LogOut, UserRound } from "lucide-react";
+import { Building2, ChevronDown, KeyRound, Loader2, LogOut, Settings2, UserRound } from "lucide-react";
 import { useAuth } from "@/components/auth/AuthContext";
 
 export default function UserMenu() {
@@ -15,6 +15,7 @@ export default function UserMenu() {
     switchOrganization,
     logout,
     isLoading,
+    hasPermission,
   } = useAuth();
   const [open, setOpen] = useState(false);
   const [switchingError, setSwitchingError] = useState<string | null>(null);
@@ -121,6 +122,17 @@ export default function UserMenu() {
             )}
 
             <div className="mt-2 border-t border-white/[0.05] pt-2">
+              {hasPermission("org:admin") && (
+                <Link
+                  href="/settings"
+                  onClick={() => setOpen(false)}
+                  role="menuitem"
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-ivory/55 hover:bg-white/[0.04] hover:text-ivory"
+                >
+                  <Settings2 size={14} />
+                  Organization settings
+                </Link>
+              )}
               <Link
                 href="/account/security"
                 onClick={() => setOpen(false)}

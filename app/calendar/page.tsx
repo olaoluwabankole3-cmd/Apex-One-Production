@@ -1,16 +1,11 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import CalendarHeader from "@/components/calendar/CalendarHeader";
-import AgendaList from "@/components/calendar/AgendaList";
-import InternalOnlyShield from "@/components/layout/InternalOnlyShield";
-
-export default function CalendarPage() {
-  return (
-    <InternalOnlyShield>
-      <div className="mx-auto w-full max-w-7xl px-1">
-        <CalendarHeader />
-        <AgendaList />
-      </div>
-    </InternalOnlyShield>
-  );
+/**
+ * The former standalone Calendar screen has been retired from the
+ * CORTEX financial-institution workspace. Existing bookmarks go to the
+ * authoritative, permission-checked destination without showing a
+ * second prototype surface. No backend records are removed.
+ */
+export default function RetiredCalendarPage() {
+  redirect("/workflows");
 }

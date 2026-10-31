@@ -104,6 +104,82 @@ for (const navigationFile of ["components/layout/Sidebar.tsx", "components/layou
   assert(source.includes("hasPermission"), `${navigationFile} must derive visibility from authenticated capabilities.`);
 }
 
+// Financial-institution release surface: keep the seven core journeys
+// visible and retire unsupported/duplicate standalone screens.
+const navigation = readFileSync(join(root, "components/layout/navigation.ts"), "utf8");
+const primaryDestinations = [
+  ...navigation.matchAll(/\{ href: "([^"]+)", label: "([^"]+)", icon:/g),
+].map((match) => [match[1], match[2]]);
+const expectedDestinations = [
+  ["/", "Command Center"],
+  ["/ai-workspace", "CORTEX Intelligence"],
+  ["/knowledge-hub", "Institutional Memory"],
+  ["/documents", "Documents & Evidence"],
+  ["/value-intelligence", "Value & Risk"],
+  ["/workflows", "Action Center"],
+  ["/value-intelligence/captured", "Recorded Outcomes"],
+];
+assert(
+  JSON.stringify(primaryDestinations) === JSON.stringify(expectedDestinations),
+  "Financial-institution primary navigation must contain only the seven reviewed intelligence journeys."
+);
+assert(
+  !navigation.includes("valueNavigation"),
+  "Duplicate Value Intelligence sidebar menu must not return."
+);
+assert(
+  navigation.includes('permission: "org:read"') &&
+    navigation.includes('permission: "value:read"') &&
+    navigation.includes('permission: "workflow:read"'),
+  "Financial navigation must preserve session-derived capability requirements."
+);
+for (const path of ["components/layout/Sidebar.tsx", "components/layout/Topbar.tsx"]) {
+  assert(
+    !readFileSync(join(root, path), "utf8").includes("valueNavigation"),
+    `${path} still renders the retired duplicate navigation section.`
+  );
+}
+
+const accountMenu = readFileSync(join(root, "components/auth/UserMenu.tsx"), "utf8");
+assert(
+  accountMenu.includes('hasPermission("org:admin")') &&
+    accountMenu.includes('href="/settings"'),
+  "Admin-only organization settings must remain discoverable through the account menu."
+);
+
+const retiredPages: Record<string, string> = {
+  "app/analytics/page.tsx": "/value-intelligence",
+  "app/calendar/page.tsx": "/workflows",
+  "app/operations/page.tsx": "/value-intelligence",
+  "app/value-intelligence/ai-analyst/page.tsx": "/ai-workspace",
+  "app/value-intelligence/capacity/page.tsx": "/value-intelligence",
+  "app/value-intelligence/customer/page.tsx": "/customers",
+  "app/value-intelligence/simulator/page.tsx": "/value-intelligence",
+  "app/value-intelligence/reports/page.tsx": "/value-intelligence/captured",
+  "app/value-intelligence/execution/page.tsx": "/workflows",
+};
+for (const [route, destination] of Object.entries(retiredPages)) {
+  const source = readFileSync(join(root, route), "utf8");
+  assert(
+    source.includes('import { redirect } from "next/navigation"') &&
+      source.includes(`redirect("${destination}")`),
+    `${route} must redirect to a reviewed, authorization-gated destination.`
+  );
+  assert(
+    !source.includes('"use client"') && !source.includes("setTimeout") &&
+      !source.includes("isDemoMode") && !source.includes("fetch("),
+    `${route} still contains a standalone prototype or simulated UI.`
+  );
+}
+const financialValueHub = readFileSync(join(root, "app/value-intelligence/page.tsx"), "utf8");
+assert(
+  financialValueHub.includes("/value-intelligence/leakage") &&
+    financialValueHub.includes("/value-intelligence/opportunities") &&
+    financialValueHub.includes("/value-intelligence/captured") &&
+    financialValueHub.includes('hasPermission(item.permission)'),
+  "Financial value hub must retain evidence-aware investigations with permission checks."
+);
+
 const demoMode = readFileSync(join(root, "lib/demo.ts"), "utf8");
 assert(
   /export function isDemoMode\(\): boolean \{\s*return false;\s*\}/m.test(demoMode),

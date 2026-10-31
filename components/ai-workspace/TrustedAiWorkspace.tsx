@@ -54,7 +54,7 @@ export default function TrustedAiWorkspace() {
         <header className="mb-6 flex flex-col gap-4 border-b border-white/[0.07] pb-5 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="mb-2 flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-gold/80">
-              <ShieldCheck className="h-4 w-4" /> Stage 8 trust boundary
+              <ShieldCheck className="h-4 w-4" /> Evidence-aware institutional intelligence
             </div>
             <h1 className="font-display text-3xl font-semibold">CORTEX Intelligence</h1>
             <p className="mt-2 max-w-2xl text-sm text-ivory/50">
@@ -78,10 +78,26 @@ export default function TrustedAiWorkspace() {
           {turns.length === 0 && (
             <section className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-8 text-center">
               <Search className="mx-auto h-7 w-7 text-gold/70" />
-              <h2 className="mt-3 text-lg font-medium">Ask a scoped enterprise question</h2>
+              <h2 className="mt-3 text-lg font-medium">Investigate your institution</h2>
               <p className="mx-auto mt-2 max-w-xl text-sm text-ivory/45">
-                The application selects a bounded, permission-checked data scope before any model call. The model cannot request arbitrary tools or tenant data.
+                Ask about supported financial exposures, recorded opportunities, leakage evidence or follow-up actions. CORTEX only uses your authorized institutional records and distinguishes retrieved facts from AI-generated interpretation.
               </p>
+              <div className="mt-5 flex flex-wrap justify-center gap-2">
+                {[
+                  "Which value opportunities have supporting source records?",
+                  "What revenue leakage can we substantiate from authorized data?",
+                  "Which recorded outcomes still require independent verification?",
+                ].map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => setInput(prompt)}
+                    className="rounded-full border border-white/10 bg-white/[0.035] px-3 py-2 text-xs text-ivory/65 transition-colors hover:border-gold/30 hover:text-gold focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
             </section>
           )}
 
@@ -174,7 +190,7 @@ export default function TrustedAiWorkspace() {
               onChange={(event) => setInput(event.target.value)}
               rows={2}
               maxLength={4000}
-              placeholder="Ask about customers, contracts, value opportunities, operations, documents, or institutional memory…"
+              placeholder="Ask what the institution can substantiate about revenue leakage, risk, opportunities or decisions…"
               className="min-h-[58px] flex-1 resize-none rounded-xl border border-white/10 bg-charcoal-light px-4 py-3 text-sm text-ivory outline-none placeholder:text-ivory/25 focus:border-gold/30"
             />
             <button
