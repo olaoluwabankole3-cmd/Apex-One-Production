@@ -1,6 +1,6 @@
 {
-  "name": "APEX ONE",
-  "description": "APEX ONE — Executive Intelligence Operating System with multi-tenant security, trusted enterprise knowledge, governed AI, workflows, value intelligence, and measurable execution.",
+  "name": "CORTEX",
+  "description": "CORTEX — Executive Intelligence Operating System with multi-tenant security, trusted enterprise knowledge, governed AI, workflows, value intelligence, and measurable execution.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
