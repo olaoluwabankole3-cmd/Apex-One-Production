@@ -1,12 +1,14 @@
-# APEX ONE
+# CORTEX
 
-APEX ONE is a multi-tenant enterprise operating and intelligence platform built with Next.js. The repository contains the application UI, authenticated API, durable persistence adapters, document/knowledge controls, workflow and value-execution domains, AI trust boundary, production readiness probes, structured telemetry, and provider-neutral release controls.
+**CORTEX** is the Enterprise Intelligence Operating System developed by **QORVEX**. This repository contains the application and production-assurance foundation; the documented technical identifiers may retain compatibility names until formally migrated.
+
+CORTEX is a multi-tenant enterprise operating and intelligence platform built with Next.js. The repository contains the application UI, authenticated API, durable persistence adapters, document/knowledge controls, workflow and value-execution domains, AI trust boundary, production readiness probes, structured telemetry, and provider-neutral release controls.
 
 This README describes the architecture that is implemented in the repository after the production-assurance and observability/deployment stages. It is not a mock-only frontend: production mode is deliberately **fail-closed** unless every required durable authority and immutable release identity is valid.
 
 ## System at a glance
 
-APEX ONE is organized around authenticated tenant-scoped application services rather than direct client access to infrastructure. The principal product domains are:
+CORTEX is organized around authenticated tenant-scoped application services rather than direct client access to infrastructure. The principal product domains are:
 
 - **Customers and enterprise records** — tenant-scoped customer data and related business state.
 - **Documents and knowledge** — encrypted object storage, durable search, document consistency, evidence provenance, controlled knowledge revisions, validation, publication, and deletion boundaries.
@@ -34,7 +36,7 @@ For the complete environment contract, see [`docs/ENVIRONMENT.md`](docs/ENVIRONM
 
 ## Security and trust boundaries
 
-APEX ONE derives tenant identity from the authenticated session, never from an arbitrary client-supplied organization identifier. Requests may authenticate with an `Authorization: Bearer <token>` credential or the HttpOnly `apex_session` cookie. Unknown roles fail closed and authorization is capability-based.
+CORTEX derives tenant identity from the authenticated session, never from an arbitrary client-supplied organization identifier. Requests may authenticate with an `Authorization: Bearer <token>` credential or the HttpOnly `apex_session` cookie. Unknown roles fail closed and authorization is capability-based.
 
 Production security properties include:
 
