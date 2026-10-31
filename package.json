@@ -42,7 +42,8 @@
     "test:restart-persistence": "tsx scripts/runInfrastructureRestartPersistenceTests.ts",
     "test:infra-connection": "tsx scripts/runInfrastructureConnectionTests.ts",
     "test:staging-http": "node --test scripts/verifyStagingHttp.test.mjs",
-    "staging:verify": "node scripts/verifyStagingHttp.mjs"
+    "staging:verify": "node scripts/verifyStagingHttp.mjs",
+    "test:financial-reconciliation": "tsx scripts/runFinancialReconciliationFoundationTests.ts"
   },
   "dependencies": {
     "@google/genai": "^2.16.0",

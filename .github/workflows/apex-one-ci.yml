@@ -39,6 +39,8 @@ jobs:
         run: bun run test:security
       - name: Run product integrity regression gate
         run: bun run test:product-integrity
+      - name: Test financial reconciliation safety and evidence boundaries
+        run: bun run test:financial-reconciliation
       - name: Reject fabricated document extraction evidence
         run: bun run test:document-truthfulness
       - name: Quarantine unassessed historical document extraction
