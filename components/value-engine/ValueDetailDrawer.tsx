@@ -34,6 +34,11 @@ export default function ValueDetailDrawer({
   financialImpact,
   auditTrail,
 }: ValueDetailDrawerProps) {
+  // A zero supplied by the evidence-aware API means "not assessed", not 0% confidence.
+  const confidenceValue = typeof confidence === "number" ? confidence : Number(confidence);
+  const hasAssessedConfidence =
+    Number.isFinite(confidenceValue) && confidenceValue > 0;
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -89,9 +94,9 @@ export default function ValueDetailDrawer({
                   </span>
                 </div>
                 <div>
-                  <span className="text-[10px] font-mono text-white/40 block uppercase tracking-wider">Confidence Level</span>
+                  <span className="text-[10px] font-mono text-white/40 block uppercase tracking-wider">Confidence Assessment</span>
                   <span className="text-[24px] font-mono font-bold text-white block mt-1">
-                    {confidence}%
+                    {hasAssessedConfidence ? `${confidenceValue}%` : "Not assessed"}
                   </span>
                 </div>
               </div>

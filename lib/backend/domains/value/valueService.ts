@@ -1,5 +1,5 @@
 /**
- * APEX ONE — Value Intelligence Domain Service & Evidence Engine
+ * CORTEX — Value Intelligence Domain Service & Evidence Engine
  *
  * Computes live, source-backed value metrics from tenant data entities.
  * Strictly adheres to: Source -> Calculation -> Result -> Provenance -> Decision State.
@@ -157,41 +157,31 @@ export class ValueService {
     };
 
     const revenueSignals = signals.filter((s) => s.category === "revenue" && s.status === "active");
-    const unindexedContracts = contracts.filter((c) => !c.volatilityIndexationClause && c.status === "active");
-    const signalLeakage = revenueSignals.reduce((sum, s) => sum + s.estimatedFinancialImpact, 0);
-    const contractLeakageRisk = unindexedContracts.reduce(
-      (sum, c) => sum + Math.round(c.contractValue * 0.12),
-      0
-    );
-    const totalLeakage = signalLeakage + contractLeakageRisk;
+    // Only aggregate financial impact explicitly recorded on active revenue signals.
+    // A missing indexation clause is a qualitative contract risk, not evidence of a
+    // quantified 12% loss. Do not convert it into monetary leakage without a
+    // tenant-approved methodology and supporting source data.
+    const totalLeakage = revenueSignals.reduce((sum, signal) => sum + signal.estimatedFinancialImpact, 0);
 
-    const leakageSources = [
-      ...revenueSignals.map((s) => ({
-        type: "Signal",
-        id: s.id,
-        name: s.title,
-        amount: s.estimatedFinancialImpact,
-      })),
-      ...unindexedContracts.map((c) => ({
-        type: "Contract",
-        id: c.id,
-        name: `Unindexed Risk: ${c.title}`,
-        amount: Math.round(c.contractValue * 0.12),
-      })),
-    ];
+    const leakageSources = revenueSignals.map((signal) => ({
+      type: "Signal",
+      id: signal.id,
+      name: signal.title,
+      amount: signal.estimatedFinancialImpact,
+    }));
 
     const revenueLeakageTotal: ValueEvidenceChain = {
       metricId: "revenue_leakage_total",
       label: "Revenue Leakage Total",
       value: totalLeakage,
       calculationMethod:
-        "SUM(Signal.estimatedImpact WHERE category='revenue') + SUM(Contract.value * 0.12 WHERE !volatilityIndexationClause)",
+        "SUM(Signal.estimatedFinancialImpact WHERE category='revenue' AND status='active')",
       sourceRecords: leakageSources,
       evidence:
         leakageSources.length > 0
-          ? `Derived from ${revenueSignals.length} active telemetry revenue signals and ${unindexedContracts.length} unindexed contract exposure records.`
-          : "Zero active revenue leakage source records were found across telemetry feeds.",
-      confidence: leakageSources.length > 0 ? 91 : 100,
+          ? `Aggregated the recorded estimated financial impact from ${revenueSignals.length} active revenue signals. Contract clause exposure is excluded until a tenant-approved quantification method exists.`
+          : "No active revenue signals with recorded financial impact were found. This is not evidence that revenue leakage is zero.",
+      confidence: 0,
       timestamp: now,
     };
 
@@ -201,7 +191,7 @@ export class ValueService {
       metricId: "unused_capacity_value",
       label: "Unused Capacity Waste",
       value: totalCapacityWaste,
-      calculationMethod: "SUM(Signal.estimatedImpact WHERE category='capacity' AND status='active')",
+      calculationMethod: "SUM(Signal.estimatedFinancialImpact WHERE category='capacity' AND status='active')",
       sourceRecords: capacitySignals.map((s) => ({
         type: "Signal",
         id: s.id,
@@ -212,7 +202,7 @@ export class ValueService {
         capacitySignals.length > 0
           ? `Computed from ${capacitySignals.length} active infrastructure and operational underutilization source records.`
           : "No capacity underutilization source records were detected.",
-      confidence: capacitySignals.length > 0 ? 88 : 100,
+      confidence: 0,
       timestamp: now,
     };
 
@@ -235,7 +225,7 @@ export class ValueService {
         captured.length > 0
           ? `Aggregated ${captured.length} recorded value-capture ledger entries. Record presence alone does not imply verification or certification.`
           : "No value-capture ledger entries are currently recorded for this organization.",
-      confidence: 100,
+      confidence: 0,
       timestamp: now,
     };
 
@@ -254,7 +244,7 @@ export class ValueService {
         canonicallyVerifiedCaptured.length > 0
           ? `${canonicallyVerifiedCaptured.length} of ${captured.length} recorded value captures currently have a canonical verified decision backed by provenance.`
           : "No recorded value captures currently have canonical verified state.",
-      confidence: 100,
+      confidence: 0,
       timestamp: now,
     };
 
@@ -273,7 +263,7 @@ export class ValueService {
         currentlyCertifiedCaptured.length > 0
           ? `${currentlyCertifiedCaptured.length} of ${captured.length} recorded value captures currently have canonical certification based on the current verified decision.`
           : "No recorded value captures currently have active canonical certification.",
-      confidence: 100,
+      confidence: 0,
       timestamp: now,
     };
 
@@ -412,7 +402,8 @@ export class ValueService {
     const clearedCosts = txnTotals.totalCosts ?? 0;
 
     const baseRevenue = arrSum > 0 ? arrSum : contractSum > 0 ? contractSum : clearedRevenue;
-    const baseCosts = clearedCosts > 0 ? clearedCosts : Math.round(baseRevenue * 0.65);
+    const hasRecordedCostBaseline = clearedCosts > 0;
+    const baseCosts = clearedCosts;
 
     if (baseRevenue === 0) {
       return {
@@ -424,7 +415,7 @@ export class ValueService {
         currency,
         currencySymbol,
         calculationEvidence: "Organization baseline is currently 0. Add customers or contracts to compute live financial simulations.",
-        confidence: 100,
+        confidence: 0,
         parametersEvaluated: params,
       };
     }
@@ -435,10 +426,12 @@ export class ValueService {
     const conversionFactor = 1 + params.salesConversionPct / 200;
 
     const calculatedRevenue = Math.round(baseRevenue * pricingFactor * retentionFactor * conversionFactor * mult);
-    const calculatedCosts = Math.round(baseCosts * (params.headcountPct / 100) * (1 - params.automationPct / 400));
+    const calculatedCosts = hasRecordedCostBaseline
+      ? Math.round(baseCosts * (params.headcountPct / 100) * (1 - params.automationPct / 400))
+      : 0;
     const projectedGain = calculatedRevenue - calculatedCosts - (baseRevenue - baseCosts);
 
-    const evidence = `Computed simulation using tenant dynamic baseline of ${customers.length} customer accounts (ARR: ${currencySymbol}${baseRevenue.toLocaleString()}) and operating baseline (Costs: ${currencySymbol}${baseCosts.toLocaleString()}). This is a modeled scenario, not a verification or certification decision.`;
+    const evidence = `Modeled from tenant records: ${customers.length} customer accounts and recorded revenue baseline ${currencySymbol}${baseRevenue.toLocaleString()}.${hasRecordedCostBaseline ? ` Recorded cost baseline: ${currencySymbol}${baseCosts.toLocaleString()}.` : " No cleared cost transactions exist; cost projections are omitted rather than estimated from an assumed cost ratio."} Scenario parameters are assumptions supplied to the simulation, not observed outcomes or verification/certification decisions.`;
 
     return {
       baselineRevenue: baseRevenue,
@@ -449,7 +442,7 @@ export class ValueService {
       currency,
       currencySymbol,
       calculationEvidence: evidence,
-      confidence: 92,
+      confidence: 0,
       parametersEvaluated: params,
     };
   }

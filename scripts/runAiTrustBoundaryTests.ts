@@ -165,6 +165,16 @@ async function main() {
   for (let index = 1; index <= 30; index += 1) {
     await store.customersRepo.create(customer(index), fullCtx);
   }
+  await store.transactionsRepo.create({
+    id: "txn-stage8-usd", customerId: "customer-stage8-30", type: "revenue", amount: 12500,
+    currency: "USD", status: "cleared", reference: "INV-USD-001", category: "subscription",
+    date: "2026-10-01", createdAt: now(),
+  }, fullCtx);
+  await store.transactionsRepo.create({
+    id: "txn-stage8-ngn", customerId: "customer-stage8-29", type: "revenue", amount: 9000000,
+    currency: "NGN", status: "pending", reference: "INV-NGN-001", category: "subscription",
+    date: "2026-10-02", createdAt: now(),
+  }, fullCtx);
   await store.memoryRepo.create(memory("mem-stage8-verified", false), fullCtx);
   await store.memoryRepo.create(memory("mem-stage8-legacy-true", true), fullCtx);
   await store.memoryRepo.create(memory("mem-stage8-other", false), fullCtx);
@@ -212,6 +222,74 @@ async function main() {
     const plan = planAuthorizedAiRetrieval({ prompt: "Show customer health", mode: "Customers" }, aiOnlyCtx);
     assert(plan.calls.length === 0, "Unauthorized customer tool was executable");
     assert(plan.deniedTools.some((item) => item.tool === "get_tenant_customers" && item.requiredPermission === "customer:read"), "Missing customer denial trace");
+  });
+
+  await check("4. Transaction retrieval is permission-gated, bounded and provenance-backed", async () => {
+    const plan = planAuthorizedAiRetrieval({
+      prompt: "Show customer payment transactions",
+      mode: "Revenue",
+    }, fullCtx);
+    assert(plan.requestedTools.includes("get_tenant_transactions"), "Transaction tool not selected");
+    const execution = await executeAuthorizedAiRetrieval(store, plan, fullCtx);
+    const result = execution.results.find((item) => item.tool === "get_tenant_transactions");
+    assert(result && result.records.length === 2, "Transaction records were not retrieved");
+    assert(result.records.some((record) => record.fields.currency === "USD"), "USD currency missing");
+    assert(result.records.some((record) => record.fields.currency === "NGN"), "NGN currency missing");
+    assert(result.records.every((record) => record.fields.currency === "USD" || record.fields.currency === "NGN"), "Transaction currency was not preserved");
+    assert(result.records[0].provenance.entityType === "Transaction", "Transaction provenance missing");
+
+    const restrictedPlan = planAuthorizedAiRetrieval({
+      prompt: "Show customer payment transactions",
+      mode: "Revenue",
+    }, aiOnlyCtx);
+    assert(!restrictedPlan.calls.some((call) => call.tool === "get_tenant_transactions"), "Transaction access bypassed financial:read");
+    assert(restrictedPlan.deniedTools.some((item) => item.tool === "get_tenant_transactions"), "Denied transaction access was not traced");
+  });
+
+  await check("4b. Revenue intelligence assembles customer-linked transaction evidence by canonical ID", async () => {
+    const response = await new AiOrchestratorService(store).processIntelligencePrompt({
+      prompt: "Show Stage 8 Customer 30 payment transactions and revenue exposure",
+      mode: "Revenue",
+    }, fullCtx);
+    const relationship = response.facts.find((fact) => fact.id === "customer-relationship:customer-stage8-30");
+    assert(response.retrieval.executedTools.includes("get_tenant_customers"), "Customer retrieval was not executed");
+    assert(response.retrieval.executedTools.includes("get_tenant_transactions"), "Transaction retrieval was not executed");
+    assert(relationship, "Customer-to-transaction relationship fact missing");
+    assert(relationship.displayValue.includes("1 transaction"), "Linked transaction count missing");
+    assert(relationship.provenance.some((source) => source.entityType === "Customer"), "Customer provenance missing from relationship");
+    assert(relationship.provenance.some((source) => source.entityType === "Transaction"), "Transaction provenance missing from relationship");
+    assert(relationship.displayValue.includes("USD 12,500"), "Related USD transaction evidence missing");
+    assert(!response.facts.some((fact) => fact.id === "customer-relationship:customer-stage8-29"), "Unrelated customer's transaction relationship leaked");
+  });
+
+  await check("4c. Linked financial retrieval remains tenant-scoped and permission-gated", async () => {
+    const restricted = context(["ai:execute", "org:read", "customer:read"]);
+    const response = await new AiOrchestratorService(store).processIntelligencePrompt({
+      prompt: "Show Stage 8 Customer 30 payment transactions and revenue exposure",
+      mode: "Revenue",
+    }, restricted);
+    assert(response.retrieval.deniedTools.some((entry) => entry.tool === "get_tenant_transactions"), "Financial permission denial missing");
+    assert(!response.facts.some((fact) => fact.id.startsWith("customer-relationship:")), "Linked financial fact leaked without permission");
+    assert(!response.facts.some((fact) => fact.id.startsWith("get_tenant_transactions:")), "Transaction facts leaked without permission");
+  });
+
+  await check("4d. Linked customer transaction scope keeps other currencies separate", async () => {
+    const response = await new AiOrchestratorService(store).processIntelligencePrompt({
+      prompt: "Show Stage 8 Customer 29 payment transactions",
+      mode: "Revenue",
+    }, fullCtx);
+    const relationship = response.facts.find((fact) => fact.id === "customer-relationship:customer-stage8-29");
+    assert(relationship && relationship.displayValue.includes("NGN 9,000,000"), "Customer 29 NGN relationship not linked");
+    assert(!relationship.displayValue.includes("USD"), "Unrelated USD amount leaked into customer 29 relationship");
+  });
+
+  await check("4a. Legacy claim confidence remains unassessed rather than inferred from retrieval completeness", async () => {
+    const response = await new AiOrchestratorService(store).processIntelligencePrompt({
+      prompt: "Show customer health",
+      mode: "Customers",
+    }, fullCtx);
+    assert(response.claims.length > 0, "Expected compatibility claims for retrieved customer facts");
+    assert(response.claims.every((claim) => claim.confidence === 0), "Retrieval completeness must not be represented as calibrated confidence");
   });
 
   await check("4. Tool executor independently rejects a tampered unauthorized plan", async () => {

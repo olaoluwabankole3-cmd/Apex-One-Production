@@ -186,7 +186,7 @@ export default function ScenarioIntelligencePage() {
               <Sliders className="text-gold" size={16} />
               <div>
                 <p className="text-[11px] font-mono font-bold text-gold uppercase tracking-wider">MATHEMATICAL SCENARIO SANDBOX</p>
-                <p className="text-[12px] text-ivory/60">Adjust sliders to model hypothetical organizational changes. Baseline figures are dynamic mathematical models initialized from enterprise telemetry.</p>
+                <p className="text-[12px] text-ivory/60">Adjust sliders to model hypothetical organizational changes. This sandbox uses fixed illustrative baseline figures. They are synthetic examples, not connected enterprise telemetry or actual company results.</p>
               </div>
             </div>
             <span className="text-[10px] font-mono text-ivory/40 uppercase tracking-wider shrink-0 bg-white/[0.03] px-2.5 py-1 rounded border border-white/[0.06]">
@@ -510,7 +510,7 @@ export default function ScenarioIntelligencePage() {
             <div className="md:col-span-4 p-4.5 bg-white/[0.01] border border-white/[0.04] rounded-xl text-left space-y-3 shrink-0">
               <div>
                 <span className="text-[10px] font-mono text-gold font-bold uppercase block">Scenario Confidence</span>
-                <span className="text-[20px] font-mono font-black text-gold block mt-1">78% Confidence</span>
+                <span className="text-[20px] font-mono font-black text-gold block mt-1">Not calibrated</span>
               </div>
               <div className="pt-2 border-t border-white/[0.03] text-[11px] text-ivory/50 flex gap-1.5 items-start">
                 <AlertTriangle size={13} className="text-gold shrink-0 mt-0.5" />

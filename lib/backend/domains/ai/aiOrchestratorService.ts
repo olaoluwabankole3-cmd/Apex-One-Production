@@ -177,6 +177,51 @@ function buildDeterministicFacts(execution: AiRetrievalExecution, currency: stri
       });
     }
 
+    if (result.tool === "get_tenant_transactions") {
+      const byCurrency = new Map<string, { amount: number; count: number; clearedRevenue: number; pendingOrDisputed: number }>();
+      for (const record of result.records) {
+        const currencyCode = typeof record.fields.currency === "string" && record.fields.currency.trim()
+          ? record.fields.currency.trim().toUpperCase()
+          : "UNKNOWN_CURRENCY";
+        const current = byCurrency.get(currencyCode) || { amount: 0, count: 0, clearedRevenue: 0, pendingOrDisputed: 0 };
+        const amount = numericField(record, "amount");
+        current.amount += amount;
+        current.count += 1;
+        if (record.fields.type === "revenue" && record.fields.status === "cleared") current.clearedRevenue += amount;
+        if (record.fields.status === "pending" || record.fields.status === "disputed") current.pendingOrDisputed += amount;
+        byCurrency.set(currencyCode, current);
+      }
+      for (const [currencyCode, totals] of byCurrency) {
+        facts.push({
+          id: `${result.tool}:gross-amount:${currencyCode}`,
+          label: `Retrieved transaction amount (${currencyCode})`,
+          value: totals.amount,
+          displayValue: `${currencyCode} ${totals.amount.toLocaleString()}`,
+          calculation: `Gross sum of amount across ${totals.count} bounded retrieved transaction records denominated in ${currencyCode}; this is not net revenue and is not a whole-tenant total unless the retrieval scope is complete.`,
+          scope,
+          provenance,
+        });
+        facts.push({
+          id: `${result.tool}:cleared-revenue:${currencyCode}`,
+          label: `Cleared revenue in retrieved transactions (${currencyCode})`,
+          value: totals.clearedRevenue,
+          displayValue: `${currencyCode} ${totals.clearedRevenue.toLocaleString()}`,
+          calculation: `Sum of amount only for retrieved transaction records with type revenue and status cleared, in ${currencyCode}; bounded by retrieval scope.`,
+          scope,
+          provenance,
+        });
+        facts.push({
+          id: `${result.tool}:pending-disputed:${currencyCode}`,
+          label: `Pending or disputed transaction amount (${currencyCode})`,
+          value: totals.pendingOrDisputed,
+          displayValue: `${currencyCode} ${totals.pendingOrDisputed.toLocaleString()}`,
+          calculation: `Sum of amount only for retrieved transaction records with status pending or disputed, in ${currencyCode}; not an assertion of confirmed loss.`,
+          scope,
+          provenance,
+        });
+      }
+    }
+
     if (result.tool === "get_operational_signals") {
       const impact = result.records.reduce((sum, record) => sum + numericField(record, "estimatedFinancialImpact"), 0);
       facts.push({
@@ -205,6 +250,62 @@ function buildDeterministicFacts(execution: AiRetrievalExecution, currency: stri
     }
   }
 
+  // Assemble explicit cross-domain relationships from canonical customer IDs.
+  // This is a bounded join over the records already authorized and retrieved above;
+  // it does not broaden repository access or infer relationships from names.
+  const customerResult = execution.results.find((result) => result.tool === "get_tenant_customers");
+  const contractResult = execution.results.find((result) => result.tool === "get_tenant_contracts");
+  const transactionResult = execution.results.find((result) => result.tool === "get_tenant_transactions");
+
+  if (customerResult && (contractResult || transactionResult)) {
+    for (const customer of customerResult.records) {
+      const linkedContracts = (contractResult?.records || []).filter(
+        (record) => record.fields.customerId === customer.entityId
+      );
+      const linkedTransactions = (transactionResult?.records || []).filter(
+        (record) => record.fields.customerId === customer.entityId
+      );
+      if (linkedContracts.length === 0 && linkedTransactions.length === 0) continue;
+
+      const transactionTotals = new Map<string, number>();
+      for (const transaction of linkedTransactions) {
+        const code = typeof transaction.fields.currency === "string" && transaction.fields.currency.trim()
+          ? transaction.fields.currency.trim().toUpperCase()
+          : "UNKNOWN_CURRENCY";
+        transactionTotals.set(code, (transactionTotals.get(code) || 0) + numericField(transaction, "amount"));
+      }
+      const amounts = Array.from(transactionTotals.entries())
+        .map(([code, amount]) => `${code} ${amount.toLocaleString()}`)
+        .join("; ");
+      const relatedProvenance = [
+        customer.provenance,
+        ...linkedContracts.map((record) => record.provenance),
+        ...linkedTransactions.map((record) => record.provenance),
+      ];
+
+      facts.push({
+        id: `customer-relationship:${customer.entityId}`,
+        label: `Retrieved cross-functional records linked to ${String(customer.fields.name || customer.entityId)}`,
+        value: `${linkedContracts.length} contracts; ${linkedTransactions.length} transactions`,
+        displayValue: [
+          linkedContracts.length ? `${linkedContracts.length} contract(s)` : null,
+          linkedTransactions.length ? `${linkedTransactions.length} transaction(s)` : null,
+          amounts ? `transaction amounts: ${amounts}` : null,
+        ].filter(Boolean).join(" • "),
+        calculation: "Relationship established only by exact customerId equality across bounded, tenant-authorized customer, contract and transaction records. Transaction amounts remain separated by currency. This is not a complete customer history unless every contributing retrieval scope is complete.",
+        scope: {
+          tool: "get_tenant_customers",
+          totalMatched: customerResult.totalMatched,
+          recordsRetrieved: 1 + linkedContracts.length + linkedTransactions.length,
+          complete: customerResult.scopeComplete
+            && (contractResult?.scopeComplete ?? true)
+            && (transactionResult?.scopeComplete ?? true),
+        },
+        provenance: relatedProvenance,
+      });
+    }
+  }
+
   return facts;
 }
 
@@ -213,7 +314,9 @@ function compatibilityClaims(facts: AiDeterministicFact[]): AiEvidenceClaim[] {
     claim: `${fact.label}: ${fact.displayValue}`,
     source: fact.scope.tool,
     evidence: fact.calculation,
-    confidence: fact.scope.complete ? 100 : 90,
+    // Legacy compatibility field only: no calibrated confidence model exists.
+    // Zero is the established unassessed sentinel; completeness is not confidence.
+    confidence: 0,
     verificationState: "unverified",
     certificationState: "uncertified",
   }));
