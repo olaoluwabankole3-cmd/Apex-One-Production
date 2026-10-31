@@ -1,4 +1,4 @@
-name: APEX ONE — Stage 10 Production Assurance
+name: CORTEX — Stage 10 Production Assurance
 
 on:
   pull_request:
