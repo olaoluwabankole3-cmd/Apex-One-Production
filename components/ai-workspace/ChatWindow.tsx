@@ -38,11 +38,11 @@ export default function ChatWindow({ messages, input, thinking, onInputChange, o
             >
               <AiOrb size="lg" pulsing />
               <h2 className="mt-5 font-display text-[22px] font-bold tracking-tight text-ivory">
-                How can I help you run APEX ONE today?
+                How can I help you run CORTEX today?
               </h2>
               <p className="mx-auto mt-2 max-w-md text-[13.5px] text-ivory/45">
                 Ask about performance, generate reports, or surface accounts that need attention —
-                Apex Sync Intelligence has live context across all four business units.
+                CORTEX uses only the information connected and authorized for your organization.
               </p>
             </motion.div>
             <motion.div
@@ -74,7 +74,7 @@ export default function ChatWindow({ messages, input, thinking, onInputChange, o
       <div className="border-t border-white/[0.06] p-4 lg:p-5">
         <ChatInput value={input} onChange={onInputChange} onSend={() => onSend(input)} disabled={thinking} />
         <p className="mt-2 px-1 text-[11px] text-ivory/30">
-          Apex Sync Intelligence uses simulated data in this prototype. Responses are illustrative.
+          Responses must be checked against the cited records and their evidence status.
         </p>
       </div>
     </div>
