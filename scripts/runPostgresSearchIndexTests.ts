@@ -149,6 +149,7 @@ function document(
       fileSizeBytes: 1024,
       mimeType: "application/pdf",
       storageUri: `s3://search-tests/${ctx.organizationId}/${id}.pdf`,
+      extractionPolicyVersion: "source-grounded-v1",
     },
     aiSummary: options.summary,
     extractedFields: options.extractedValue
@@ -379,6 +380,27 @@ async function main(): Promise<void> {
     if (!ids.includes(durableId) || ids.includes("doc-search-service-decoy")) {
       throw new Error("DocumentService did not use the durable search authority to constrain PostgreSQL documents");
     }
+  });
+
+  await check("13a. Unassessed legacy claims are not searchable or readable as content evidence", async () => {
+    const id = "doc-search-unsafe-legacy";
+    const doc = document(id, ctxA, { name: "archival safe document.pdf", summary: "inventedlegacyclause", extractedValue: "inventedlegacyamount" });
+    delete doc.metadata.extractionPolicyVersion;
+    await store.documentsRepo.create(doc, ctxA);
+    const index = new PostgresDocumentSearchIndex(databaseUrl);
+    if ((await index.search(ctxA.organizationId, "inventedlegacyclause")).includes(id)
+        || (await index.search(ctxA.organizationId, "inventedlegacyamount")).includes(id)) {
+      throw new Error("Untrusted historical extraction contaminated PostgreSQL search");
+    }
+    if (!(await index.search(ctxA.organizationId, "archival")).includes(id)) {
+      throw new Error("Historical document metadata became unsearchable");
+    }
+    const exposed = await new DocumentService(store, undefined, index).getDocumentById(id, ctxA);
+    if (exposed.extractedFields.length || exposed.aiSummary?.includes("inventedlegacy")) {
+      throw new Error("Untrusted historical claims escaped the document API");
+    }
+    const migration = await inspect(`SELECT count(*) AS count FROM apex_schema_migrations WHERE version = '003_cortex_source_grounded_search'`);
+    if (migration.rows[0]?.count !== "1") throw new Error("New scoped search migration not recorded");
   });
 
   await check("13. Cross-tenant index/remove attempts cannot reveal or mutate another tenant's search visibility", async () => {

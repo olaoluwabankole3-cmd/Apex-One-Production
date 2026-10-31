@@ -41,6 +41,8 @@ jobs:
         run: bun run test:product-integrity
       - name: Reject fabricated document extraction evidence
         run: bun run test:document-truthfulness
+      - name: Quarantine unassessed historical document extraction
+        run: bun run test:document-quarantine
       - name: Run authentication experience regression gate
         run: bun run test:auth-experience
       - name: Run Phase 3 infrastructure connection contract gate

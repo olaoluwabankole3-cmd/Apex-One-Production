@@ -67,7 +67,8 @@ export class InMemoryDocumentIndexAdapter implements IDocumentSearchIndex {
   }
 }
 
-const POSTGRES_DOCUMENT_SEARCH_TEXT_SQL = `
+// Preserve the original deployed search index migration for compatibility.
+const LEGACY_SEARCH_TEXT_SQL = `
   COALESCE(record->>'name', '') || ' ' ||
   COALESCE(record->>'category', '') || ' ' ||
   COALESCE(record->>'tags', '') || ' ' ||
@@ -75,10 +76,27 @@ const POSTGRES_DOCUMENT_SEARCH_TEXT_SQL = `
   COALESCE(record->>'extractedFields', '')
 `;
 
-const POSTGRES_DOCUMENT_SEARCH_VECTOR_SQL = `to_tsvector('simple'::regconfig, ${POSTGRES_DOCUMENT_SEARCH_TEXT_SQL})`;
-
 export const STAGE4_POSTGRES_SEARCH_MIGRATION_002 = `
 CREATE INDEX IF NOT EXISTS apex_domain_records_document_search_gin_idx
+  ON apex_domain_records USING GIN (to_tsvector('simple'::regconfig, ${LEGACY_SEARCH_TEXT_SQL}))
+  WHERE entity_type = 'Document' AND record->>'status' = 'indexed';
+`;
+
+// Unmarked legacy summaries and fields cannot supply search matches.
+const POSTGRES_DOCUMENT_SEARCH_TEXT_SQL = `
+  COALESCE(record->>'name', '') || ' ' ||
+  COALESCE(record->>'category', '') || ' ' ||
+  COALESCE(record->>'tags', '') || ' ' ||
+  CASE WHEN record->'metadata'->>'extractionPolicyVersion' = 'source-grounded-v1'
+    THEN COALESCE(record->>'aiSummary', '') || ' ' || COALESCE(record->>'extractedFields', '')
+    ELSE ''
+  END
+`;
+
+const POSTGRES_DOCUMENT_SEARCH_VECTOR_SQL = `to_tsvector('simple'::regconfig, ${POSTGRES_DOCUMENT_SEARCH_TEXT_SQL})`;
+
+export const CORTEX_POSTGRES_SEARCH_MIGRATION_003 = `
+CREATE INDEX IF NOT EXISTS cortex_document_source_grounded_search_gin_idx
   ON apex_domain_records USING GIN (${POSTGRES_DOCUMENT_SEARCH_VECTOR_SQL})
   WHERE entity_type = 'Document' AND record->>'status' = 'indexed';
 `;
@@ -112,6 +130,10 @@ export class PostgresDocumentSearchIndex implements IDocumentSearchIndex {
         await connection.query(STAGE4_POSTGRES_SEARCH_MIGRATION_002);
         await connection.query(
           `INSERT INTO apex_schema_migrations(version) VALUES ('002_stage4_document_search') ON CONFLICT (version) DO NOTHING`
+        );
+        await connection.query(CORTEX_POSTGRES_SEARCH_MIGRATION_003);
+        await connection.query(
+          `INSERT INTO apex_schema_migrations(version) VALUES ('003_cortex_source_grounded_search') ON CONFLICT (version) DO NOTHING`
         );
         await connection.query("COMMIT");
       } catch (error) {
