@@ -6,10 +6,10 @@ This runbook accompanies `.github/workflows/cortex-staging-image-candidate.yml`.
 
 - CORTEX staging is running on a single small EC2 application instance behind a Cloudflare Tunnel. Its container binds to loopback port 3000.
 - RDS PostgreSQL, ElastiCache Serverless Valkey and encrypted S3 are provisioned in AWS. After the RDS-managed credential rotated, restarting the staging application service restored `/api/v1/health/ready` to HTTP 200.
-- The **existing** staging image was built from an earlier September source revision and remains the confirmed working rollback candidate.
+- September ECR staging images remain historical rollback *candidates*; a prior digest must be verified and attested before it is approved for rollback.
 - There is no confirmed AWS CodeBuild project, CodePipeline, or GitHub-to-AWS OIDC role; don't assume a release controller exists. A private ECR repository does exist.
 - The EC2 host has limited memory and disk space: **do not build a fresh Next.js image on the live EC2 server**. A separate builder avoids exhausting staging resources.
-- No released October CORTEX image has been pushed to ECR as of this audit.
+- An October CORTEX staging image was pushed to ECR and subsequently deployed on 31 October (see verified status below).
 
 These observations may change. Recheck live conditions immediately before a deployment.
 
@@ -64,10 +64,29 @@ Before changing the running application:
 
 **Staging GO/NO-GO:** See `docs/STAGING-READINESS.md`. A healthy container alone is not release approval. Historical document inventories and UAT still require tenant-by-tenant evidence.
 
-## Current release status
+## Current release status (verified 31 October 2026)
 
-- Successful source commit candidate: `299dc8614ba2b319d333a9e114e61dce7d9d4b68` at the time of this audit.
-- Staging service: restored and healthy on its **older** image.
-- Latest CORTEX candidate image: **not yet built or published to AWS ECR**.
-- Staging deployment: **not yet promoted**; no new source code was deployed.
-- AWS staging builder/controlled promotion path: **operator provisioning required**. No additional billable AWS resources or IAM trusts were created in this audit.
+- Deployed GitHub commit: `fd1955dcd4e4634abf26e7e49bb79f4d3c4c4cf5`.
+- ECR immutable digest: `sha256:69dc843d3b8c46b83dfe722f4f3ff96013ac30d291100ec241accb08ffe18fad`.
+- Release ID: `cortex-staging-fd1955dcd4e4`. The live readiness report matches all three identifiers.
+- Liveness, startup and readiness returned HTTP 200 from the staging host, and readiness reported no unavailable authorities or configuration issues.
+- Exact-source Production CI and the staging image candidate workflow passed for the deployed commit. Stage 9/10/11 gates were green on earlier revisions; do not treat those as exact-source evidence for this one.
+- The staging promotion was successful at the single-container level, **not** proof of a two-replica production rollout, UAT, release-controller attestation or a rehearsed rollback.
+- Credential rotation resilience still needs engineering: a prior RDS secret rotation required restarting the staging application to refresh its credentials.
+- The legacy extracted document remains quarantined and requires source-backed review; production launch remains **NO-GO** without UAT and sign-off.
+
+## Repeatable staging verification
+
+The repo provides a fail-closed, read-only verifier. Run it from an approved operator environment able to reach the staging endpoint. Obtain expected identifiers independently from the approved GitHub commit and ECR manifest; do **not** trust the values printed by the readiness endpoint as your expectations.
+
+```bash
+CORTEX_STAGING_URL=http://127.0.0.1:3000 \
+CORTEX_EXPECTED_COMMIT_SHA=<approved-40-character-main-SHA> \
+CORTEX_EXPECTED_IMAGE_DIGEST=sha256:<64-character-ECR-hex> \
+CORTEX_EXPECTED_RELEASE_ID=<approved-release-id> \
+bun run staging:verify
+```
+
+It checks the three health routes, all six durable authorities, production-mode fail-closed configuration, immutable commit/image identity and staging-only deployment environment. Run regression tests locally with `bun run test:staging-http`; the same tests also run in Production CI.
+
+This verification does not reprocess historical data, authorize deployment, reset passwords, perform UAT, or attest to rollback safety. New source changes require fresh CI and a separate controlled staging promotion.
