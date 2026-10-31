@@ -1,0 +1,82 @@
+name: CORTEX — Staging Image Candidate
+
+# Build an immutable, source-bound *artifact*, not an AWS deployment.
+# Run only after the exact-main Production CI workflow succeeds.
+on:
+  workflow_run:
+    workflows:
+      - CORTEX — Production CI
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cortex-staging-image-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  build-candidate:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout the exact successful source commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify exact main and source identity
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+          REMOTE_MAIN="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          test "$REMOTE_MAIN" = "$HEAD_SHA"
+          echo "Candidate source: $HEAD_SHA"
+
+      - name: Build isolated CORTEX staging candidate
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          RELEASE_ID="cortex-staging-${HEAD_SHA:0:12}"
+          docker build --pull \
+            --build-arg "APEX_RELEASE_ID=$RELEASE_ID" \
+            --build-arg "APEX_COMMIT_SHA=$HEAD_SHA" \
+            --tag "cortex-staging-candidate:$HEAD_SHA" .
+          ACTUAL_REV="$(docker image inspect "cortex-staging-candidate:$HEAD_SHA" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+          test "$ACTUAL_REV" = "$HEAD_SHA"
+
+      - name: Export candidate and content checksum
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          ARCHIVE="cortex-candidate-$HEAD_SHA.tar.gz"
+          docker save "cortex-staging-candidate:$HEAD_SHA" | gzip -1 > "output/$ARCHIVE"
+          (cd output && sha256sum "$ARCHIVE" > "$ARCHIVE.sha256")
+          printf '{"sourceCommit":"%s","releaseId":"cortex-staging-%s","artifactType":"docker-save-gzip","awsPromoted":false}\n' \
+            "$HEAD_SHA" "${HEAD_SHA:0:12}" > output/candidate.json
+          ls -lh output/
+
+      - name: Publish short-lived candidate artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cortex-candidate-${{ github.event.workflow_run.head_sha }}
+          path: output/
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
