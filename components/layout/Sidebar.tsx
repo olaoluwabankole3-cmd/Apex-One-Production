@@ -30,14 +30,14 @@ export default function Sidebar() {
           A1
         </div>
         <div className="leading-tight">
-          <p className="font-display text-[17px] font-bold tracking-tight text-ivory">APEX ONE</p>
+          <p className="font-display text-[17px] font-bold tracking-tight text-ivory">CORTEX</p>
           <p className="mt-0.5 text-[8.5px] uppercase tracking-[0.12em] text-ivory/35">
             Executive Intelligence OS
           </p>
         </div>
       </div>
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto pr-1" aria-label="APEX ONE navigation">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto pr-1" aria-label="CORTEX navigation">
         {visiblePrimary.map((item) => {
           const active = isNavigationItemActive(pathname, item.href);
           const Icon = item.icon;
