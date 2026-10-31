@@ -31,6 +31,28 @@ const productionUiFiles = [
   ...collectSourceFiles("lib/data/repositories"),
 ];
 
+// Product identity is a release contract, not a cosmetic string.
+const legacyBrandTerms = ["APEX ONE", "Apex One", "Apex Sync", "APEX SYNC"];
+for (const file of productionUiFiles) {
+  const source = readFileSync(file, "utf8");
+  for (const legacy of legacyBrandTerms) {
+    assert(!source.includes(legacy), `${relative(root, file)} still exposes legacy product identity: ${legacy}`);
+  }
+}
+
+for (const path of [
+  "lib/organizationConfig.ts",
+  "lib/backend/domains/ai/aiOrchestratorService.ts",
+  "metadata.json",
+  "README.md",
+]) {
+  const source = readFileSync(join(root, path), "utf8");
+  assert(source.includes("CORTEX"), `${path} does not identify the current CORTEX product`);
+  for (const legacy of legacyBrandTerms) {
+    assert(!source.includes(legacy), `${path} still identifies the retired brand: ${legacy}`);
+  }
+}
+
 const bannedProductionUiTerms = [
   "APEX CONNECT",
   "ApexConnectDashboard",
