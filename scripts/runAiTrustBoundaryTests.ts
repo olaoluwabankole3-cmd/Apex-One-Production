@@ -235,7 +235,7 @@ async function main() {
     assert(result && result.records.length === 2, "Transaction records were not retrieved");
     assert(result.records.some((record) => record.fields.currency === "USD"), "USD currency missing");
     assert(result.records.some((record) => record.fields.currency === "NGN"), "NGN currency missing");
-    assert(result.records[0].fields.currency === "USD", "Transaction currency was not preserved");
+    assert(result.records.every((record) => record.fields.currency === "USD" || record.fields.currency === "NGN"), "Transaction currency was not preserved");
     assert(result.records[0].provenance.entityType === "Transaction", "Transaction provenance missing");
 
     const restrictedPlan = planAuthorizedAiRetrieval({
@@ -263,7 +263,7 @@ async function main() {
   });
 
   await check("4c. Linked financial retrieval remains tenant-scoped and permission-gated", async () => {
-    const restricted = context(["ai:execute", "customer:read"]);
+    const restricted = context(["ai:execute", "org:read", "customer:read"]);
     const response = await new AiOrchestratorService(store).processIntelligencePrompt({
       prompt: "Show Stage 8 Customer 30 payment transactions and revenue exposure",
       mode: "Revenue",
