@@ -4,8 +4,7 @@
 
 :root {
   color-scheme: dark;
-  /* Platform-native stacks keep production builds independent of Google
-     Fonts availability. Existing Tailwind font families retain their names. */
+  /* Platform-native stacks keep builds independent of Google Fonts availability. */
   --font-syne: "Trebuchet MS", "Segoe UI", Arial, sans-serif;
   --font-dm-sans: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --font-jetbrains-mono: "Cascadia Code", Consolas, "Liberation Mono", monospace;

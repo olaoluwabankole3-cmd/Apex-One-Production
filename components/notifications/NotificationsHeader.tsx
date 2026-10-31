@@ -18,7 +18,7 @@ export default function NotificationsHeader({ activeDigestCount }: Notifications
       <div>
         <p className="text-[12px] font-mono font-bold uppercase tracking-[0.15em] text-gold/70 flex items-center gap-2">
           <Radar size={13} className="text-gold animate-pulse" />
-          APEX ONE — APEX SYNC
+          CORTEX — QORVEX
         </p>
         <h1 className="mt-2 font-display text-[28px] font-bold tracking-tight text-ivory lg:text-[34px] uppercase">
           INTELLIGENCE SIGNALS
@@ -30,7 +30,7 @@ export default function NotificationsHeader({ activeDigestCount }: Notifications
       <div className="flex items-center gap-2.5">
         <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald animate-pulse" />
         <span className="text-[11.5px] font-mono text-emerald/90 uppercase tracking-wider font-semibold">
-          Canary Radar System Live
+          Institutional signal monitoring
         </span>
       </div>
     </motion.div>

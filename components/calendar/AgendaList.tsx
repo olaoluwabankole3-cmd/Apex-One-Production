@@ -50,7 +50,7 @@ export default function AgendaList() {
         </h2>
         <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-ivory/45">
           Meetings, decision events, attendees, conflicts and follow-up tasks will appear
-          after a calendar or scheduling authority is connected. APEX ONE does not populate
+          after a calendar or scheduling authority is connected. CORTEX does not populate
           this screen with fictional meetings.
         </p>
         {failed && (

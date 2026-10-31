@@ -31,6 +31,28 @@ const productionUiFiles = [
   ...collectSourceFiles("lib/data/repositories"),
 ];
 
+// Product identity is a release contract, not a cosmetic string.
+const legacyBrandTerms = ["APEX ONE", "Apex One", "Apex Sync", "APEX SYNC"];
+for (const file of productionUiFiles) {
+  const source = readFileSync(file, "utf8");
+  for (const legacy of legacyBrandTerms) {
+    assert(!source.includes(legacy), `${relative(root, file)} still exposes legacy product identity: ${legacy}`);
+  }
+}
+
+for (const path of [
+  "lib/organizationConfig.ts",
+  "lib/backend/domains/ai/aiOrchestratorService.ts",
+  "metadata.json",
+  "README.md",
+]) {
+  const source = readFileSync(join(root, path), "utf8");
+  assert(source.includes("CORTEX"), `${path} does not identify the current CORTEX product`);
+  for (const legacy of legacyBrandTerms) {
+    assert(!source.includes(legacy), `${path} still identifies the retired brand: ${legacy}`);
+  }
+}
+
 const bannedProductionUiTerms = [
   "APEX CONNECT",
   "ApexConnectDashboard",
@@ -63,8 +85,8 @@ assert(
 const rootPage = readFileSync(join(root, "app/page.tsx"), "utf8");
 assert(!rootPage.includes("ApexConnectDashboard"), "Root page must never route to a client/wealth portal fallback.");
 assert(
-  rootPage.includes("apex-one-executive-command-center"),
-  "Root page must identify the APEX ONE Executive Command Center."
+  rootPage.includes("cortex-executive-command-center"),
+  "Root page must identify the CORTEX Executive Command Center."
 );
 
 const shell = readFileSync(join(root, "components/layout/AppShell.tsx"), "utf8");
@@ -99,12 +121,12 @@ for (const simulatedMarker of [
 }
 
 if (failures.length > 0) {
-  console.error("APEX ONE — PRODUCT INTEGRITY GATE FAILED");
+  console.error("CORTEX — PRODUCT INTEGRITY GATE FAILED");
   for (const failure of failures) console.error(`❌ ${failure}`);
   process.exit(1);
 }
 
-console.log("APEX ONE — PRODUCT INTEGRITY GATE PASSED");
+console.log("CORTEX — PRODUCT INTEGRITY GATE PASSED");
 console.log(`Checked ${productionUiFiles.length} production-facing source files.`);
 console.log("✅ Unauthenticated root fails closed");
 console.log("✅ No private-wealth/client-portal fallback");

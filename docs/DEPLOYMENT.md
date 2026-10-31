@@ -1,6 +1,6 @@
-# APEX ONE deployment and release operations
+# CORTEX deployment and release operations
 
-This document describes the deployment contract implemented by APEX ONE after the production-assurance and observability/deployment stages. The application is provider-neutral at the deployment-controller boundary: the repository defines the runtime, topology, health, provenance, promotion, and rollback invariants without requiring a specific orchestrator such as Kubernetes, ECS, or another platform.
+This document describes the deployment contract implemented by CORTEX after the production-assurance and observability/deployment stages. The application is provider-neutral at the deployment-controller boundary: the repository defines the runtime, topology, health, provenance, promotion, and rollback invariants without requiring a specific orchestrator such as Kubernetes, ECS, or another platform.
 
 The machine-readable topology authority is [`../deploy/production-topology.json`](../deploy/production-topology.json). If an operator guide and an executable validation disagree, the executable validation is authoritative until the documentation is corrected.
 
@@ -50,7 +50,7 @@ Do not treat `latest`, a branch tag, or another mutable registry reference as re
 
 ## Phase 3 environment connection gate
 
-Before an APEX ONE staging deployment is allowed to receive traffic, provision
+Before a CORTEX staging deployment is allowed to receive traffic, provision
 environment-isolated durable authorities and load their credentials from the
 deployment platform's protected secret store.
 
@@ -74,7 +74,7 @@ The pre-traffic staging sequence is:
 4. run the one-time `bun run infra:bootstrap-admin` operation;
 5. remove the bootstrap password and confirmation variables;
 6. run `bun run infra:verify`;
-7. start/restart the APEX ONE application;
+7. start/restart the CORTEX application;
 8. require `/api/v1/health/ready` to return `ready`; and
 9. proceed to staging UAT only after all checks pass.
 
@@ -98,7 +98,7 @@ A safe release procedure therefore treats schema migration as an explicit pre-tr
 
 ## Health model
 
-APEX ONE separates process health, static startup validity, and active serving readiness.
+CORTEX separates process health, static startup validity, and active serving readiness.
 
 ### Liveness — `/api/v1/health`
 
@@ -166,7 +166,7 @@ Before deployment control executes, the workflow:
 1. checks out `main`;
 2. resolves the exact local commit SHA;
 3. confirms it still equals remote `main`; and
-4. requires a successful **APEX ONE — Production CI** run whose `head_sha` is that exact commit.
+4. requires a successful **CORTEX — Production CI** run whose `head_sha` is that exact commit.
 
 A successful CI run for an older commit is not promotion evidence for a newer `main`.
 
@@ -233,7 +233,7 @@ A successful rollback receipt must confirm:
 - the rollback digest is now the active digest; and
 - `verifiedPreviousSuccessfulDigest` equals that exact rollback target.
 
-Without that previous-success attestation, APEX ONE rejects the rollback receipt. This prevents an arbitrary immutable digest from being treated as a safe rollback merely because its syntax is valid.
+Without that previous-success attestation, CORTEX rejects the rollback receipt. This prevents an arbitrary immutable digest from being treated as a safe rollback merely because its syntax is valid.
 
 After rollback, verify startup and readiness before restoring or expanding traffic.
 
@@ -301,4 +301,4 @@ For each deployment:
 
 The deployment-controller implementation and infrastructure provider are intentionally outside the application repository. This document therefore does not prescribe cluster namespaces, cloud account IDs, load balancer products, registry vendors, DNS providers, or secret-manager products.
 
-Those platform-specific choices must still satisfy the code-owned APEX ONE contract described here and in `deploy/production-topology.json`.
+Those platform-specific choices must still satisfy the code-owned CORTEX contract described here and in `deploy/production-topology.json`.

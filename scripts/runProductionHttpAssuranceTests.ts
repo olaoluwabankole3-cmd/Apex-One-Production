@@ -192,7 +192,7 @@ async function main(): Promise<void> {
 
   const failed = results.filter((result) => !result.passed);
   console.log("================================================================================");
-  console.log("APEX ONE — STAGE 10 HTTP / AI / CONCURRENCY ASSURANCE");
+  console.log("CORTEX — STAGE 10 HTTP / AI / CONCURRENCY ASSURANCE");
   console.log("================================================================================");
   for (const result of results) {
     console.log(`${result.passed ? "✅ [PASS]" : "❌ [FAIL]"} ${result.name}`);

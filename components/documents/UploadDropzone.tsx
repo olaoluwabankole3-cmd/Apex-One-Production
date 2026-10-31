@@ -47,7 +47,7 @@ export default function UploadDropzone({ onSimulateUpload, uploading }: UploadDr
         </p>
         <p className="mt-0.5 text-[11.5px] text-ivory/40">
           {uploading
-            ? "Apex Sync Intelligence is extracting fields and generating a summary."
+            ? "QORVEX is extracting fields and generating a summary."
             : "PDF, Word, or Excel — analyzed automatically on upload."}
         </p>
       </div>

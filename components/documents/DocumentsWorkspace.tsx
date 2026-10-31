@@ -49,7 +49,7 @@ export default function DocumentsWorkspace() {
     <div className="mx-auto w-full max-w-7xl space-y-6">
       <header>
         <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-gold/70">
-          APEX ONE · Knowledge Intake
+          CORTEX · Knowledge Intake
         </p>
         <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-ivory">
           Documents
@@ -67,7 +67,7 @@ export default function DocumentsWorkspace() {
           <div>
             <p className="font-medium text-ivory/80">File upload UI not connected yet</p>
             <p className="mt-1 text-sm leading-6 text-ivory/45">
-              APEX ONE will not display a fake upload, extraction, OCR or verification flow.
+              CORTEX will not display a fake upload, extraction, OCR or verification flow.
               Existing authorized document records remain readable below.
             </p>
           </div>

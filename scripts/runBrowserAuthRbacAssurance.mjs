@@ -33,7 +33,7 @@ try {
   let ceoContext;
   let ceoPage;
 
-  await check("0. unauthenticated root redirects to the secure APEX ONE login without business data", async () => {
+  await check("0. unauthenticated root redirects to the secure CORTEX login without business data", async () => {
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
@@ -41,7 +41,7 @@ try {
       await page.waitForURL((url) => url.pathname === "/login", { timeout: 15_000 });
       await page.waitForSelector("#apex-login-screen", { state: "visible", timeout: 15_000 });
       const text = await page.locator("body").innerText();
-      assert(text.includes("Sign in to APEX ONE"), "Unauthenticated root did not reach the APEX ONE login");
+      assert(text.includes("Sign in to CORTEX"), "Unauthenticated root did not reach the CORTEX login");
       assert(!text.includes("APEX CONNECT"), "Unauthenticated root leaked the retired client portal");
       assert(!text.includes("Welcome back"), "Unauthenticated root leaked a hard-coded user greeting");
       assert(!text.includes("$10.48M"), "Unauthenticated root leaked a fabricated wealth balance");
@@ -131,7 +131,7 @@ try {
 
   const failed = results.filter((result) => !result.passed);
   console.log("================================================================================");
-  console.log("APEX ONE — STAGE 10 BROWSER AUTH / RBAC ASSURANCE");
+  console.log("CORTEX — STAGE 10 BROWSER AUTH / RBAC ASSURANCE");
   console.log("================================================================================");
   for (const result of results) {
     console.log(`${result.passed ? "✅ [PASS]" : "❌ [FAIL]"} ${result.name}`);

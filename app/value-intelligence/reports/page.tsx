@@ -166,7 +166,7 @@ export default function ReportsPage() {
       <ValueHeader
         category="BOARD-LEVEL INTELLIGENCE"
         title="EXECUTIVE VALUE REPORTS"
-        subtitle="The ultimate boardroom communication layer of the APEX ONE system. Translates raw telemetry into strategic insights, risks, and critical board decisions."
+        subtitle="The ultimate boardroom communication layer of the CORTEX system. Translates raw telemetry into strategic insights, risks, and critical board decisions."
       />
 
       {!hasData ? (
@@ -199,7 +199,7 @@ export default function ReportsPage() {
             <div className="text-left font-mono">
               <p className="text-[10px] text-gold font-bold uppercase tracking-widest">REPORT SPECIFICATION</p>
               <div className="flex flex-wrap items-center gap-3.5 mt-1 text-[12px] text-ivory/60">
-                <span className="font-bold text-ivory">APEX ONE — EXECUTIVE VALUE REPORT</span>
+                <span className="font-bold text-ivory">CORTEX — EXECUTIVE VALUE REPORT</span>
                 <span className="text-ivory/30">•</span>
                 <span className="flex items-center gap-1"><Calendar size={12} /> Period: Q3 2026</span>
                 <span className="text-ivory/30">•</span>
@@ -261,7 +261,7 @@ export default function ReportsPage() {
               <div>
                 <span className="text-[10px] font-mono text-gold font-bold uppercase tracking-wider block">BOARD BRIEFING EXECUTIVE SUMMARY</span>
                 <p className="text-[15px] font-serif text-ivory/95 leading-relaxed mt-1.5 font-medium italic">
-                  &ldquo;Enterprise performance remains stable, with APEX ONE identifying {formatNaira(totalIdentified)} in potential value across customer expansion, revenue recovery and unused capacity. Targeted execution on priority playbooks can secure {formatNaira(totalCaptured || Math.round(totalIdentified * 0.2))} in verified value.&rdquo;
+                  &ldquo;Enterprise performance remains stable, with CORTEX identifying {formatNaira(totalIdentified)} in potential value across customer expansion, revenue recovery and unused capacity. Targeted execution on priority playbooks can secure {formatNaira(totalCaptured || Math.round(totalIdentified * 0.2))} in verified value.&rdquo;
                 </p>
               </div>
             </div>
@@ -392,7 +392,7 @@ export default function ReportsPage() {
               {/* VALUE JOURNEY PIPELINE */}
               <div className="rounded-2xl border border-white/[0.07] bg-charcoal/40 p-5 shadow-glass text-left space-y-4">
                 <div className="flex items-center justify-between border-b border-white/[0.04] pb-2.5">
-                  <span className="text-[11px] font-mono font-bold text-gold uppercase tracking-wider">APEX ONE VALUE JOURNEY PIPELINE</span>
+                  <span className="text-[11px] font-mono font-bold text-gold uppercase tracking-wider">CORTEX VALUE JOURNEY PIPELINE</span>
                   <span className="text-[10px] font-mono text-ivory/30">Conversion Funnel</span>
                 </div>
 
@@ -412,10 +412,10 @@ export default function ReportsPage() {
                 </div>
               </div>
 
-              {/* AI OUTLOOK - WHAT APEX ONE EXPECTS NEXT */}
+              {/* AI OUTLOOK - WHAT CORTEX EXPECTS NEXT */}
               <div className="rounded-2xl border border-white/[0.07] bg-charcoal/40 p-5 shadow-glass text-left space-y-3">
                 <div className="border-b border-white/[0.04] pb-2 flex items-center justify-between">
-                  <span className="text-[11px] font-mono font-bold text-gold uppercase tracking-wider">WHAT APEX ONE EXPECTS NEXT</span>
+                  <span className="text-[11px] font-mono font-bold text-gold uppercase tracking-wider">WHAT CORTEX EXPECTS NEXT</span>
                   <span className="text-[9.5px] font-mono text-gold bg-gold/10 px-2 py-0.5 rounded border border-gold/20 font-bold">Predictive Signals</span>
                 </div>
 

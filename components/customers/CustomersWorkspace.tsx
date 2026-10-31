@@ -278,7 +278,7 @@ export default function CustomersWorkspace() {
 
   // Define dynamic coordinates for interactive intelligence map nodes (within 550x450 coordinate system)
   const mapCoordinates = useMemo(() => {
-    const center = { x: 275, y: 220, label: "Apex Sync Hub" };
+    const center = { x: 275, y: 220, label: "QORVEX Hub" };
     const businessUnits = {
       "Enterprise Operations": { x: 140, y: 130, color: "#eab308" },
       "Strategic Accounts": { x: 410, y: 130, color: "#eab308" },
@@ -782,12 +782,12 @@ export default function CustomersWorkspace() {
 
                     {/* NODES LAYER */}
                     
-                    {/* 1. Center Node (Apex Sync Core) */}
+                    {/* 1. Center Node (QORVEX Core) */}
                     <g transform={`translate(${mapCoordinates.center.x}, ${mapCoordinates.center.y})`} className="cursor-pointer">
                       <circle r="26" fill="rgba(234, 179, 8, 0.12)" stroke="#eab308" strokeWidth="2" filter="url(#gold-glow)" />
                       <circle r="18" fill="#141414" stroke="#eab308" strokeWidth="1" />
                       <path d="M-6 -6 L6 -6 L6 6 L-6 6 Z" fill="none" stroke="#eab308" strokeWidth="1.5" />
-                      <text y="40" textAnchor="middle" fill="#fcfaf2" fontSize="10.5" fontFamily="monospace" fontWeight="bold" letterSpacing="0.05em">APEX ONE CORE</text>
+                      <text y="40" textAnchor="middle" fill="#fcfaf2" fontSize="10.5" fontFamily="monospace" fontWeight="bold" letterSpacing="0.05em">CORTEX CORE</text>
                     </g>
 
                     {/* 2. Business Unit Nodes */}
@@ -1288,12 +1288,12 @@ export default function CustomersWorkspace() {
             </div>
           </div>
 
-          {/* ────────────────── APEX ONE AI INSIGHT & DIRECTIVE ────────────────── */}
+          {/* ────────────────── CORTEX AI INSIGHT & DIRECTIVE ────────────────── */}
           <div className="rounded-xl border border-gold/30 bg-gold/[0.03] p-4 shadow-gold-glow-soft">
             <div className="flex items-center gap-1.5">
               <Sparkles size={14} className="text-gold animate-pulse" />
               <h4 className="text-[11.5px] font-bold uppercase tracking-wider text-gold font-mono">
-                APEX ONE AI RECOMMENDATION ENGINE
+                CORTEX AI RECOMMENDATION ENGINE
               </h4>
             </div>
 

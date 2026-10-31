@@ -60,12 +60,12 @@ export interface OrganizationConfig {
  * must not invent them.
  */
 export const defaultOrganizationConfig: OrganizationConfig = {
-  id: "apex-one-workspace",
-  name: "APEX ONE Workspace",
-  displayName: "APEX ONE Workspace",
-  shortName: "APEX ONE",
+  id: "cortex-workspace",
+  name: "CORTEX Workspace",
+  displayName: "CORTEX Workspace",
+  shortName: "CORTEX",
   industry: "enterprise",
-  description: "Enterprise intelligence workspace powered by Apex Sync Intelligence.",
+  description: "Enterprise intelligence workspace powered by QORVEX.",
 
   branding: {
     primaryColor: "#0a0a0b",
@@ -114,7 +114,7 @@ export const defaultOrganizationConfig: OrganizationConfig = {
 };
 
 export const company = {
-  name: "Apex Sync Intelligence",
+  name: "QORVEX",
   subsidiaries: defaultOrganizationConfig.organizationStructure.businessUnits,
 };
 

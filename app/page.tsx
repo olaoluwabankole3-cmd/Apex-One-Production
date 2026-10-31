@@ -8,7 +8,7 @@ import QuickActions from "@/components/dashboard/QuickActions";
 
 export default function ExecutiveCommandCenterPage() {
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-6" id="apex-one-executive-command-center">
+    <div className="mx-auto w-full max-w-7xl space-y-6" id="cortex-executive-command-center">
       <DashboardHeader />
 
       <div className="space-y-6">

@@ -188,12 +188,12 @@ for (const script of [
 }
 
 if (failures.length > 0) {
-  console.error("APEX ONE — PHASE 3 INFRASTRUCTURE CONNECTION GATE FAILED");
+  console.error("CORTEX — PHASE 3 INFRASTRUCTURE CONNECTION GATE FAILED");
   for (const failure of failures) console.error(`❌ ${failure}`);
   process.exit(1);
 }
 
-console.log("APEX ONE — PHASE 3 INFRASTRUCTURE CONNECTION GATE PASSED");
+console.log("CORTEX — PHASE 3 INFRASTRUCTURE CONNECTION GATE PASSED");
 console.log("✅ Durable providers are the normal application-development profile");
 console.log("✅ Local/deployment secret files are ignored");
 console.log("✅ Development stack has persistent PostgreSQL, Redis, and S3-compatible volumes");

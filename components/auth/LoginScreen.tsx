@@ -34,7 +34,7 @@ function safeNextFromLocation(): string {
 function loginErrorMessage(error: unknown): string {
   if (error instanceof AuthClientError) {
     if (error.status === 403) {
-      return "Your credentials were accepted, but this account is not authorized for an active APEX ONE organization. Contact your administrator.";
+      return "Your credentials were accepted, but this account is not authorized for an active CORTEX organization. Contact your administrator.";
     }
     if (error.status === 401) {
       if (error.message.toLowerCase().includes("too many failed login attempts")) {
@@ -44,7 +44,7 @@ function loginErrorMessage(error: unknown): string {
     }
     if (error.status === 400) return error.message;
   }
-  return "APEX ONE could not complete sign-in. Please try again.";
+  return "CORTEX could not complete sign-in. Please try again.";
 }
 
 const noticeCopy = {
@@ -151,10 +151,10 @@ export default function LoginScreen() {
           <div>
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-gold/30 bg-gold/10 font-display text-sm font-bold text-gold">
-                A1
+                C
               </div>
               <div>
-                <p className="font-display text-xl font-bold text-ivory">APEX ONE</p>
+                <p className="font-display text-xl font-bold text-ivory">CORTEX</p>
                 <p className="text-[10px] uppercase tracking-[0.16em] text-ivory/35">
                   Executive Intelligence OS
                 </p>
@@ -169,7 +169,7 @@ export default function LoginScreen() {
                 Intelligence, decisions and execution in one trusted workspace.
               </h1>
               <p className="mt-5 text-sm leading-7 text-ivory/45">
-                Sign in with an identity provisioned by your organization. APEX ONE derives
+                Sign in with an identity provisioned by your organization. CORTEX derives
                 tenant access, role and permissions exclusively from the authenticated
                 server session.
               </p>
@@ -194,10 +194,10 @@ export default function LoginScreen() {
           <div className="w-full max-w-md">
             <div className="mb-10 flex items-center gap-3 lg:hidden">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gold/30 bg-gold/10 font-display text-sm font-bold text-gold">
-                A1
+                C
               </div>
               <div>
-                <p className="font-display text-lg font-bold text-ivory">APEX ONE</p>
+                <p className="font-display text-lg font-bold text-ivory">CORTEX</p>
                 <p className="text-[9px] uppercase tracking-[0.14em] text-ivory/35">
                   Executive Intelligence OS
                 </p>
@@ -263,7 +263,7 @@ export default function LoginScreen() {
                   <LockKeyhole size={21} />
                 </div>
                 <h2 className="mt-5 font-display text-2xl font-bold text-ivory">
-                  Sign in to APEX ONE
+                  Sign in to CORTEX
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-ivory/50">
                   Use your organization-issued email address or username.

@@ -1,4 +1,4 @@
-name: APEX ONE — Stage 11 Release Control
+name: CORTEX — Stage 11 Release Control
 
 on:
   workflow_dispatch:
@@ -82,7 +82,7 @@ jobs:
           set -euo pipefail
           for attempt in $(seq 1 60); do
             row="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/apex-one-ci.yml/runs?branch=main&per_page=50" \
-              --jq "[.workflow_runs[] | select(.head_sha == \"$COMMIT_SHA\" and .name == \"APEX ONE — Production CI\")][0] | if . == null then \"\" else [.status, (.conclusion // \"\"), (.id|tostring)] | @tsv end")"
+              --jq "[.workflow_runs[] | select(.head_sha == \"$COMMIT_SHA\" and .name == \"CORTEX — Production CI\")][0] | if . == null then \"\" else [.status, (.conclusion // \"\"), (.id|tostring)] | @tsv end")"
 
             if [ -n "$row" ]; then
               status="$(printf '%s' "$row" | cut -f1)"
@@ -150,7 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           {
-            echo "## APEX ONE release completed"
+            echo "## CORTEX release completed"
             echo
             echo '```json'
             cat release-receipt.json

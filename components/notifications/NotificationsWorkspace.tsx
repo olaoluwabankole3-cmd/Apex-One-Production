@@ -41,7 +41,7 @@ export default function NotificationsWorkspace() {
     <div className="mx-auto w-full max-w-5xl space-y-6">
       <header>
         <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-gold/70">
-          APEX ONE
+          CORTEX
         </p>
         <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-ivory">
           Notifications
@@ -62,7 +62,7 @@ export default function NotificationsWorkspace() {
             No notification records
           </h2>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-ivory/45">
-            APEX ONE has no authoritative notification records to show for this session.
+            CORTEX has no authoritative notification records to show for this session.
             Synthetic signals, confidence scores and fictional assignees are not generated.
           </p>
         </GlassCard>

@@ -25,7 +25,7 @@ export default function CustomersHeader() {
     >
       <div>
         <p className="text-[12.5px] font-medium uppercase tracking-[0.12em] text-gold/70 font-mono">
-          APEX ONE
+          CORTEX
         </p>
         <h1 className="mt-1.5 font-display text-[28px] font-bold tracking-tight text-ivory lg:text-[32px] uppercase">
           Customer Intelligence

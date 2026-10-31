@@ -13,7 +13,7 @@ export default function LeakagePage() {
     <div className="mx-auto w-full max-w-7xl space-y-6">
       <header>
         <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-gold/70">
-          APEX ONE · Value Intelligence
+          CORTEX · Value Intelligence
         </p>
         <h1 className="mt-2 font-display text-3xl font-bold text-ivory">Revenue Leakage</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-ivory/50">
@@ -29,7 +29,7 @@ export default function LeakagePage() {
           <ShieldAlert size={24} className="mx-auto text-gold/70" />
           <h2 className="mt-4 font-display text-xl font-bold text-ivory">No leakage records</h2>
           <p className="mx-auto mt-2 max-w-xl text-sm text-ivory/45">
-            APEX ONE will not insert example SLA leakage, renewal losses or recovery amounts.
+            CORTEX will not insert example SLA leakage, renewal losses or recovery amounts.
           </p>
         </GlassCard>
       ) : (
