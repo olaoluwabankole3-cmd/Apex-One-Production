@@ -62,6 +62,6 @@ export async function POST(req: NextRequest) {
     if (err instanceof BackendError) {
       return NextResponse.json({ error: err.message, code: err.code }, { status: err.statusCode });
     }
-    return NextResponse.json({ error: err.message || "Failed to change password" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to change password", code: "INTERNAL_ERROR" }, { status: 500 });
   }
 }
