@@ -1,5 +1,5 @@
 /**
- * APEX ONE — Document Extraction Engine
+ * CORTEX — Document Extraction Engine
  * 
  * Extracts structured metadata, key contractual terms, and summary facts from document content.
  */
