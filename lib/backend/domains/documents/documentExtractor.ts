@@ -33,7 +33,7 @@ export class RuleBasedDocumentExtractor implements IDocumentExtractor {
     fields: DocumentExtractionField[];
   }> {
     const unavailable = {
-      summary: "Document metadata indexed only. No document-content terms were extracted or verified; contractual, financial and compliance assertions are unavailable.",
+      summary: "Document metadata indexed only. No content-derived fields are available; contractual, financial and compliance assertions have not been assessed.",
       fields: [] as DocumentExtractionField[],
     };
 
