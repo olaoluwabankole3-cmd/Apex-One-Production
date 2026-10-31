@@ -55,7 +55,7 @@ export default function PasswordChangeScreen() {
             A1
           </div>
           <div>
-            <p className="font-display text-lg font-bold text-ivory">APEX ONE</p>
+            <p className="font-display text-lg font-bold text-ivory">CORTEX</p>
             <p className="text-[9px] uppercase tracking-[0.14em] text-ivory/35">Account security</p>
           </div>
         </div>
