@@ -57,7 +57,7 @@ export class RuleBasedDocumentExtractor implements IDocumentExtractor {
       const raw = data[key];
       if (typeof raw !== "string") continue;
       const value = raw.trim();
-      if (!value || value.length > 200 || /[\\u0000-\\u001f]/.test(value)) continue;
+      if (!value || value.length > 200 || /[\x00-\x1f]/.test(value)) continue;
       if (key === "currency" && !/^[A-Z]{3}$/.test(value)) continue;
 
       fields.push({
