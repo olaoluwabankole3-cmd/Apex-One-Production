@@ -329,6 +329,32 @@ const checks: Check[] = [
     },
   },
   {
+    name: "unexpected authentication failures never return raw internal exception text",
+    run: () => {
+      const routes = [
+        ["app/api/v1/auth/me/route.ts", "Session verification failed"],
+        ["app/api/v1/auth/change-password/route.ts", "Failed to change password"],
+        ["app/api/v1/auth/switch-organization/route.ts", "Failed to switch organization"],
+      ] as const;
+
+      for (const [filePath, fallbackMessage] of routes) {
+        const route = source(filePath);
+        const unexpectedErrorBranch = route.slice(route.lastIndexOf("return NextResponse.json("));
+        requireCondition(
+          unexpectedErrorBranch.includes(`error: "${fallbackMessage}"`) &&
+            unexpectedErrorBranch.includes('code: "INTERNAL_ERROR"') &&
+            unexpectedErrorBranch.includes("status: 500"),
+          `${filePath} does not use a safe, explicit 500 error response`
+        );
+        requireCondition(
+          !unexpectedErrorBranch.includes("err.message") &&
+            !unexpectedErrorBranch.includes("error.message"),
+          `${filePath} exposes raw unexpected exception details`
+        );
+      }
+    },
+  },
+  {
     name: "PostgreSQL auth identity migration enforces case-insensitive username uniqueness",
     run: () => {
       const migration = source("lib/backend/database/migrations/004_phase2_auth_identity.sql");
