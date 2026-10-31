@@ -44,10 +44,13 @@ async function main(): Promise<void> {
   assert(!supported.fields.some(f => f.value.includes("must not be extracted")), "Nonallowlisted field was extracted");
   assert(supported.summary.includes("unverified"), "JSON field summary failed to state verification limits");
 
-  for (const bad of ["not-json", "{}", "[]", '{"currency":"NGN", "paymentTerms":22}']) {
+  for (const bad of ["not-json", "{}", "[]"]) {
     const result = await extractor.extractFields(jsonDoc, bad);
     assert(result.fields.length === 0, "Malformed/unrecognized JSON generated extracted evidence");
   }
+  const partial = await extractor.extractFields(jsonDoc, '{"currency":"NGN", "paymentTerms":22}');
+  assert(partial.fields.length === 1 && partial.fields[0].label === "Currency Code",
+    "Mixed JSON must extract only supported string fields and ignore numeric payment terms");
 
   const unsupportedWithJson = await extractor.extractFields(base,
     JSON.stringify({ governingJurisdiction: "Nigeria", paymentTerms: "Net 30" }));
