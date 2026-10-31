@@ -12,11 +12,11 @@ function BrandMark() {
   return (
     <div className="flex items-center gap-3">
       <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gold/30 bg-gold/10 font-display text-sm font-bold text-gold">
-        A1
+        C
       </div>
       <div>
         <p className="font-display text-lg font-bold tracking-tight text-ivory">
-          APEX ONE
+          CORTEX
         </p>
         <p className="text-[10px] uppercase tracking-[0.14em] text-ivory/35">
           Executive Intelligence OS
@@ -177,7 +177,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <TransitionState
         id="apex-authentication-required"
         title="Authentication required"
-        detail="A valid authenticated session is required to access APEX ONE. No enterprise data is rendered while the browser is being redirected to secure sign-in."
+        detail="A valid authenticated session is required to access CORTEX. No enterprise data is rendered while the browser is being redirected to secure sign-in."
       />
     );
   }
@@ -190,7 +190,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <TransitionState
         id="apex-password-change-required"
         title="Password update required"
-        detail="Your authenticated account requires a password update before the APEX ONE workspace can be entered."
+        detail="Your authenticated account requires a password update before the CORTEX workspace can be entered."
       />
     );
   }
@@ -217,7 +217,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <TransitionState
         id="apex-access-denied"
         title="Access denied"
-        detail="Your authenticated session is not authorized for the APEX ONE internal workspace."
+        detail="Your authenticated session is not authorized for the CORTEX internal workspace."
         denied
       />
     );
