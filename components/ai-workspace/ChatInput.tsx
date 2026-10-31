@@ -38,7 +38,7 @@ export default function ChatInput({ value, onChange, onSend, disabled }: ChatInp
           autoGrow();
         }}
         onKeyDown={handleKeyDown}
-        placeholder="Ask Apex Sync Intelligence anything about APEX ONE…"
+        placeholder="Ask QORVEX anything about CORTEX…"
         rows={1}
         disabled={disabled}
         className="max-h-[140px] flex-1 resize-none bg-transparent px-2 py-1.5 text-[13.5px] text-ivory placeholder:text-ivory/30 outline-none disabled:opacity-50"

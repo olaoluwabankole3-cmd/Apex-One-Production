@@ -49,7 +49,7 @@ export default function ScenarioIntelligencePage() {
 
   const [activeProfile, setActiveProfile] = useState<ScenarioProfile>("Expected");
 
-  // Constant Base Benchmarks for APEX ONE (or dynamically derived)
+  // Constant Base Benchmarks for CORTEX (or dynamically derived)
   const BASE_REVENUE = 184000000; // ₦184M baseline revenue
   const BASE_COSTS = 132000000; // ₦132M base operating costs
   const BASE_CUSTOMERS = 48210; // 48,210 customers base

@@ -1,10 +1,10 @@
-# APEX ONE Product Integrity
+# CORTEX Product Integrity
 
 This document defines the production-facing product boundary established during Product Integrity Recovery.
 
 ## Product identity
 
-The application is **APEX ONE — Executive Intelligence Operating System** by Apex Sync Intelligence.
+The application is **CORTEX — Executive Intelligence Operating System** by QORVEX.
 
 The production application must not silently switch into a separate private-wealth, investor, client-portal, banking, custody, or fictional financial-product experience.
 
@@ -15,12 +15,12 @@ The application shell is fail-closed:
 1. While the server-backed session is unresolved, no enterprise UI is rendered.
 2. An unauthenticated browser receives an authentication-required state.
 3. An authenticated session without `org:read` receives access denied.
-4. Only an authenticated session with `org:read` enters the internal APEX ONE workspace.
+4. Only an authenticated session with `org:read` enters the internal CORTEX workspace.
 5. Domain-specific navigation is additionally filtered by server-issued permission capabilities.
 
 Frontend role/presentation context is never an authorization authority.
 
-## APEX ONE information architecture
+## CORTEX information architecture
 
 Primary workspace:
 
@@ -78,4 +78,4 @@ Run:
 bun run test:product-integrity
 ```
 
-The gate checks the fail-closed root boundary, APEX ONE product identity, capability-derived navigation, removal of the former wealth/client portal, and known prototype/simulation markers.
+The gate checks the fail-closed root boundary, CORTEX product identity, capability-derived navigation, removal of the former wealth/client portal, and known prototype/simulation markers.

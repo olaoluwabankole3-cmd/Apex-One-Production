@@ -1,5 +1,5 @@
 /**
- * APEX ONE — Command-Line Tenant Isolation Security & Release Verification Test Runner
+ * CORTEX — Command-Line Tenant Isolation Security & Release Verification Test Runner
  */
 
 import * as fs from "fs";
@@ -90,7 +90,7 @@ function verifySuiteCompleteness(testsDir: string): void {
 
 async function main() {
   console.log("================================================================================");
-  console.log("APEX ONE PRODUCTION — COMPREHENSIVE SECURITY & INTEGRITY TEST SUITE");
+  console.log("CORTEX PRODUCTION — COMPREHENSIVE SECURITY & INTEGRITY TEST SUITE");
   console.log("================================================================================\n");
 
   const testsDir = path.resolve(__dirname, "../lib/backend/tests");

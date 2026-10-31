@@ -56,7 +56,7 @@ export default function TrustedAiWorkspace() {
             <div className="mb-2 flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] text-gold/80">
               <ShieldCheck className="h-4 w-4" /> Stage 8 trust boundary
             </div>
-            <h1 className="font-display text-3xl font-semibold">APEX ONE Intelligence</h1>
+            <h1 className="font-display text-3xl font-semibold">CORTEX Intelligence</h1>
             <p className="mt-2 max-w-2xl text-sm text-ivory/50">
               Deterministic repository facts and their provenance are shown separately from AI-generated synthesis.
               Model prose is never automatically verified or certified.

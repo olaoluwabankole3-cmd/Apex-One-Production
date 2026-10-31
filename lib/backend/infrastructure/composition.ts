@@ -1,5 +1,5 @@
 /**
- * APEX ONE — Stage 4F application infrastructure composition root.
+ * CORTEX — Stage 4F application infrastructure composition root.
  *
  * This module is the only default application wiring point for persistence
  * authorities. Production composition is fail-closed and may never resolve an

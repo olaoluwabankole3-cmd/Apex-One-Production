@@ -1,4 +1,4 @@
-name: APEX ONE — Stage 11 Observability & Deployment
+name: CORTEX — Stage 11 Observability & Deployment
 
 on:
   pull_request:

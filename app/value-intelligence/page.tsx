@@ -25,14 +25,14 @@ export default function ValueIntelligencePage() {
     <div className="mx-auto w-full max-w-7xl space-y-6">
       <header>
         <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-gold/70">
-          APEX ONE · Value Intelligence
+          CORTEX · Value Intelligence
         </p>
         <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-ivory">
           Value Overview
         </h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-ivory/50">
           Values shown here come from the authoritative opportunity, action and captured-value
-          APIs. APEX ONE no longer inserts demo leakage totals, synthetic scans or fabricated
+          APIs. CORTEX no longer inserts demo leakage totals, synthetic scans or fabricated
           capture outcomes.
         </p>
       </header>

@@ -1,5 +1,5 @@
 /**
- * APEX ONE — Value Intelligence Domain Service & Evidence Engine
+ * CORTEX — Value Intelligence Domain Service & Evidence Engine
  *
  * Computes live, source-backed value metrics from tenant data entities.
  * Strictly adheres to: Source -> Calculation -> Result -> Provenance -> Decision State.

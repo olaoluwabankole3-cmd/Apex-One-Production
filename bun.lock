@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "apex-one",
+      "name": "cortex",
       "dependencies": {
         "@google/genai": "^2.16.0",
         "clsx": "^2.1.1",

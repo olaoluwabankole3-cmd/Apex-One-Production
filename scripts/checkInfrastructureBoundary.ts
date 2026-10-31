@@ -1,5 +1,5 @@
 /**
- * APEX ONE — Stage 4 production infrastructure boundary verification.
+ * CORTEX — Stage 4 production infrastructure boundary verification.
  */
 
 import * as fs from "fs";
@@ -265,7 +265,7 @@ check("14. Stage 4F production composition root and dedicated CI gate are commit
 
 const failed = results.filter((result) => !result.passed);
 console.log("================================================================================");
-console.log("APEX ONE — STAGE 4 INFRASTRUCTURE BOUNDARY CHECK");
+console.log("CORTEX — STAGE 4 INFRASTRUCTURE BOUNDARY CHECK");
 console.log("================================================================================");
 for (const result of results) {
   console.log(`${result.passed ? "✅ [PASS]" : "❌ [FAIL]"} ${result.name}`);
