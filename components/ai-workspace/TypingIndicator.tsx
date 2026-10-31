@@ -2,7 +2,7 @@
 
 export default function TypingIndicator() {
   return (
-    <div className="flex items-center gap-1 py-1" aria-label="Apex Sync Intelligence is responding">
+    <div className="flex items-center gap-1 py-1" aria-label="QORVEX is responding">
       {[0, 1, 2].map((i) => (
         <span
           key={i}
