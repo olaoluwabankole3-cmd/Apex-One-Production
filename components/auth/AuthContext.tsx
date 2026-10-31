@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * APEX ONE — Authentication Context
+ * CORTEX — Authentication Context
  *
  * Security authority remains server-side. This provider only projects safe
  * session metadata and drives UX state around the HttpOnly-cookie session.
