@@ -34,7 +34,7 @@ export default function SettingsWorkspace() {
     <div id="organizational-control-center" className="mx-auto w-full max-w-6xl space-y-6">
       <header>
         <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-gold/70">
-          APEX ONE · Administration
+          CORTEX · Administration
         </p>
         <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-ivory">
           Settings & Integrations
