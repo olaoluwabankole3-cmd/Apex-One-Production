@@ -52,7 +52,7 @@ export default function PasswordChangeScreen() {
       <div className="w-full max-w-xl rounded-2xl border border-white/[0.08] bg-charcoal/70 p-7 shadow-glass sm:p-9">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gold/30 bg-gold/10 font-display text-sm font-bold text-gold">
-            A1
+            C
           </div>
           <div>
             <p className="font-display text-lg font-bold text-ivory">CORTEX</p>
