@@ -1,0 +1,12 @@
+[Unit]
+Description=Check CORTEX staging RDS secret rotation every five minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=5min
+RandomizedDelaySec=30s
+Persistent=false
+Unit=cortex-staging-rotation-recovery.service
+
+[Install]
+WantedBy=timers.target
