@@ -50,7 +50,7 @@ Do not treat `latest`, a branch tag, or another mutable registry reference as re
 
 ## Phase 3 environment connection gate
 
-Before an CORTEX staging deployment is allowed to receive traffic, provision
+Before a CORTEX staging deployment is allowed to receive traffic, provision
 environment-isolated durable authorities and load their credentials from the
 deployment platform's protected secret store.
 
