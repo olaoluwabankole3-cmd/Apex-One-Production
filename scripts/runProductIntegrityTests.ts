@@ -63,8 +63,8 @@ assert(
 const rootPage = readFileSync(join(root, "app/page.tsx"), "utf8");
 assert(!rootPage.includes("ApexConnectDashboard"), "Root page must never route to a client/wealth portal fallback.");
 assert(
-  rootPage.includes("apex-one-executive-command-center"),
-  "Root page must identify the APEX ONE Executive Command Center."
+  rootPage.includes("cortex-executive-command-center"),
+  "Root page must identify the CORTEX Executive Command Center."
 );
 
 const shell = readFileSync(join(root, "components/layout/AppShell.tsx"), "utf8");
@@ -99,12 +99,12 @@ for (const simulatedMarker of [
 }
 
 if (failures.length > 0) {
-  console.error("APEX ONE — PRODUCT INTEGRITY GATE FAILED");
+  console.error("CORTEX — PRODUCT INTEGRITY GATE FAILED");
   for (const failure of failures) console.error(`❌ ${failure}`);
   process.exit(1);
 }
 
-console.log("APEX ONE — PRODUCT INTEGRITY GATE PASSED");
+console.log("CORTEX — PRODUCT INTEGRITY GATE PASSED");
 console.log(`Checked ${productionUiFiles.length} production-facing source files.`);
 console.log("✅ Unauthenticated root fails closed");
 console.log("✅ No private-wealth/client-portal fallback");
