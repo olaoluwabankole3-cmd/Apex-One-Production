@@ -151,7 +151,7 @@ export default function LoginScreen() {
           <div>
             <div className="flex items-center gap-3">
               <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-gold/30 bg-gold/10 font-display text-sm font-bold text-gold">
-                A1
+                C
               </div>
               <div>
                 <p className="font-display text-xl font-bold text-ivory">CORTEX</p>
@@ -194,7 +194,7 @@ export default function LoginScreen() {
           <div className="w-full max-w-md">
             <div className="mb-10 flex items-center gap-3 lg:hidden">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gold/30 bg-gold/10 font-display text-sm font-bold text-gold">
-                A1
+                C
               </div>
               <div>
                 <p className="font-display text-lg font-bold text-ivory">CORTEX</p>
