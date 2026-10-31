@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: err.message || "Failed to switch organization" },
+      { error: "Failed to switch organization", code: "INTERNAL_ERROR" },
       { status: 500 }
     );
   }
