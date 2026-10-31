@@ -34,6 +34,8 @@ Production cannot silently fall back to memory providers. Invalid provider selec
 
 For the complete environment contract, see [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md). For runtime topology, promotion, and rollback, see [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
+For the **staging GO/NO-GO checklist**, including required evidence, credential isolation and historical-document remediation, see [`docs/STAGING-READINESS.md`](docs/STAGING-READINESS.md).
+
 ## Security and trust boundaries
 
 CORTEX derives tenant identity from the authenticated session, never from an arbitrary client-supplied organization identifier. Requests may authenticate with an `Authorization: Bearer <token>` credential or the HttpOnly `apex_session` cookie. Unknown roles fail closed and authorization is capability-based.
