@@ -346,7 +346,7 @@ const checks: Check[] = [
 
 async function main(): Promise<void> {
   console.log("=".repeat(80));
-  console.log("APEX ONE — PHASE 2 AUTHENTICATION EXPERIENCE");
+  console.log("CORTEX — PHASE 2 AUTHENTICATION EXPERIENCE");
   console.log("=".repeat(80));
 
   let passed = 0;

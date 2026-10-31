@@ -10,7 +10,7 @@ export default function ForgotPasswordPage() {
             A1
           </div>
           <div>
-            <p className="font-display text-lg font-bold text-ivory">APEX ONE</p>
+            <p className="font-display text-lg font-bold text-ivory">CORTEX</p>
             <p className="text-[9px] uppercase tracking-[0.14em] text-ivory/35">
               Account recovery
             </p>
@@ -22,7 +22,7 @@ export default function ForgotPasswordPage() {
         </div>
         <h1 className="mt-5 font-display text-2xl font-bold text-ivory">Password recovery</h1>
         <p className="mt-2 text-sm leading-6 text-ivory/55">
-          Self-service password reset is not enabled yet because APEX ONE does not currently
+          Self-service password reset is not enabled yet because CORTEX does not currently
           have an authoritative reset-token delivery service configured.
         </p>
 

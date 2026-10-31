@@ -174,7 +174,7 @@ export default function ApexValueAnalystPage() {
       return {
         finding: "Value analysis requires connected organizational data.",
         evidence: "No active CRM, ERP, or billing streams are currently integrated.",
-        historicalContext: "APEX ONE operates on live and historical enterprise telemetry.",
+        historicalContext: "CORTEX operates on live and historical enterprise telemetry.",
         signals: [
           "Enterprise data streams awaiting connection",
           "Institutional telemetry inactive"

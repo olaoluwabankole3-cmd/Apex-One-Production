@@ -1,5 +1,5 @@
 /**
- * APEX ONE — Backend Core Security, Errors, and Tenant Context
+ * CORTEX — Backend Core Security, Errors, and Tenant Context
  * 
  * Strict Multi-Tenancy Rules:
  * 1. The client-provided tenantId is NEVER trusted.

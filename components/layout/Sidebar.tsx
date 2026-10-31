@@ -27,17 +27,17 @@ export default function Sidebar() {
     <aside className="hidden w-[248px] shrink-0 flex-col border-r border-white/[0.06] bg-charcoal/60 px-4 py-6 lg:flex">
       <div className="flex items-center gap-3 px-2 pb-8">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gold/30 bg-gold/10 font-display text-sm font-bold text-gold">
-          A1
+          C
         </div>
         <div className="leading-tight">
-          <p className="font-display text-[17px] font-bold tracking-tight text-ivory">APEX ONE</p>
+          <p className="font-display text-[17px] font-bold tracking-tight text-ivory">CORTEX</p>
           <p className="mt-0.5 text-[8.5px] uppercase tracking-[0.12em] text-ivory/35">
             Executive Intelligence OS
           </p>
         </div>
       </div>
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto pr-1" aria-label="APEX ONE navigation">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto pr-1" aria-label="CORTEX navigation">
         {visiblePrimary.map((item) => {
           const active = isNavigationItemActive(pathname, item.href);
           const Icon = item.icon;

@@ -24,10 +24,10 @@ export default function InternalOnlyShield({
 
   if (!hasInternalAccess || !hasRequiredCapability) {
     const denialMessage = !isAuthenticated
-      ? "A valid authenticated session is required to access this internal APEX ONE section."
+      ? "A valid authenticated session is required to access this internal CORTEX section."
       : !hasInternalAccess
-        ? "Your authenticated session is not authorized for the APEX ONE internal workspace."
-        : "Your authenticated session does not include the capability required for this privileged APEX ONE section.";
+        ? "Your authenticated session is not authorized for the CORTEX internal workspace."
+        : "Your authenticated session does not include the capability required for this privileged CORTEX section.";
 
     return (
       <div className="mx-auto max-w-[680px] px-4 py-12">
@@ -37,7 +37,7 @@ export default function InternalOnlyShield({
           </div>
           <div className="space-y-2">
             <span className="rounded bg-gold/15 px-2.5 py-0.5 font-mono text-[10.5px] font-bold uppercase tracking-wider text-gold">
-              APEX ONE ACCESS CONTROL
+              CORTEX ACCESS CONTROL
             </span>
             <h2 className="font-display text-[20px] font-bold tracking-tight text-white sm:text-[23px]">
               Access denied

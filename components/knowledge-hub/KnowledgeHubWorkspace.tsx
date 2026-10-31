@@ -70,7 +70,7 @@ export default function KnowledgeHubWorkspace() {
     <div className="mx-auto w-full max-w-7xl space-y-6">
       <header>
         <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-gold/70">
-          APEX ONE · Organizational Memory
+          CORTEX · Organizational Memory
         </p>
         <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-ivory">
           Knowledge Hub

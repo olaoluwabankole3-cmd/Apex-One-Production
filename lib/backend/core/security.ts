@@ -1,5 +1,5 @@
 /**
- * APEX ONE — Security, Authentication Tokens, and Tenant Context Resolver
+ * CORTEX — Security, Authentication Tokens, and Tenant Context Resolver
  *
  * Security invariants:
  *

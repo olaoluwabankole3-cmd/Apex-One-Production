@@ -1,6 +1,6 @@
-# APEX ONE environment reference
+# CORTEX environment reference
 
-This document describes the environment contract implemented by APEX ONE. The application deliberately distinguishes local/test convenience from production authority: memory adapters are valid outside production, while `APP_ENV=production` is fail-closed unless every required durable provider, secure transport requirement, and immutable release-identity field is valid.
+This document describes the environment contract implemented by CORTEX. The application deliberately distinguishes local/test convenience from production authority: memory adapters are valid outside production, while `APP_ENV=production` is fail-closed unless every required durable provider, secure transport requirement, and immutable release-identity field is valid.
 
 Do not commit real credentials. `.env.example` contains names and safe defaults only.
 
@@ -223,7 +223,7 @@ Do not write either value into `release-plan.json`, application configuration co
 - Keep database, Redis, S3, Gemini and deployment-controller credentials in the deployment platform’s protected secret store.
 - Do not place credentials in image tags, release IDs, request IDs, telemetry attributes, readiness URLs, or repository variables that are intended to be public/non-secret.
 - Rotate a secret if it is ever committed or emitted to a log; removing it from the latest revision is not sufficient remediation.
-- Prefer environment-specific credentials with the minimum provider privileges required by APEX ONE.
+- Prefer environment-specific credentials with the minimum provider privileges required by CORTEX.
 
 ## Readiness behavior
 

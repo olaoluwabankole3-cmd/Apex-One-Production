@@ -14,7 +14,7 @@ export default function SummaryTab({ doc }: SummaryTabProps) {
       <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
         <Loader2 size={22} className="animate-spin text-gold" />
         <p className="text-[13px] text-ivory/45">
-          Apex Sync Intelligence is still reading this document — summary will appear here shortly.
+          QORVEX is still reading this document — summary will appear here shortly.
         </p>
       </div>
     );

@@ -61,7 +61,7 @@ export default function OperationsPage() {
       <div className="mx-auto w-full max-w-7xl space-y-6">
         <header>
           <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-gold/70">
-            APEX ONE · Operations
+            CORTEX · Operations
           </p>
           <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-ivory">
             Operations Intelligence
@@ -98,7 +98,7 @@ export default function OperationsPage() {
               No authoritative operations telemetry is available
             </h2>
             <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-ivory/45">
-              APEX ONE will not invent incidents, SLA breaches, KYC failures, capacity
+              CORTEX will not invent incidents, SLA breaches, KYC failures, capacity
               utilization, financial impact or remediation outcomes. These surfaces will
               activate after the corresponding operations data service is connected.
             </p>

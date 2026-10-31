@@ -83,7 +83,7 @@ const MEMORY_CATEGORIES = [
 ];
 
 const HISTORICAL_TIMELINE = [
-  { year: "2019", label: "Enterprise Founded", desc: "Core infrastructure set up for Apex Sync" },
+  { year: "2019", label: "Enterprise Founded", desc: "Historical enterprise milestone (source required)" },
   { year: "2020", label: "Regional Expansion", desc: "Launched secondary banking products across regions" },
   { year: "2021", label: "Subsidiary Launch", desc: "Consolidated Commercial and Customer Operations" },
   { year: "2022", label: "Portfolio Scaling", desc: "Major client portfolio expansion, hitting 1M transactions" },
@@ -214,7 +214,7 @@ export default function AiWorkspace() {
           year: "2026",
           confidence: { score: 98, sources: 24, consistency: "Optimal" },
           contextUsed: "2019–2026 (7 Years Consolidated Memory)",
-          finding: "Apex Sync Intelligence initialized. The complete operational memory of Apex Sync is synchronized. Current reasoning is optimized for the Chief of Staff and strategic executive focus.",
+          finding: "CORTEX intelligence workspace initialized. Information is limited to connected, authorized records.",
           evidence: [
             "7 fiscal years of general ledgers completely indexed",
             "18 corporate application systems synced (CRM, ERP, Contracts, Support logs, Core Banking)",
@@ -225,7 +225,7 @@ export default function AiWorkspace() {
           recommendations: [
             "Select a temporal anchor from the Timeline above to query past years.",
             "Toggle specific Intelligence Modes to focus neural synthesis on Finance, Sales, or Operations.",
-            "Click on any 'What APEX ONE Noticed' items in the sidebar to review proactive opportunities."
+            "Click on any 'What CORTEX Noticed' items in the sidebar to review proactive opportunities."
           ],
           sources: ["CRM", "ERP", "Contracts", "Support", "Finance", "Operations"],
           trace: ["Database Connection", "Neural Index Retrieval", "Temporal Alignments", "Cross-System Synthesis", "Aligning Role Context"]
@@ -463,7 +463,7 @@ export default function AiWorkspace() {
         response = {
           ...response,
           confidence: { score: 91, sources: 8, consistency: "Medium" },
-          finding: `Apex One Intelligence synthesized Apex Sync's operational database matching the temporal anchor (${activeYear}) under ${activeMode} Mode rules.`,
+          finding: `CORTEX analyzed the available organizational context matching the temporal anchor (${activeYear}) under ${activeMode} Mode rules.`,
           evidence: [
             `Query: "${trimmed}" resolved within our ${activeYear} data silos.`,
             `Active context covers 7 years of institutional records up to the year ${activeYear}.`,
@@ -1053,7 +1053,7 @@ export default function AiWorkspace() {
                               className="flex w-full items-center justify-between px-4 py-2.5 text-[11.5px] font-bold uppercase tracking-wider text-ivory/50 font-mono hover:text-gold transition-colors"
                             >
                               <span className="flex items-center gap-1.5">
-                                <Brain size={12} className="text-gold/60" /> WHY APEX ONE THINKS THIS (REASONING TRACE)
+                                <Brain size={12} className="text-gold/60" /> WHY CORTEX THINKS THIS (REASONING TRACE)
                               </span>
                               {expandedTrace[m.id] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                             </button>
@@ -1278,14 +1278,14 @@ export default function AiWorkspace() {
             </div>
           </GlassCard>
 
-          {/* 10. PROACTIVE INTELLIGENCE: WHAT APEX ONE NOTICED */}
+          {/* 10. PROACTIVE INTELLIGENCE: WHAT CORTEX NOTICED */}
           <GlassCard delay={0.18} hover={false} className="p-4 border-crimson/15 relative overflow-hidden">
             <div className="absolute top-0 right-0 h-16 w-16 bg-crimson/5 blur-xl rounded-full" />
             
             <div className="flex items-center gap-2 mb-3">
               <Sparkles size={13} className="text-crimson animate-pulse" />
               <h3 className="text-[11.5px] font-bold uppercase tracking-[0.15em] text-crimson font-mono">
-                WHAT APEX ONE NOTICED
+                WHAT CORTEX NOTICED
               </h3>
             </div>
 

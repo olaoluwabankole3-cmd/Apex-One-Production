@@ -1,4 +1,4 @@
-name: APEX ONE — Production CI
+name: CORTEX — Production CI
 
 on:
   push:

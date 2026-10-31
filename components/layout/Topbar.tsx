@@ -45,14 +45,14 @@ export default function Topbar() {
           <button
             onClick={() => setIsMobileMenuOpen(true)}
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.02] text-ivory/60 transition-colors hover:border-gold/30 hover:text-ivory lg:hidden"
-            aria-label="Open APEX ONE navigation"
+            aria-label="Open CORTEX navigation"
           >
             <Menu size={18} strokeWidth={1.75} />
           </button>
 
-          <Link href="/" className="flex items-center gap-2 lg:hidden" aria-label="APEX ONE home">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-gold/30 bg-gold/10 font-display text-[11px] font-bold text-gold">A1</span>
-            <span className="font-display text-sm font-bold text-ivory">APEX ONE</span>
+          <Link href="/" className="flex items-center gap-2 lg:hidden" aria-label="CORTEX home">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-gold/30 bg-gold/10 font-display text-[11px] font-bold text-gold">C</span>
+            <span className="font-display text-sm font-bold text-ivory">CORTEX</span>
           </Link>
 
           <div className="hidden lg:block">
@@ -96,7 +96,7 @@ export default function Topbar() {
             >
               <div className="mb-5 flex items-center justify-between border-b border-white/[0.06] pb-6">
                 <div>
-                  <p className="font-display text-[17px] font-bold text-ivory">APEX ONE</p>
+                  <p className="font-display text-[17px] font-bold text-ivory">CORTEX</p>
                   <p className="mt-0.5 text-[9px] uppercase tracking-[0.14em] text-gold">Executive Intelligence OS</p>
                 </div>
                 <button
@@ -108,7 +108,7 @@ export default function Topbar() {
                 </button>
               </div>
 
-              <nav className="flex-1 space-y-1 overflow-y-auto pr-1" aria-label="APEX ONE mobile navigation">
+              <nav className="flex-1 space-y-1 overflow-y-auto pr-1" aria-label="CORTEX mobile navigation">
                 {visiblePrimary.map((item) => {
                   const active = isNavigationItemActive(pathname, item.href);
                   const Icon = item.icon;

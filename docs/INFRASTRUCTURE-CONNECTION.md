@@ -1,6 +1,6 @@
-# APEX ONE durable infrastructure connection
+# CORTEX durable infrastructure connection
 
-Phase 3 moves normal APEX ONE execution away from process-local state. The
+Phase 3 moves normal CORTEX execution away from process-local state. The
 application's durable authorities are:
 
 | Responsibility | Authority |
@@ -55,7 +55,7 @@ bun run infra:dev:destroy
 
 Do not use the destructive command when state must be preserved.
 
-Load the same environment values into the APEX ONE application process, then
+Load the same environment values into the CORTEX application process, then
 apply migrations:
 
 ```bash
@@ -67,7 +67,7 @@ audit controls, and Phase 2 username identity constraints.
 
 ## 2. Initial organization and administrator
 
-APEX ONE does not fabricate a default production identity. Bootstrap is a
+CORTEX does not fabricate a default production identity. Bootstrap is a
 one-time explicit operation.
 
 Populate the `APEX_BOOTSTRAP_*` variables in the protected environment and set:
@@ -153,7 +153,7 @@ Remove bootstrap secret/confirmation
         ↓
 Run bun run infra:verify
         ↓
-Start APEX ONE
+Start CORTEX
         ↓
 Require /api/v1/health/ready = ready
         ↓
@@ -163,7 +163,7 @@ Run staging UAT
 ## 5. Restart-persistence exit condition
 
 Production CI now contains a disposable durable-stack gate that writes state
-through one fresh APEX ONE infrastructure process and verifies it from a second
+through one fresh CORTEX infrastructure process and verifies it from a second
 fresh process using the same PostgreSQL, Redis and S3 authorities.
 
 The test requires:

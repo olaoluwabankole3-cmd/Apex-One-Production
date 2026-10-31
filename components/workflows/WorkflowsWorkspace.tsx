@@ -123,7 +123,7 @@ export default function WorkflowsWorkspace() {
       <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <p className="font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-gold/70">
-            APEX ONE · Execution
+            CORTEX · Execution
           </p>
           <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-ivory">
             Workflows

@@ -185,7 +185,7 @@ async function main(): Promise<void> {
   expectThrow(() => assertProductionTopology(zeroSurge), "Zero-surge rolling rollout");
 
   console.log("================================================================================");
-  console.log("APEX ONE — STAGE 11 RELEASE ATTESTATION / TOPOLOGY REGRESSION");
+  console.log("CORTEX — STAGE 11 RELEASE ATTESTATION / TOPOLOGY REGRESSION");
   console.log("================================================================================");
   console.log("✅ Promoted image digest is bound to the exact frozen Git commit");
   console.log("✅ Production promotion requires controller-attested staging source");

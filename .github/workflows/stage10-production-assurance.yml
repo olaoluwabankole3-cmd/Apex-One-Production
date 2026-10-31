@@ -1,4 +1,4 @@
-name: APEX ONE — Stage 10 Production Assurance
+name: CORTEX — Stage 10 Production Assurance
 
 on:
   pull_request:
@@ -15,7 +15,8 @@ concurrency:
 jobs:
   runtime-assurance:
     name: HTTP / Browser / Fault / Recovery Assurance
-    runs-on: ubuntu-latest
+    # Playwright 1.55.0 is not compatible with ubuntu-26.04 images.
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     services:
       postgres:

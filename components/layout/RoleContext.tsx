@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * APEX ONE — Presentation Context
+ * CORTEX — Presentation Context
  *
  * This context is not an authentication or authorization authority.
  * Role and tenant authority come only from the authenticated backend session.

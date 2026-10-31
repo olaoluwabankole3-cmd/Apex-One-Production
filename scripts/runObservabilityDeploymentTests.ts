@@ -351,7 +351,7 @@ async function main(): Promise<void> {
 
   await check("18. Release workflow requires exact-main Production CI before deployment control", () => {
     const workflow = fs.readFileSync(path.join(process.cwd(), ".github/workflows/stage11-release-control.yml"), "utf8");
-    if (!workflow.includes("APEX ONE — Production CI") || !workflow.includes("git rev-parse HEAD")) {
+    if (!workflow.includes("CORTEX — Production CI") || !workflow.includes("git rev-parse HEAD")) {
       throw new Error("Release workflow does not gate deployment on exact-main CI evidence");
     }
     if (!workflow.includes("APEX_DEPLOYMENT_CONTROL_TOKEN") || !workflow.includes("release:control")) {
@@ -379,7 +379,7 @@ async function main(): Promise<void> {
 
   const failed = results.filter((result) => !result.passed);
   console.log("================================================================================");
-  console.log("APEX ONE — STAGE 11 OBSERVABILITY & DEPLOYMENT");
+  console.log("CORTEX — STAGE 11 OBSERVABILITY & DEPLOYMENT");
   console.log("================================================================================");
   for (const result of results) {
     console.log(`${result.passed ? "✅ [PASS]" : "❌ [FAIL]"} ${result.name}`);

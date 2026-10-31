@@ -35,7 +35,7 @@ export default function DashboardHeader() {
     >
       <div>
         <p className="text-[12.5px] font-medium uppercase tracking-[0.12em] text-gold/70">
-          APEX ONE · {today || "Executive Command Center"}
+          CORTEX · {today || "Executive Command Center"}
         </p>
         <h1 className="mt-1.5 font-display text-[28px] font-bold tracking-tight text-ivory lg:text-[32px]">
           Executive Command Center

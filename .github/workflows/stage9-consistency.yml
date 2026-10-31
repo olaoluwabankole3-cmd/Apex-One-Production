@@ -1,4 +1,4 @@
-name: APEX ONE — Stage 9 Consistency Gate
+name: CORTEX — Stage 9 Consistency Gate
 
 on:
   pull_request:

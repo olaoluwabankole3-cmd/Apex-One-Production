@@ -54,7 +54,7 @@ export default function ValueHeader({ title, subtitle, category = "VALUE INTELLI
       <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <p className="text-[12.5px] font-medium uppercase tracking-[0.12em] text-gold/70 font-mono">
-            {category} · {today || "APEX ONE"}
+            {category} · {today || "CORTEX"}
           </p>
           <h1 className="mt-1.5 font-display text-[28px] font-bold tracking-tight text-ivory lg:text-[32px]">
             {title}
