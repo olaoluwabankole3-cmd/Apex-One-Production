@@ -129,7 +129,8 @@ function validateLine(value: unknown, index: number, organizationId: string): Fi
   }
   if (typeof line.recordedAt !== "string" ||
       !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(line.recordedAt) ||
-      !Number.isFinite(Date.parse(line.recordedAt))) {
+      !Number.isFinite(Date.parse(line.recordedAt)) ||
+      new Date(line.recordedAt).toISOString().slice(0, 19) !== line.recordedAt.slice(0, 19)) {
     throw new ValidationError("Source recordedAt must be a valid UTC timestamp");
   }
   return line;
