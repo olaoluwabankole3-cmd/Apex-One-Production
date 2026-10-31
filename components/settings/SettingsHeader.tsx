@@ -14,7 +14,7 @@ export default function SettingsHeader() {
       <div>
         <p className="text-[12px] font-mono font-bold uppercase tracking-[0.15em] text-gold/70 flex items-center gap-2">
           <Sliders size={13} className="text-gold" />
-          APEX ONE — CONTROL INTERFACE
+          CORTEX — CONTROL INTERFACE
         </p>
         <h1 className="mt-2 font-display text-[28px] font-bold tracking-tight text-ivory lg:text-[34px] uppercase">
           ORGANIZATIONAL CONTROL CENTER
