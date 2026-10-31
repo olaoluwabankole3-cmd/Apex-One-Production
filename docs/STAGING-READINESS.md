@@ -4,13 +4,16 @@
 **Scope:** Controlled staging validation only. This checklist is not deployment authorization, a completed verification report, or proof that cloud infrastructure is provisioned.  
 **Related:** [Deployment contract](DEPLOYMENT.md), [Environment contract](ENVIRONMENT.md), [Infrastructure connection](INFRASTRUCTURE-CONNECTION.md), [Product integrity](PRODUCT-INTEGRITY.md).
 
-## Current evidence status
+## Current evidence status (observed 31 October 2026)
 
-- Application source and the CORTEX brand are committed to `main`.
-- Production CI, Stage 9, Stage 10, and Stage 11 are automated **test/assurance** gates. A pass does not prove an actual staging deployment exists.
-- `deploy/environments/staging.env.example` contains **placeholders**, not staging credentials.
-- No connected staging database, Redis service, encrypted S3 bucket, Gemini account, deployment controller, image registry, or deployed endpoint has been verified through this checklist.
-- Previously indexed documents may retain synthetic terms from the retired category-driven extractor. Until each tenant's historical records are inventoried and safely reprocessed or quarantined, document-derived decisions and search results are **not** approved for staging user acceptance or a production pilot.
+- CORTEX staging **is provisioned** in AWS `eu-west-1`: EC2 application instance, RDS PostgreSQL, ElastiCache Serverless Valkey and encrypted object storage, with a Cloudflare Tunnel for ingress.
+- On 31 October, the running release was commit `fd1955dcd4e4634abf26e7e49bb79f4d3c4c4cf5`, ECR digest `sha256:69dc843d3b8c46b83dfe722f4f3ff96013ac30d291100ec241accb08ffe18fad` and release ID `cortex-staging-fd1955dcd4e4`. Live readiness, ECR and GitHub matched.
+- Exact-source **CORTEX — Production CI** passed all 12 jobs for the deployed commit and the staging image candidate build succeeded. Stage 9/10/11 assurance passed on earlier commits; exact-source assurance for this staging release was **not** established by that result.
+- Read-only staging host checks returned HTTP 200 for liveness, startup and readiness, with zero unavailable authorities and zero configuration issues. These are infrastructure checks, **not** end-to-end user acceptance.
+- Future source commits, including changes to this runbook and verifier, need fresh exact-source gates and a new controlled image promotion before their code can be considered deployed.
+- The legacy document inventory previously identified an unassessed extracted record. It remains quarantined pending individual source-backed review.
+- RDS-managed credential rotation previously required a staging service restart. Automatic credential refresh/recovery has not been validated.
+- Staging UAT, rollback rehearsal, two-replica production topology and engineering/security sign-off are still outstanding.
 
 Mark a gate PASS only with the corresponding dated artifact or operator evidence; otherwise record BLOCKED or NOT RUN.
 
@@ -18,8 +21,8 @@ Mark a gate PASS only with the corresponding dated artifact or operator evidence
 
 | Gate | Evidence required | Status |
 | --- | --- | --- |
-| Immutable candidate | Exact 40-character `main` commit SHA, immutable registry `sha256:` digest, release ID | NOT RUN |
-| GitHub checks | Successful **CORTEX — Production CI** for the exact candidate commit, plus Stage 9/10/11 assurance on the changes being promoted | NOT RUN |
+| Immutable candidate | Exact 40-character `main` commit SHA, immutable registry `sha256:` digest, release ID | PASS for the deployed `fd1955d` only |
+| GitHub checks | Successful **CORTEX — Production CI** for the exact candidate commit, plus Stage 9/10/11 assurance on the changes being promoted | PARTIAL — CI passed; exact-source Stage 9/10/11 proof not established |
 | Branch review | All intended code PRs merged; no unreviewed artifacts or unresolved blockers | NOT RUN |
 | Product integrity | No legacy customer-facing branding, invented value metrics, or unsupported document terms; access-denied behavior verified | NOT RUN |
 | Existing documents | Tenant-scoped inventory, documented source integrity, quarantine/reprocessing decision and audit evidence for old extracted fields | BLOCKED |
@@ -78,12 +81,12 @@ For rollback follow the existing release-control contract and use a previously a
 
 | Decision evidence | Value |
 | --- | --- |
-| Candidate commit SHA | NOT SET |
-| Image digest | NOT SET |
-| Staging controller / endpoint | NOT VERIFIED |
-| Durable authority report | NOT RUN |
-| Staging release receipt | NOT PRESENT |
+| Running commit SHA (31 Oct) | `fd1955dcd4e4634abf26e7e49bb79f4d3c4c4cf5` |
+| Running ECR image digest (31 Oct) | `sha256:69dc843d3b8c46b83dfe722f4f3ff96013ac30d291100ec241accb08ffe18fad` |
+| Staging controller / endpoint | Local HTTP endpoints verified; production-grade controller attestation not established |
+| Durable authority report | Ready, no unavailable authorities on 31 Oct; attach formal operator evidence before GO |
+| Staging release receipt | Matching runtime and ECR identifiers; no provider-neutral controller receipt |
 | Historical document handling | BLOCKED — inventory and safe remediation required |
 | Security sign-off | NOT GRANTED |
 | Engineering sign-off | NOT GRANTED |
-| Overall status | **NO-GO — staging not yet provisioned or validated** |
+| Overall status | **NO-GO for production — healthy staging, UAT and security sign-offs outstanding** |
