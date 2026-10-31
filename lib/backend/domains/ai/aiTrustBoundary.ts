@@ -1,6 +1,7 @@
 import type { PermissionCapability, TenantContext } from "../../core/errors";
 import { requirePermission } from "../../core/security";
 import type { DatabaseStore } from "../../database/store";
+import { hasSourceGroundedExtraction } from "../documents/documentExtractionTrust";
 import type { QuerySpecification } from "../../database/querySpecification";
 import { EvidenceService } from "../evidence/evidenceService";
 import type {
@@ -421,7 +422,7 @@ export function createAuthorizedAiTools(database: DatabaseStore): Record<AiDataT
         requirePermission(ctx, "document:read");
         const query: QuerySpecification<any> = {
           ...baseQuery<any>(call),
-          ...(call.searchTerm ? { search: { fields: ["name", "category", "aiSummary", "tags"], term: call.searchTerm } } : {}),
+          ...(call.searchTerm ? { search: { fields: ["name", "category", "tags"], term: call.searchTerm } } : {}),
         };
         const countQuery = query.search ? { search: query.search } : {};
         const [page, totalMatched] = await Promise.all([
@@ -435,8 +436,9 @@ export function createAuthorizedAiTools(database: DatabaseStore): Record<AiDataT
             name: record.name,
             category: record.category,
             status: record.status,
-            summary: record.aiSummary?.slice(0, 800) || null,
-            extractedFieldCount: record.extractedFields.length,
+            summary: hasSourceGroundedExtraction(record) ? record.aiSummary?.slice(0, 800) || null : null,
+            extractedFieldCount: hasSourceGroundedExtraction(record) ? record.extractedFields.length : 0,
+            extractionAssessed: hasSourceGroundedExtraction(record),
             tags: record.tags.slice(0, 10),
           },
           provenance: await evidenceRef(evidence, "Document", record.id, `apex://Document/${record.id}`, ctx),

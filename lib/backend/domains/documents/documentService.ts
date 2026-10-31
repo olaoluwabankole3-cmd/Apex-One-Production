@@ -1,5 +1,5 @@
 /**
- * APEX ONE — Document Domain Service
+ * CORTEX — Document Domain Service
  *
  * PostgreSQL document metadata is authoritative. Blob storage is deliberately
  * coordinated through durable audit/outbox events because PostgreSQL and S3
@@ -23,6 +23,7 @@ import {
   resolveDocumentMimeType,
 } from "./documentStorage";
 import { documentExtractor } from "./documentExtractor";
+import { DOCUMENT_EXTRACTION_POLICY_VERSION, safeDocumentProjection } from "./documentExtractionTrust";
 import { IDocumentSearchIndex } from "./documentSearchIndex";
 
 export interface DocumentListOptions extends DocumentFilterDto {
@@ -109,7 +110,7 @@ export class DocumentService {
       ? await this.searchIndex.search(ctx.organizationId, query)
       : undefined;
 
-    return this.database.documentsRepo.findMany(ctx, {
+    const page = await this.database.documentsRepo.findMany(ctx, {
       where: {
         category:
           filters?.category && filters.category !== "all"
@@ -127,11 +128,12 @@ export class DocumentService {
       limit: filters?.limit,
       cursor: filters?.cursor,
     });
+    return { ...page, items: page.items.map(safeDocumentProjection) };
   }
 
   public async getDocumentById(id: string, ctx: TenantContext): Promise<DocumentRecord> {
     requirePermission(ctx, "document:read");
-    return this.database.documentsRepo.findById(id, ctx, "Document");
+    return safeDocumentProjection(await this.database.documentsRepo.findById(id, ctx, "Document"));
   }
 
   private operationAuditRecord(
@@ -367,6 +369,7 @@ export class DocumentService {
             ...doc.metadata,
             indexRef,
             extractedAt: new Date().toISOString(),
+            extractionPolicyVersion: DOCUMENT_EXTRACTION_POLICY_VERSION,
           },
         },
         uow.context,

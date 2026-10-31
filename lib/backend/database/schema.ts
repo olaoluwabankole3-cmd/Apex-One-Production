@@ -128,6 +128,8 @@ export interface DocumentMetadata {
   checksumSha256?: string;
   storageUri: string;
   extractedAt?: string;
+  /** Parser-policy version, not a canonical evidence-verification claim. */
+  extractionPolicyVersion?: "source-grounded-v1";
   indexRef?: string;
 }
 
