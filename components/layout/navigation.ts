@@ -1,25 +1,12 @@
 import type { LucideIcon } from "lucide-react";
 import {
   LayoutGrid,
-  Sparkles,
-  Users,
-  Cog,
-  FileStack,
-  BarChart3,
-  Workflow,
-  CalendarDays,
-  Bell,
+  BrainCircuit,
   BookOpenText,
-  Settings,
-  Gem,
-  ShieldAlert,
-  UserCheck,
-  Gauge,
-  Zap,
-  Trophy,
-  Brain,
-  Sliders,
-  LineChart,
+  FileStack,
+  Target,
+  Workflow,
+  ShieldCheck,
 } from "lucide-react";
 import type { OrganizationConfig } from "@/lib/organizationConfig";
 
@@ -31,34 +18,35 @@ export interface AppNavigationItem {
   feature?: keyof OrganizationConfig["features"];
 }
 
+/**
+ * CORTEX financial-institution release.
+ *
+ * Navigation represents source-backed intelligence journeys, not every
+ * backend domain or experimental screen. Detailed records remain reachable
+ * within their authorized workspaces; they are not a second sidebar.
+ * All visibility is gated by session-derived permissions.
+ */
 export const primaryNavigation: AppNavigationItem[] = [
-  { href: "/", label: "Executive Overview", icon: LayoutGrid, permission: "org:read" },
-  { href: "/ai-workspace", label: "AI Workspace", icon: Sparkles, permission: "ai:execute", feature: "aiWorkspace" },
-  { href: "/customers", label: "Customers", icon: Users, permission: "customer:read", feature: "customerIntelligence" },
-  { href: "/operations", label: "Operations", icon: Cog, permission: "org:read" },
-  { href: "/documents", label: "Documents", icon: FileStack, permission: "document:read" },
-  { href: "/analytics", label: "Analytics", icon: BarChart3, permission: "financial:read", feature: "revenueIntelligence" },
-  { href: "/workflows", label: "Workflows", icon: Workflow, permission: "workflow:read", feature: "workflowIntelligence" },
-  { href: "/calendar", label: "Calendar", icon: CalendarDays, permission: "org:read" },
-  { href: "/notifications", label: "Notifications", icon: Bell, permission: "org:read" },
-  { href: "/knowledge-hub", label: "Knowledge Hub", icon: BookOpenText, permission: "knowledge:read" },
-  { href: "/settings", label: "Settings", icon: Settings, permission: "org:admin" },
-];
-
-export const valueNavigation: AppNavigationItem[] = [
-  { href: "/value-intelligence", label: "Value Overview", icon: LayoutGrid, permission: "value:read" },
-  { href: "/value-intelligence/opportunities", label: "Value Opportunities", icon: Gem, permission: "value:read" },
-  { href: "/value-intelligence/leakage", label: "Revenue Leakage", icon: ShieldAlert, permission: "value:read" },
-  { href: "/value-intelligence/customer", label: "Customer Value", icon: UserCheck, permission: "value:read" },
-  { href: "/value-intelligence/capacity", label: "Capacity Intelligence", icon: Gauge, permission: "value:read", feature: "capacityIntelligence" },
-  { href: "/value-intelligence/captured", label: "Value Captured", icon: Trophy, permission: "value:read" },
-  { href: "/value-intelligence/execution", label: "Execution Center", icon: Zap, permission: "value:read" },
-  { href: "/value-intelligence/ai-analyst", label: "AI Value Analyst", icon: Brain, permission: "ai:execute" },
-  { href: "/value-intelligence/simulator", label: "Value Simulator", icon: Sliders, permission: "value:read" },
-  { href: "/value-intelligence/reports", label: "Executive Value Reports", icon: LineChart, permission: "value:read" },
+  { href: "/", label: "Command Center", icon: LayoutGrid, permission: "org:read" },
+  { href: "/ai-workspace", label: "CORTEX Intelligence", icon: BrainCircuit, permission: "ai:execute", feature: "aiWorkspace" },
+  { href: "/knowledge-hub", label: "Institutional Memory", icon: BookOpenText, permission: "knowledge:read" },
+  { href: "/documents", label: "Documents & Evidence", icon: FileStack, permission: "document:read" },
+  { href: "/value-intelligence", label: "Value & Risk", icon: Target, permission: "value:read", feature: "valueIntelligence" },
+  { href: "/workflows", label: "Action Center", icon: Workflow, permission: "workflow:read", feature: "workflowIntelligence" },
+  { href: "/value-intelligence/captured", label: "Recorded Outcomes", icon: ShieldCheck, permission: "value:read", feature: "valueIntelligence" },
 ];
 
 export function isNavigationItemActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
+  // Captured outcomes is a separate journey from value/risk opportunities.
+  if (href === "/value-intelligence") {
+    return (
+      (pathname === href || pathname.startsWith(`${href}/`)) &&
+      !(
+        pathname === "/value-intelligence/captured" ||
+        pathname.startsWith("/value-intelligence/captured/")
+      )
+    );
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
