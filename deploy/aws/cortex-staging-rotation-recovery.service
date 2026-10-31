@@ -1,0 +1,29 @@
+[Unit]
+Description=CORTEX staging RDS credential rotation recovery check
+Documentation=See docs/AWS-STAGING-ROTATION-RECOVERY.md in the CORTEX repository
+After=network-online.target docker.service apex-one.service
+Wants=network-online.target
+ConditionPathExists=/usr/local/libexec/cortex/staging_rotation_recovery.py
+ConditionPathExists=/etc/systemd/system/apex-one.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/bin/python3 /usr/local/libexec/cortex/staging_rotation_recovery.py --apply
+TimeoutStartSec=180
+UMask=0077
+StateDirectory=cortex-staging-rotation-recovery
+StateDirectoryMode=0700
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/run/lock
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target
