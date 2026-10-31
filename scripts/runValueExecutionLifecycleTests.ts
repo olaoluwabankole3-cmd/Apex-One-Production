@@ -267,7 +267,7 @@ async function runFullLifecycle(store: DatabaseStore, context: TenantContext, pr
 
 async function main() {
   console.log("=".repeat(80));
-  console.log("APEX ONE — STAGE 7 VALUE / EXECUTION LIFECYCLE INTEGRATION");
+  console.log("CORTEX — STAGE 7 VALUE / EXECUTION LIFECYCLE INTEGRATION");
   console.log("=".repeat(80));
 
   const memory = DatabaseStore.createFreshStore(EMPTY_PROVIDER);
