@@ -8,7 +8,7 @@ export async function GET() {
   return NextResponse.json(
     {
       status: "healthy",
-      service: "APEX ONE Backend",
+      service: "CORTEX Backend",
       release: resolveReleaseIdentity(),
       topology: {
         schemaVersion: getDeploymentTopologySummary().schemaVersion,
