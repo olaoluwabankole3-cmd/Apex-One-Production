@@ -198,6 +198,7 @@ const checks: Array<[string, () => void]> = [
   }],
   ["unusable timestamps are rejected", () => {
     rejects(request([line("expected", { recordedAt: "tomorrow" })]));
+    rejects(request([line("expected", { recordedAt: "2026-02-30T00:00:00Z" })]));
     rejects(request([line("expected", { recordedAt: "2026-01-01T00:00:00+02:00" })]));
   }],
   ["absent coverage declaration cannot produce a missing-source exception", () => {
