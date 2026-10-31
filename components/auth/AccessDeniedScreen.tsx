@@ -56,7 +56,7 @@ export default function AccessDeniedScreen() {
             A1
           </div>
           <div>
-            <p className="font-display text-lg font-bold text-ivory">APEX ONE</p>
+            <p className="font-display text-lg font-bold text-ivory">CORTEX</p>
             <p className="text-[9px] uppercase tracking-[0.14em] text-ivory/35">
               Access control
             </p>
@@ -71,7 +71,7 @@ export default function AccessDeniedScreen() {
         </h1>
         <p className="mt-2 text-sm leading-6 text-ivory/55">
           Your server-authenticated session does not include the capability required to
-          enter the internal APEX ONE workspace. No internal business data is displayed.
+          enter the internal CORTEX workspace. No internal business data is displayed.
         </p>
 
         <div className="mt-6 grid gap-3 rounded-xl border border-white/[0.07] bg-white/[0.025] p-4 text-sm sm:grid-cols-2">
