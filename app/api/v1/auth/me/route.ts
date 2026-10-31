@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: err.message || "Internal server error" },
+      { error: "Session verification failed", code: "INTERNAL_ERROR" },
       { status: 500 }
     );
   }
