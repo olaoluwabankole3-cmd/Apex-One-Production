@@ -80,6 +80,14 @@ async function main() {
     "Stale administrator session survived membership demotion"
   );
 
+  const currentAdmin = store.users.get("admin-a")!;
+  store.users.set("admin-a", { ...currentAdmin, status: "disabled" });
+  await assertForbidden(
+    () => listInstitutionTeam(context(), store),
+    "Disabled administrator account retained directory access"
+  );
+  store.users.set("admin-a", currentAdmin);
+
   // Any foreign member stays filtered even when a repository accidentally
   // hands back a cross-tenant row; do not trust arbitrary client identifiers.
   store.memberships.set("a1", {id:"a1",organizationId:"tenant-a",userId:"admin-a",role:"Administrator",joinedAt:now});
