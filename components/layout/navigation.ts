@@ -1,13 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import {
-  LayoutGrid,
-  BrainCircuit,
-  BookOpenText,
-  FileStack,
-  Target,
-  Workflow,
-  ShieldCheck,
-} from "lucide-react";
+import { House, FileStack, MessageSquareText, Target, ListChecks } from "lucide-react";
 import type { OrganizationConfig } from "@/lib/organizationConfig";
 
 export interface AppNavigationItem {
@@ -19,33 +11,26 @@ export interface AppNavigationItem {
 }
 
 /**
- * CORTEX financial-institution release.
- *
- * Navigation represents source-backed intelligence journeys, not every
- * backend domain or experimental screen. Detailed records remain reachable
- * within their authorized workspaces; they are not a second sidebar.
- * All visibility is gated by session-derived permissions.
+ * Five straightforward entry points for first-time financial operators.
+ * Knowledge and recorded outcomes stay available contextually without
+ * taking permanent space in the sidebar.
+ * Visibility remains derived from authenticated session capabilities.
  */
 export const primaryNavigation: AppNavigationItem[] = [
-  { href: "/", label: "Command Center", icon: LayoutGrid, permission: "org:read" },
-  { href: "/ai-workspace", label: "CORTEX Intelligence", icon: BrainCircuit, permission: "ai:execute", feature: "aiWorkspace" },
-  { href: "/knowledge-hub", label: "Institutional Memory", icon: BookOpenText, permission: "knowledge:read" },
-  { href: "/documents", label: "Documents & Evidence", icon: FileStack, permission: "document:read" },
+  { href: "/", label: "Home", icon: House, permission: "org:read" },
+  { href: "/documents", label: "Documents", icon: FileStack, permission: "document:read" },
   { href: "/value-intelligence", label: "Value & Risk", icon: Target, permission: "value:read", feature: "valueIntelligence" },
-  { href: "/workflows", label: "Action Center", icon: Workflow, permission: "workflow:read", feature: "workflowIntelligence" },
-  { href: "/value-intelligence/captured", label: "Recorded Outcomes", icon: ShieldCheck, permission: "value:read", feature: "valueIntelligence" },
+  { href: "/ai-workspace", label: "Ask CORTEX", icon: MessageSquareText, permission: "ai:execute", feature: "aiWorkspace" },
+  { href: "/workflows", label: "Actions", icon: ListChecks, permission: "workflow:read", feature: "workflowIntelligence" },
 ];
 
 export function isNavigationItemActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
-  // Captured outcomes is a separate journey from value/risk opportunities.
   if (href === "/value-intelligence") {
     return (
       (pathname === href || pathname.startsWith(`${href}/`)) &&
-      !(
-        pathname === "/value-intelligence/captured" ||
-        pathname.startsWith("/value-intelligence/captured/")
-      )
+      !(pathname === "/value-intelligence/captured" ||
+        pathname.startsWith("/value-intelligence/captured/"))
     );
   }
   return pathname === href || pathname.startsWith(`${href}/`);
