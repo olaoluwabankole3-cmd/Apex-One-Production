@@ -13,7 +13,7 @@ import {
   isProductionInfrastructureEnvironment,
   resolveInfrastructureConfiguration,
 } from "../../infrastructure/runtime";
-import { S3WireClient } from "../../infrastructure/s3/S3WireClient";
+import { S3WireClient, type S3VersionRetentionMetadata } from "../../infrastructure/s3/S3WireClient";
 
 export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 
@@ -22,6 +22,8 @@ export interface ObjectStorageWriteResult {
   bytes: number;
   checksumSha256: string;
   encryption: "AES-256-GCM" | "none";
+  /** S3 server-assigned version ID; absent for non-versioned buckets. */
+  versionId?: string;
 }
 
 export interface IObjectStorageService {
@@ -308,7 +310,7 @@ export class S3CompatibleObjectStorageService implements IObjectStorageService {
     const buffer = normalizeObjectData(data);
     const checksumSha256 = sha256(buffer);
     const encrypted = this.encrypt(normalizedKey, buffer, normalizedMimeType);
-    await this.client.putObject(
+    const receipt = await this.client.putObject(
       normalizedKey,
       encrypted,
       "application/vnd.apex.encrypted-document+json"
@@ -318,7 +320,21 @@ export class S3CompatibleObjectStorageService implements IObjectStorageService {
       bytes: buffer.length,
       checksumSha256,
       encryption: "AES-256-GCM",
+      ...(receipt.versionId ? { versionId: receipt.versionId } : {}),
     };
+  }
+
+  /** Read one pinned version, never the mutable latest S3 object. */
+  public async getObjectVersion(key: string, versionId: string): Promise<{ data: Buffer; mimeType: string } | null> {
+    const safeKey = validateStorageKey(key);
+    const object = await this.client.getObject(safeKey, versionId);
+    if (!object || object.versionId !== versionId) return null;
+    return this.decrypt(safeKey, object.data);
+  }
+
+  /** Observation only: no mutation of a bucket's retention settings. */
+  public async inspectObjectVersionRetention(key: string, versionId: string): Promise<S3VersionRetentionMetadata | null> {
+    return this.client.inspectObjectVersionRetention(validateStorageKey(key), versionId);
   }
 
   public async getObject(key: string): Promise<{ data: Buffer; mimeType: string } | null> {
