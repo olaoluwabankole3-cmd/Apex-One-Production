@@ -8,7 +8,6 @@ import { useAuth } from "@/components/auth/AuthContext";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import ApiFailureBanner from "@/components/layout/ApiFailureBanner";
-import CortexWelcome from "@/components/dashboard/CortexWelcome";
 
 function BrandMark() {
   return (
