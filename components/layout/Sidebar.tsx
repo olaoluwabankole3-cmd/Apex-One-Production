@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { motion } from "framer-motion";
@@ -20,15 +21,15 @@ export default function Sidebar() {
 
 
   return (
-    <aside className="hidden w-[248px] shrink-0 flex-col border-r border-white/[0.06] bg-charcoal/60 px-4 py-6 lg:flex">
+    <aside className="hidden w-[266px] shrink-0 flex-col border-r border-[#B99B7A]/15 bg-[#24231F] px-4 py-6 lg:flex">
       <div className="flex items-center gap-3 px-2 pb-8">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gold/30 bg-gold/10 font-display text-sm font-bold text-gold">
-          C
+        <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-[#C58D5F]/30 bg-[#171715]">
+          <Image src="/qorvex-emblem.svg" width={33} height={28} alt="" className="h-7 w-[33px]" />
         </div>
         <div className="leading-tight">
           <p className="font-display text-[17px] font-bold tracking-tight text-ivory">CORTEX</p>
           <p className="mt-0.5 text-[8.5px] uppercase tracking-[0.12em] text-ivory/35">
-            Financial Institution Intelligence
+            BY QORVEX · FINANCIAL INTELLIGENCE
           </p>
         </div>
       </div>
@@ -69,9 +70,9 @@ export default function Sidebar() {
 
       </nav>
 
-      <div className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3.5">
-        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-gold/60">
-          Financial institution workspace
+      <div className="mt-4 rounded-lg border border-[#C58D5F]/20 bg-[#171715]/60 p-3.5">
+        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#D9A06F]">
+          Your institution
         </p>
         <p className="mt-0.5 font-display text-[12.5px] font-semibold text-ivory/80">
           {organization.displayName}

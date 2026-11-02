@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { Bell, Menu, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
@@ -47,12 +48,12 @@ export default function Topbar() {
           </button>
 
           <Link href="/" className="flex items-center gap-2 lg:hidden" aria-label="CORTEX home">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-gold/30 bg-gold/10 font-display text-[11px] font-bold text-gold">C</span>
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#C58D5F]/30 bg-[#171715]"><Image src="/qorvex-emblem.svg" alt="" width={28} height={25} /></span>
             <span className="font-display text-sm font-bold text-ivory">CORTEX</span>
           </Link>
 
           <div className="hidden lg:block">
-            <p className="font-display text-sm font-semibold text-ivory/80">Financial Institution Intelligence</p>
+            <p className="font-display text-sm font-semibold text-ivory/80">CORTEX · Intelligence workspace</p>
             <p className="mt-0.5 text-[11px] text-ivory/35">{organization.displayName}</p>
           </div>
         </div>
@@ -93,7 +94,7 @@ export default function Topbar() {
               <div className="mb-5 flex items-center justify-between border-b border-white/[0.06] pb-6">
                 <div>
                   <p className="font-display text-[17px] font-bold text-ivory">CORTEX</p>
-                  <p className="mt-0.5 text-[9px] uppercase tracking-[0.14em] text-gold">Financial Intelligence Workspace</p>
+                  <p className="mt-0.5 text-[9px] uppercase tracking-[0.14em] text-gold">BY QORVEX · FINANCIAL INTELLIGENCE</p>
                 </div>
                 <button
                   onClick={() => setIsMobileMenuOpen(false)}
