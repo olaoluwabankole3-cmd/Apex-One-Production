@@ -2,6 +2,7 @@
 
 import { Loader2, LockKeyhole, ShieldAlert } from "lucide-react";
 import { useEffect } from "react";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthContext";
 import Sidebar from "@/components/layout/Sidebar";
@@ -12,15 +13,15 @@ import CortexWelcome from "@/components/dashboard/CortexWelcome";
 function BrandMark() {
   return (
     <div className="flex items-center gap-3">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-gold/30 bg-gold/10 font-display text-sm font-bold text-gold">
-        C
+      <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-[#C58D5F]/30 bg-[#171715]">
+        <Image src="/qorvex-emblem.svg" alt="" width={32} height={28} />
       </div>
       <div>
         <p className="font-display text-lg font-bold tracking-tight text-ivory">
           CORTEX
         </p>
         <p className="text-[10px] uppercase tracking-[0.14em] text-ivory/35">
-          Executive Intelligence OS
+          BY QORVEX · FINANCIAL INTELLIGENCE
         </p>
       </div>
     </div>
