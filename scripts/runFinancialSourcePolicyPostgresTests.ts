@@ -24,9 +24,17 @@ const ctx = (id: string): TenantContext => ({
   requestId: "source-pg-test-" + suffix, timestamp: now,
 });
 
+let checkpoint = "initialization";
+const hardStop = setTimeout(() => {
+  console.error("FAIL: source policy PostgreSQL test deadline at stage:", checkpoint);
+  process.exit(1);
+}, 65000);
+
 async function main() {
+  checkpoint = "database bootstrap";
   const db = DatabaseStore.createPostgresStore(databaseUrl!);
   await db.bootstrapPersistence();
+  checkpoint = "organization creation";
   await db.createOrganizationRecord({
     id: org, name: "Synthetic source custody institution",
     displayName: "Synthetic source custody institution",
@@ -34,6 +42,7 @@ async function main() {
     plan: "enterprise", currency: "NGN", currencySymbol: "₦",
     timezone: "Africa/Lagos", createdAt: now, updatedAt: now,
   });
+  checkpoint = "test identity creation";
   for (const id of userIds) {
     await db.createUserRecord({
       id, email: id + "@example.invalid", name: id, title: "Institution administrator",
@@ -44,17 +53,20 @@ async function main() {
       role: "Administrator", joinedAt: now,
     });
   }
+  checkpoint = "create approval service";
   const service = new FinancialSourceIntakeService(db, new InMemoryObjectStorageAdapter());
   const policy = await service.proposeSource(ctx(userIds[0]), {
     sourceLabel: "synthetic-core-settlement-source",
     kind: "settlement", role: "expected",
   });
   assert.equal(policy.status, "pending");
+  checkpoint = "self approval denial";
   await assert.rejects(() => service.decideSource(ctx(userIds[0]), {
     registryId: policy.id, expectedRevision: 1,
     verdict: "approved", reason: "Self authorization must never be possible",
   }), /may not approve/i);
 
+  checkpoint = "competing source reviewers";
   const [a, b] = await Promise.allSettled([
     service.decideSource(ctx(userIds[1]), {
       registryId: policy.id, expectedRevision: 1,
@@ -65,6 +77,7 @@ async function main() {
       verdict: "rejected", reason: "Concurrent reviewer attempts rejection of source policy",
     }),
   ]);
+  checkpoint = "concurrent review results";
   assert.equal([a, b].filter(x => x.status === "fulfilled").length, 1);
   assert.equal([a, b].filter(x => x.status === "rejected").length, 1);
   const after = await db.financialSourceRegistryRepo.findById(policy.id, ctx(userIds[0]));
@@ -74,6 +87,7 @@ async function main() {
   const audit = await db.auditLogsRepo.findMany(ctx(userIds[0]), { limit: 100 });
   assert.equal(audit.items.filter(x => x.resourceId === policy.id && x.action === "financial_source:reviewed").length, 1);
 
+  checkpoint = "restart persistence";
   const restarted = DatabaseStore.createPostgresStore(databaseUrl!);
   await restarted.bootstrapPersistence();
   const persisted = await restarted.financialSourceRegistryRepo.findById(policy.id, ctx(userIds[1]));
@@ -82,6 +96,7 @@ async function main() {
   assert.equal(persisted.externalSourceAuthorityVerified, false);
 
   // Failure in the audit insert must rollback the conditional source approval.
+  checkpoint = "audit failure rollback";
   const second = await service.proposeSource(ctx(userIds[0]), {
     sourceLabel: "synthetic-rollback-source", kind: "fee", role: "observed",
   });
@@ -98,6 +113,7 @@ async function main() {
   const reverted = await restarted.financialSourceRegistryRepo.findById(second.id, ctx(userIds[1]));
   assert.equal(reverted.status, "pending");
   assert.equal(reverted.revision, 1);
+  clearTimeout(hardStop);
   console.log("PASS: PostgreSQL atomic independent source checker, serialized races, restart durability and audit rollback");
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
