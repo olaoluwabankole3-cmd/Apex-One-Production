@@ -94,6 +94,17 @@ export const ROLE_PERMISSIONS = {
     "action:execute",
     "audit:read",
   ],
+  Finance: [
+    "org:read",
+    "financial:read",
+    "document:read",
+    "knowledge:read",
+    "workflow:read",
+    "workflow:write",
+    "ai:execute",
+    "value:read",
+    "audit:read",
+  ],
   "Relationship Manager": [
     "org:read",
     "customer:read",
