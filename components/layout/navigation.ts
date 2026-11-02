@@ -1,7 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   LayoutGrid, ArrowLeftRight, ClipboardList, ShieldCheck,
-  FileStack, ChartNoAxesCombined, Settings2,
+  FileStack, BarChart3, Settings2,
 } from "lucide-react";
 import type { OrganizationConfig } from "@/lib/organizationConfig";
 
@@ -25,7 +25,7 @@ export const primaryNavigation: AppNavigationItem[] = [
   { href: "/work/cases", label: "Cases", icon: ClipboardList, permission: "case:read" },
   { href: "/reviews", label: "Reviews", icon: ShieldCheck, permission: "case:approve" },
   { href: "/documents", label: "Evidence", icon: FileStack, permission: "document:read" },
-  { href: "/reports", label: "Reports", icon: ChartNoAxesCombined, permission: "case:read" },
+  { href: "/reports", label: "Reports", icon: BarChart3, permission: "case:read" },
   { href: "/settings", label: "Administration", icon: Settings2, permission: "org:admin" },
 ];
 
