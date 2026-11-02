@@ -1,3 +1,4 @@
+import GettingStartedPanel from "@/components/dashboard/GettingStartedPanel";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import ExecutiveSummary from "@/components/dashboard/ExecutiveSummary";
 import KpiGrid from "@/components/dashboard/KpiGrid";
@@ -10,6 +11,7 @@ export default function ExecutiveCommandCenterPage() {
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6" id="cortex-executive-command-center">
       <DashboardHeader />
+      <GettingStartedPanel />
 
       <div className="space-y-6">
         <ExecutiveSummary />
