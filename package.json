@@ -51,6 +51,7 @@
     "test:financial-source-integrity": "tsx scripts/runFinancialSourceIntegrityTests.ts",
     "test:financial-source-intake": "tsx scripts/runFinancialSourceIntakeTests.ts",
     "test:financial-provenance": "tsx scripts/runFinancialSourceProvenanceTests.ts",
+    "test:financial-import-journal": "tsx scripts/runFinancialSourceImportJournalTests.ts",
     "test:financial-source-policy-pg": "tsx scripts/runFinancialSourcePolicyPostgresTests.ts",
     "test:document-workspace": "tsx scripts/runDocumentWorkspaceModelTests.ts"
   },
