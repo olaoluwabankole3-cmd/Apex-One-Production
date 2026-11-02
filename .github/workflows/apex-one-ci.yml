@@ -63,6 +63,8 @@ jobs:
         run: bun run test:infra-connection
       - name: Test staging RDS secret rotation recovery safeguards
         run: python3 -m unittest discover -s ops -p 'test_staging_rotation_recovery.py' -v
+      - name: Enforce no-write financial evidence S3 Object Lock preflight and CloudFormation controls
+        run: python3 -m unittest discover -s ops -p 'test_financial_evidence_bucket_preflight.py' -v
       - name: Verify staging release gate safety against simulated endpoints
         run: bun run test:staging-http
       - name: Validate durable development Docker Compose configuration
