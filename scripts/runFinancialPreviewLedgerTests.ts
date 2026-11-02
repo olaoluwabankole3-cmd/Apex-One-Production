@@ -235,15 +235,45 @@ async function main(): Promise<void> {
     assert.equal(after.version, 1);
   });
 
-  await check("candidate storage never contains source CSV references or monetary values", async () => {
-    const output = await manager.withConnection(async (connection) =>
-      connection.query(`SELECT * FROM apex_financial_preview_cases WHERE organization_id = ${quotePostgresLiteral(org)}`)
-    );
-    const encoded = JSON.stringify(output.rows);
-    assert(!encoded.includes("REFERENCE-ALPHA"));
-    assert(!encoded.includes("row-provider"));
-    assert(!encoded.includes("9800"));
-    assert(!encoded.includes("10000"));
+  await check("preview metadata tables have no source reference or monetary-value columns", async () => {
+    const output = await manager.withConnection(async (connection) => ({
+      cases: await connection.query(
+        `SELECT * FROM apex_financial_preview_cases WHERE organization_id = ${quotePostgresLiteral(org)}`
+      ),
+      batches: await connection.query(
+        `SELECT * FROM apex_financial_preview_batches WHERE organization_id = ${quotePostgresLiteral(org)}`
+      ),
+    }));
+    assert(output.cases.rows.length > 0);
+    assert(output.batches.rows.length > 0);
+    const caseColumns = [
+      "organization_id", "batch_id", "case_id", "comparison_status",
+      "triage_status", "version", "reviewer_id", "reason_code", "updated_at",
+    ];
+    const batchColumns = [
+      "id", "organization_id", "request_fingerprint", "source_pair_fingerprint",
+      "reconciliation_kind", "case_count", "created_by", "created_at",
+    ];
+    for (const row of output.cases.rows) {
+      // Compare the actual schema, not substring matches against SHA-256 IDs:
+      // hashed case IDs can legitimately contain "9800" or "10000" by chance.
+      assert.deepEqual(Object.keys(row).sort(), [...caseColumns].sort());
+      assert.match(row.case_id!, /^recon-[a-f0-9]{32}$/);
+      assert(["amount_discrepancy", "currency_mismatch", "insufficient_source_coverage", "ambiguous"].includes(row.comparison_status!));
+    }
+    for (const row of output.batches.rows) {
+      assert.deepEqual(Object.keys(row).sort(), [...batchColumns].sort());
+      assert.match(row.source_pair_fingerprint!, /^[a-f0-9]{64}$/);
+      assert.match(row.request_fingerprint!, /^[a-f0-9]{64}$/);
+    }
+    const allColumns = [...caseColumns, ...batchColumns];
+    for (const forbidden of [
+      "reference", "source_record_id", "csv", "data", "amount_minor",
+      "expected_amount_minor", "observed_amount_minor", "difference_minor",
+      "financial_loss", "storage_key", "account_id",
+    ]) {
+      assert(!allColumns.includes(forbidden), `Sensitive column ${forbidden} must not be stored`);
+    }
   });
 
   console.log("CORTEX FINANCIAL PREVIEW LEDGER: 15/15 PostgreSQL integration checks passed");
