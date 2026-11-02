@@ -115,14 +115,15 @@ def evaluate_bucket(
     ownership_rules = _get(_get(raw, "ownership"), "OwnershipControls").get("Rules", [])
     tags_list = _get(raw, "tags").get("TagSet", [])
     tags = {str(t.get("Key")): t.get("Value") for t in tags_list if isinstance(t, dict)} if isinstance(tags_list, list) else {}
-    region = _get(raw, "location").get("LocationConstraint") or "us-east-1"
+    location_available = isinstance(raw.get("location"), dict) and bool(raw["location"])
+    region = (_get(raw, "location").get("LocationConstraint") or "us-east-1") if location_available else None
     policy = _get(raw, "bucket_policy").get("Policy")
     policy_status = _get(_get(raw, "policy_status"), "PolicyStatus")
 
     days = retain.get("Days")
     checks = {
         "separate_financial_bucket": bucket != DOC_BUCKET and "financial" in bucket and "evidence" in bucket,
-        "region_known": isinstance(region, str) and bool(region) and (expected_region is None or region == expected_region),
+        "region_known": location_available and isinstance(region, str) and bool(region) and (expected_region is None or region == expected_region),
         "versioning_enabled": version.get("Status") == "Enabled",
         "object_lock_enabled": config.get("ObjectLockEnabled") == "Enabled",
         "compliance_default_retention": retain.get("Mode") == "COMPLIANCE" and type(days) is int and days > 0,
