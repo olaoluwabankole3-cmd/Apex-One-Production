@@ -7,7 +7,8 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { TenantContext } from "../lib/backend/core/errors";
 import { ForbiddenError, ValidationError } from "../lib/backend/core/errors";
-import { prepareFinancialCsvPreview, type CsvPreviewRequest } from "../lib/backend/domains/reconciliation/csvPreviewService";
+import { prepareFinancialCsvPreview, validateFinancialCsvForInternalIntake, type CsvPreviewRequest } from "../lib/backend/domains/reconciliation/csvPreviewService";
+import { getPermissionsForRole } from "../lib/backend/core/security";
 
 const HEAD = "reference,currency,amount_minor,record_id,recorded_at\n";
 const RECORD = "TEST-001,NGN,10001,entry-01,2026-10-31T10:00:00Z\n";
@@ -73,6 +74,26 @@ const checks: Array<[string, () => void]> = [
   }],
   ["financial-write privilege without read cannot run a comparison", () => {
     rejects(request(), context("synthetic-bank-1", ["financial:write"]), ForbiddenError);
+  }],
+  ["Finance may compare synthetic inputs without financial-write authority", () => {
+    const finance = getPermissionsForRole("Finance");
+    assert(finance.includes("financial:read") && finance.includes("financial:preview"));
+    assert(!finance.includes("financial:write"), "Finance must never inherit broad financial writing");
+    const result = prepareFinancialCsvPreview(context("synthetic-bank-1", [...finance]), request());
+    assert.equal(result.reconciliation.cases[0].comparisonStatus, "amount_discrepancy");
+    assert.equal(result.sourceStored, false);
+    assert.equal(result.reconciliation.financialLossAssessed, false);
+  }],
+  ["preview rights cannot bypass financial source-intake write checks", () => {
+    const finance = getPermissionsForRole("Finance");
+    assert.throws(() => validateFinancialCsvForInternalIntake(
+      context("synthetic-bank-1", [...finance]), "settlement", "expected", request().expected
+    ), ForbiddenError);
+    assert(!getPermissionsForRole("Compliance").includes("financial:preview"));
+    rejects(request(), context("synthetic-bank-1", [...getPermissionsForRole("Compliance")]), ForbiddenError);
+  }],
+  ["scoped preview permission without financial read cannot compare", () => {
+    rejects(request(), context("synthetic-bank-1", ["financial:preview"]), ForbiddenError);
   }],
   ["unrecognized kind and unsupported body fields are rejected", () => {
     rejects({ ...request(), kind: "fraud" });
