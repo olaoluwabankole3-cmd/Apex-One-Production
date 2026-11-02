@@ -51,6 +51,8 @@ jobs:
         run: bun run test:document-quarantine
       - name: Run authentication experience regression gate
         run: bun run test:auth-experience
+      - name: Verify institution team scope and member privacy
+        run: bun run test:institution-team
       - name: Run Phase 3 infrastructure connection contract gate
         run: bun run test:infra-connection
       - name: Test staging RDS secret rotation recovery safeguards
