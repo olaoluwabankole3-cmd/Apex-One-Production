@@ -103,6 +103,21 @@ function CaseInbox() {
     }
   }
 
+  function clearPreviewDraft() {
+    // Remove only browser draft query state; no case, evidence or financial record is changed.
+    window.history.replaceState(window.history.state, "", window.location.pathname);
+    setDraftFromPreview(false);
+  }
+
+  function discardPreviewDraft() {
+    clearPreviewDraft();
+    setTitle("");
+    setDescription("");
+    setDepartment("Operations");
+    setPriority("normal");
+    setShowCreate(false);
+  }
+
   async function createCase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (saving || !mayCreate) return;
@@ -115,7 +130,7 @@ function CaseInbox() {
       });
       setTitle("");
       setDescription("");
-      setDraftFromPreview(false);
+      clearPreviewDraft();
       setShowCreate(false);
       setJustCreatedId(created.id);
       setExpandedCaseId(created.id);
@@ -167,6 +182,10 @@ function CaseInbox() {
                   <strong>Draft prepared from a preview classification only.</strong> No transaction references,
                   amounts, source files, hashes or evidence were transferred. Review the form before creating
                   an independent, unverified investigation.
+                  <button type="button" onClick={discardPreviewDraft}
+                    className="ml-3 inline-flex rounded-md border border-[#C58D5F]/45 px-3 py-1.5 font-semibold text-[#F5E3D1] hover:bg-[#C58D5F]/10">
+                    Discard preview draft
+                  </button>
                 </p>
               )}
               <p className="text-xs text-[#D3C9BD]">Creating a case does not verify a loss or execute an external banking action.</p>
