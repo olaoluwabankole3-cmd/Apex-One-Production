@@ -25,6 +25,14 @@ import {
   type FinancialStoredSourceReadResult
 } from "./financialSourceIntegrityGate";
 import { validateFinancialCsvForInternalIntake } from "./csvPreviewService";
+import {
+  pinFinancialSigner, verifyFinancialManifestSignature,
+  checkFinancialSnapshotObjectLock,
+  type SignedFinancialSourceManifest,
+  type FinancialSignerInput,
+  type ManifestCryptographicCheck,
+  type VersionRetentionCheck,
+} from "./financialSourceProvenanceGate";
 
 const MAX_BYTES = 128 * 1024;
 const SOURCE_LABEL = /^[A-Za-z0-9][A-Za-z0-9._-]{2,63}$/;
@@ -114,6 +122,7 @@ export class FinancialSourceIntakeService {
   /** Register a source definition, NOT an authenticated bank connector. */
   public async proposeSource(ctx: TenantContext, input: {
     sourceLabel: string; kind: Kind; role: Role;
+    signingKey?: FinancialSignerInput;
   }): Promise<FinancialSourceRegistryRecord> {
     gateIntake();
     await authorized(ctx, this.db, "org:admin");
@@ -125,6 +134,7 @@ export class FinancialSourceIntakeService {
         !["expected", "observed"].includes(input.role)) {
       throw new ValidationError("Source kind or role is not supported");
     }
+    const signingKey = input.signingKey === undefined ? undefined : pinFinancialSigner(input.signingKey);
     return this.db.runInTransaction(ctx, async () => {
       await authorized(ctx, this.db, "org:admin");
       const now = new Date().toISOString();
@@ -134,9 +144,11 @@ export class FinancialSourceIntakeService {
         status: "pending", createdByUserId: ctx.userId,
         createdAt: now, revision: 1, updatedAt: now,
         externalSourceAuthorityVerified: false,
+        ...(signingKey ? { signingKey } : {}),
       }, ctx);
       await this.db.recordAuditLog(audit(ctx, "financial_source:proposed", record.id, {
         kind: record.kind, role: record.role, revision: record.revision,
+        ...(signingKey ? { signerKeyId: signingKey.keyId, signerFingerprint: signingKey.keyFingerprintSha256 } : {}),
       }));
       return record;
     });
@@ -235,6 +247,7 @@ export class FinancialSourceIntakeService {
         recordedByUserId: ctx.userId, createdAt: new Date().toISOString(),
         encryption: stored.encryption,
         byteIntegrityCheckedAtIntake: true,
+        ...(stored.versionId ? { storageVersionId: stored.versionId } : {}),
         storageImmutabilityVerified: false,
         sourceAuthenticityVerified: false,
         coverageVerified: false,
@@ -247,6 +260,58 @@ export class FinancialSourceIntakeService {
       }));
       return record;
     });
+  }
+
+  /**
+   * Signature validity is key-matching only. The pinned public key was
+   * reviewed by two local administrators; it is NOT independently attested as
+   * owned by the purported bank or payment processor.
+   */
+  public async checkSnapshotManifestSignature(ctx: TenantContext, input: {
+    snapshotId: string;
+    manifest: SignedFinancialSourceManifest;
+    signatureBase64: string;
+  }): Promise<ManifestCryptographicCheck> {
+    gateIntake();
+    await authorized(ctx, this.db, "financial:read");
+    const snapshot = await scopedFind(this.db.financialSourceSnapshotsRepo, ctx, input.snapshotId, "FinancialSourceSnapshot");
+    const registry = await scopedFind(this.db.financialSourceRegistryRepo, ctx, snapshot.sourceRegistryId, "FinancialSourceRegistry");
+    const result = verifyFinancialManifestSignature(
+      input.manifest, input.signatureBase64, registry, snapshot
+    );
+    await this.db.runInTransaction(ctx, async () => {
+      await authorized(ctx, this.db, "financial:read");
+      await this.db.recordAuditLog(audit(ctx, "financial_source:manifest_signature_checked", snapshot.id, {
+        sourceRegistryId: registry.id, signerKeyId: result.signerKeyId,
+        signerKeyFingerprint: result.signerKeyFingerprintSha256,
+        manifestFingerprint: result.manifestFingerprintSha256,
+        bankKeyOwnershipIndependentlyVerified: false,
+      }));
+    });
+    return result;
+  }
+
+  /**
+   * Version-specific S3 COMPLIANCE headers are an OBSERVATION, not a guarantee
+   * that the bank's retention policy is satisfied. The version must have been
+   * returned by S3 itself at intake; no unversioned/latest key is accepted.
+   */
+  public async checkSnapshotRetention(ctx: TenantContext, snapshotId: string): Promise<VersionRetentionCheck> {
+    gateIntake();
+    await authorized(ctx, this.db, "financial:read");
+    if (!(this.storage instanceof S3CompatibleObjectStorageService)) {
+      throw new ConflictError("S3 version-specific retention inspection requires the encrypted S3 adapter");
+    }
+    const snapshot = await scopedFind(this.db.financialSourceSnapshotsRepo, ctx, snapshotId, "FinancialSourceSnapshot");
+    const result = await checkFinancialSnapshotObjectLock(ctx.organizationId, snapshot, this.storage);
+    await this.db.runInTransaction(ctx, async () => {
+      await authorized(ctx, this.db, "financial:read");
+      await this.db.recordAuditLog(audit(ctx, "financial_source:retention_observed", snapshot.id, {
+        s3VersionId: result.s3VersionId, retainUntil: result.retainUntil,
+        complianceModeObserved: true, bankRetentionPolicyVerified: false,
+      }));
+    });
+    return result;
   }
 
   /** Authorized, read-only preview of TWO independently approved sources. */

@@ -5,7 +5,7 @@
  */
 process.env.TEST_ENV = "true";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { randomUUID, generateKeyPairSync, sign } from "node:crypto";
 import { DatabaseStore } from "../lib/backend/database/store";
 import { getPermissionsForRole, type TenantContext } from "../lib/backend/core/security";
 import type { OrganizationMembershipRecord, UserRecord } from "../lib/backend/database/schema";
@@ -15,6 +15,7 @@ import {
 } from "../lib/backend/domains/documents/documentStorage";
 import { FinancialSourceIntakeService } from "../lib/backend/domains/reconciliation/financialSourceIntakeService";
 import { financialSourceSnapshotKey } from "../lib/backend/domains/reconciliation/financialSourceIntegrityGate";
+import { manifestSigningBytes } from "../lib/backend/domains/reconciliation/financialSourceProvenanceGate";
 
 const unique = randomUUID().slice(0, 12);
 const org = "fin-source-test-" + unique;
@@ -56,8 +57,13 @@ const rejects = async (task: () => Promise<unknown>, pattern: RegExp) =>
 
 async function exercise(storage: IObjectStorageService, label: string) {
   const service = new FinancialSourceIntakeService(db, storage);
+  const signingPair = generateKeyPairSync("ed25519");
+  const signingKey = {
+    keyId: "synthetic-signer-" + unique,
+    ed25519PublicKeySpkiDerBase64: signingPair.publicKey.export({ type: "spki", format: "der" }).toString("base64"),
+  };
   const ePolicy = await service.proposeSource(ctx("registrar"), {
-    sourceLabel: label + "-settlement-expected", kind: "settlement", role: "expected",
+    sourceLabel: label + "-settlement-expected", kind: "settlement", role: "expected", signingKey,
   });
   assert.equal(ePolicy.status, "pending");
   assert.equal(ePolicy.externalSourceAuthorityVerified, false);
@@ -81,6 +87,7 @@ async function exercise(storage: IObjectStorageService, label: string) {
     reason: "Allow synthetic expected-source intake under test controls",
   });
   assert.equal(approvedExpected.reviewedByUserId, "checker");
+  assert.equal(approvedExpected.signingKey?.bankKeyOwnershipIndependentlyVerified, false);
   await rejects(() => service.decideSource(ctx("checker"), {
     registryId: ePolicy.id, expectedRevision: 1, verdict: "approved",
     reason: "Duplicate decision must fail on old revision",
@@ -137,6 +144,43 @@ async function exercise(storage: IObjectStorageService, label: string) {
   assert.equal(source.sourceAuthenticityVerified, false);
   assert.equal(source.coverageVerified, false);
   assert.equal(source.financialLossAssessed, false);
+  const signedManifest = {
+    schemaVersion: 1 as const,
+    organizationId: org, registryId: ePolicy.id,
+    sourceReference: "signed-synthetic-feed-" + unique,
+    kind: "settlement" as const, role: "expected" as const,
+    sha256: source.expectedSha256, bytes: source.expectedBytes,
+    issuedAt: "2026-11-02T10:00:00Z", expiresAt: "2026-11-09T10:00:00Z",
+  };
+  // The service uses real wall clock; tests must not depend on a frozen
+  // historical reference when the fixture is run in a later month.
+  const issued = new Date(Date.now() - 60_000);
+  const expires = new Date(Date.now() + 2 * 86400_000);
+  const utc = (date: Date) => date.toISOString().replace(/\.\d{3}Z$/, "Z");
+  signedManifest.issuedAt = utc(issued);
+  signedManifest.expiresAt = utc(expires);
+  const signatureBase64 = sign(
+    null, manifestSigningBytes(signedManifest), signingPair.privateKey
+  ).toString("base64");
+  const verified = await service.checkSnapshotManifestSignature(ctx("custodian"), {
+    snapshotId: source.id, manifest: signedManifest, signatureBase64,
+  });
+  assert.equal(verified.signatureValid, true);
+  assert.equal(verified.sourceAuthenticityVerified, false);
+  assert.equal(verified.bankKeyOwnershipIndependentlyVerified, false);
+  await rejects(() => service.checkSnapshotManifestSignature(ctx("custodian"), {
+    snapshotId: source.id, manifest: { ...signedManifest, sha256: "a".repeat(64) }, signatureBase64,
+  }), /does not match/i);
+  await rejects(() => service.checkSnapshotManifestSignature(ctx("outsider", otherOrg), {
+    snapshotId: source.id, manifest: signedManifest, signatureBase64,
+  }), /not found/i);
+  // A standard LocalStack bucket has no COMPLIANCE version retention; the
+  // service MUST refuse to classify a plain encrypted object as WORM.
+  if (storage instanceof S3CompatibleObjectStorageService) {
+    await rejects(() => service.checkSnapshotRetention(ctx("custodian"), source.id),
+      /no pinned|no qualifying|retention|S3/i);
+  }
+
   if (storage instanceof S3CompatibleObjectStorageService) {
     assert.equal(source.encryption, "AES-256-GCM");
     assert.equal(paired.encryption, "AES-256-GCM");

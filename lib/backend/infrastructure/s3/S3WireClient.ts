@@ -8,10 +8,17 @@ export interface S3WireClientConfig {
   endpoint?: string;
 }
 
+export interface S3VersionRetentionMetadata {
+  versionId: string;
+  mode: string | null;
+  retainUntil: string | null;
+}
+
 export interface S3RawObject {
   data: Buffer;
   contentType?: string;
   etag?: string;
+  versionId?: string;
 }
 
 export class S3ObjectStorageError extends Error {
@@ -167,9 +174,18 @@ export class S3WireClient {
     key?: string,
     body: Buffer = Buffer.alloc(0),
     contentType?: string,
-    allowNotFound: boolean = false
+    allowNotFound: boolean = false,
+    versionId?: string
   ): Promise<Response | null> {
     const url = this.requestUrl(key);
+    if (versionId !== undefined) {
+      // Never accept caller-supplied query syntax or ambiguous S3 versions.
+      if (!key || versionId.length < 1 || versionId.length > 256 ||
+          !/^[A-Za-z0-9+./=_-]+$/.test(versionId) || versionId === "null") {
+        throw new TypeError("Pinned S3 object version ID is invalid");
+      }
+      url.searchParams.set("versionId", versionId);
+    }
     const payloadHash = sha256Hex(body);
     const now = new Date();
     const signed = this.authorization(method, url, payloadHash, now);
@@ -202,18 +218,39 @@ export class S3WireClient {
     await this.request("PUT", undefined, Buffer.alloc(0));
   }
 
-  public async putObject(key: string, data: Buffer, contentType: string): Promise<{ etag?: string }> {
+  public async putObject(key: string, data: Buffer, contentType: string): Promise<{ etag?: string; versionId?: string }> {
     const response = await this.request("PUT", key, data, contentType);
-    return { etag: response?.headers.get("etag") || undefined };
+    return { etag: response?.headers.get("etag") || undefined,
+      versionId: response?.headers.get("x-amz-version-id") || undefined };
   }
 
-  public async getObject(key: string): Promise<S3RawObject | null> {
-    const response = await this.request("GET", key, Buffer.alloc(0), undefined, true);
+  public async getObject(key: string, versionId?: string): Promise<S3RawObject | null> {
+    const response = await this.request("GET", key, Buffer.alloc(0), undefined, true, versionId);
     if (!response) return null;
     return {
       data: Buffer.from(await response.arrayBuffer()),
       contentType: response.headers.get("content-type") || undefined,
       etag: response.headers.get("etag") || undefined,
+      versionId: response.headers.get("x-amz-version-id") || undefined,
+    };
+  }
+
+  /**
+   * Read-only Object Lock metadata of one EXACT version. The caller must
+   * inspect the version returned by S3 at upload, not a mutable latest key.
+   * S3 permissions must include GetObjectRetention for these HEAD headers.
+   */
+  public async inspectObjectVersionRetention(key: string, versionId: string): Promise<S3VersionRetentionMetadata | null> {
+    const response = await this.request("HEAD", key, Buffer.alloc(0), undefined, true, versionId);
+    if (!response) return null;
+    const actual = response.headers.get("x-amz-version-id");
+    if (!actual || actual !== versionId) {
+      throw new S3ObjectStorageError("S3 retention response did not match requested version", 412);
+    }
+    return {
+      versionId: actual,
+      mode: response.headers.get("x-amz-object-lock-mode"),
+      retainUntil: response.headers.get("x-amz-object-lock-retain-until-date"),
     };
   }
 
