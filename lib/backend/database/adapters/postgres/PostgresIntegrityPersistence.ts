@@ -381,6 +381,10 @@ export class PostgresIntegrityPersistence {
     return this.persistence.getMembership(userId, organizationId);
   }
 
+  public getMembershipsForOrganization(organizationId: string): Promise<OrganizationMembershipRecord[]> {
+    return this.persistence.getMembershipsForOrganization(organizationId);
+  }
+
   public getMembershipsForUser(userId: string): Promise<OrganizationMembershipRecord[]> {
     return this.persistence.getMembershipsForUser(userId);
   }

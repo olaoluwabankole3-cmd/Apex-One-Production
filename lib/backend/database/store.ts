@@ -361,6 +361,14 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     return this.postgresPersistence ? this.postgresPersistence.getMembership(userId, orgId) : this.getUserMembership(userId, orgId);
   }
 
+  public async findMembershipsForOrganization(orgId: string): Promise<OrganizationMembershipRecord[]> {
+    if (this.postgresPersistence) return this.postgresPersistence.getMembershipsForOrganization(orgId);
+    return Array.from(this.memberships.values())
+      .filter((membership) => membership.organizationId === orgId)
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .slice(0, 101);
+  }
+
   public async findMembershipsForUser(userId: string): Promise<OrganizationMembershipRecord[]> {
     if (this.postgresPersistence) return this.postgresPersistence.getMembershipsForUser(userId);
     return Array.from(this.memberships.values()).filter((membership) => membership.userId === userId);

@@ -574,6 +574,9 @@ export interface BankingCaseRecord {
   sourceId?: string;
   createdByUserId: string;
   ownerUserId: string;
+  /** Optimistic revision of case ownership state; historical cases default to 1. */
+  revision?: number;
+  lastHandoffAt?: string;
   createdAt: string;
   updatedAt: string;
 }

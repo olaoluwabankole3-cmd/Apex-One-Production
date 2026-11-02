@@ -711,6 +711,14 @@ export class PostgresPersistence {
       `SELECT record::text AS record FROM apex_memberships WHERE user_id = ${quotePostgresLiteral(userId)} AND organization_id = ${quotePostgresLiteral(organizationId)} LIMIT 1`
     )).rows[0]));
   }
+  public async getMembershipsForOrganization(organizationId: string): Promise<OrganizationMembershipRecord[]> {
+    return this.manager.withConnection(async (connection) => (await connection.query(
+      `SELECT record::text AS record FROM apex_memberships
+       WHERE organization_id = ${quotePostgresLiteral(organizationId)}
+       ORDER BY id LIMIT 101`
+    )).rows.map((row) => parseRecord<OrganizationMembershipRecord>(row)!).filter(Boolean));
+  }
+
   public async getMembershipsForUser(userId: string): Promise<OrganizationMembershipRecord[]> {
     return this.manager.withConnection(async (connection) => (await connection.query(
       `SELECT record::text AS record FROM apex_memberships WHERE user_id = ${quotePostgresLiteral(userId)} ORDER BY organization_id, id`

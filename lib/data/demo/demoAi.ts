@@ -43,6 +43,7 @@ export const demoReportSections: ReportSection[] = [];
 export const demoExecutiveSummary: Record<Role, string> = {
   CEO: "Zero critical alerts active. Connect organizational data streams or import records to view real-time executive summaries.",
   Operations: "Operations platform standby. Connect telemetry feeds to monitor live reconciliation and SLA compliance.",
+  Finance: "No authoritative finance briefing is connected. Review permitted banking cases and source records instead.",
   "Relationship Manager": "No active customer alerts. Connect CRM data sources to track relationship health.",
   Compliance: "Compliance monitors active. No policy violations detected.",
   "Customer Service": "Support queue is currently clear.",
