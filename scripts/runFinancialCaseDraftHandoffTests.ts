@@ -64,6 +64,16 @@ assert.match(cases,/api\/v1\/banking-cases/);
 assert.match(cases,/No transaction references/);
 assert.match(cases,/avo(i|id) duplicate/i);
 assert.match(cases,/evidence.*linked|link.*evidence/i);
+assert.match(cases,/window\.history\.replaceState\(window\.history\.state, "", window\.location\.pathname\)/,
+  "Successful/discarded preview drafts must clear browser query state");
+assert.match(cases,/function discardPreviewDraft\(\)/,
+  "A user must be able to discard an unsubmitted preview draft explicitly");
+assert.match(cases,/Discard preview draft/,
+  "Case form must expose the discard action");
+assert.match(cases,/const created = await apiClient\.postData<BankingCaseRecord>[\s\S]*?clearPreviewDraft\(\)/,
+  "Preview URL state may only be cleared after the server acknowledges creation");
+assert.match(cases,/catch \{[\s\S]*?avoid duplicate investigations/i,
+  "An ambiguous create failure must retain the operator's need to reconcile before retry");
 const server = readFileSync(join(process.cwd(),"app/api/v1/banking-cases/route.ts"),"utf8");
 assert.match(server,/resolveTenantContext\(req\.headers\)/);
 assert.match(server,/bankingCaseService\.create\(ctx,/);
