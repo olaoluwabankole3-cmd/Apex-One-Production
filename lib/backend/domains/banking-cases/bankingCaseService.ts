@@ -60,10 +60,10 @@ export async function verifyCurrentAccess(
   capability: "case:read" | "case:create" | "case:assign" | "case:approve"
 ): Promise<{ isAdministrator: boolean }> {
   requirePermission(ctx, capability);
-  const [membership, user] = await Promise.all([
-    database.findUserMembership(ctx.userId, ctx.organizationId),
-    database.findUserById(ctx.userId),
-  ]);
+  // Shared PostgreSQL transactional wire connections cannot run simultaneous
+  // queries. Sequential identity reads preserve fail-closed membership checks.
+  const membership = await database.findUserMembership(ctx.userId, ctx.organizationId);
+  const user = await database.findUserById(ctx.userId);
   if (!membership || !user || user.status !== "active" ||
       membership.role !== ctx.userRole ||
       !getPermissionsForRole(membership.role).includes(capability)) {
@@ -214,10 +214,8 @@ export class BankingCaseService {
       if (recipientUserId === existing.ownerUserId) {
         throw new ValidationError("Case is already assigned to the selected employee");
       }
-      const [recipientMembership, recipient] = await Promise.all([
-        this.database.findUserMembership(recipientUserId, ctx.organizationId),
-        this.database.findUserById(recipientUserId),
-      ]);
+      const recipientMembership = await this.database.findUserMembership(recipientUserId, ctx.organizationId);
+      const recipient = await this.database.findUserById(recipientUserId);
       const department = recipientMembership ? departmentForRole(recipientMembership.role) : null;
       if (!recipientMembership || recipientMembership.organizationId !== ctx.organizationId ||
           !recipient || recipient.status !== "active" || !department ||
