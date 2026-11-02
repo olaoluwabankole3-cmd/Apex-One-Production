@@ -427,7 +427,8 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     if (existing.status !== "pending" || existing.revision !== expectedRevision) {
       throw new ConflictError("Source proposal changed or was already reviewed");
     }
-    return this.financialSourceRegistryRepo.update(id, updates, ctx, "FinancialSourceRegistry");
+    const { updatedAt: _generatedByRepository, ...safeUpdates } = updates;
+    return this.financialSourceRegistryRepo.update(id, safeUpdates, ctx, "FinancialSourceRegistry");
   }
 
   public async findMembershipsForUser(userId: string): Promise<OrganizationMembershipRecord[]> {
