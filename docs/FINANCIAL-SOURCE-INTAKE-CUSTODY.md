@@ -45,11 +45,12 @@ Run in the S3 integration environment:
 
 ```bash
 bun run test:financial-source-intake
+bun run test:financial-source-policy-pg
 bun run typecheck
 bun run build
 ```
 
-The test uses LocalStack and the existing encrypted object-storage adapter; CI supplies synthetic S3 credentials. Do **not** run it against a production bucket or production database.
+The intake test uses LocalStack and the existing encrypted object-storage adapter; CI supplies synthetic S3 credentials. A separate disposable PostgreSQL test proves atomic competing policy reviews, persistence across DBStore restarts, and rollback when audit insertion fails. Do **not** run it against a production bucket or production database.
 
 ## Next engineering milestone
 
