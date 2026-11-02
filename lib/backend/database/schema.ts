@@ -648,6 +648,9 @@ export interface FinancialSourceRegistryRecord {
   revision: number;
   updatedAt: string;
   externalSourceAuthorityVerified: false;
+  revokedAt?: string;
+  revokedByUserId?: string;
+  revocationReason?: string;
   /** The second admin approves the exact verifier key fingerprint, not external bank identity. */
   signingKey?: {
     keyId: string;
@@ -677,6 +680,7 @@ export interface FinancialSignerOnboardingRecord {
   challengeExpiresAt: string;
   challengeIssuedAt: string;
   proofVerifiedAt?: string;
+  proofSubmittedByUserId?: string;
   proofSignatureSha256?: string;
   reviewedByUserId?: string;
   reviewedAt?: string;
