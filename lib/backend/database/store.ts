@@ -356,6 +356,18 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     return Array.from(this.memberships.values()).filter((membership) => membership.userId === userId);
   }
 
+  /**
+   * Lists only memberships belonging to one tenant. Read only, capped to 101
+   * entries so the caller can report whether more results exist.
+   */
+  public async findMembershipsForOrganization(organizationId: string): Promise<OrganizationMembershipRecord[]> {
+    if (this.postgresPersistence) return this.postgresPersistence.getMembershipsForOrganization(organizationId);
+    return Array.from(this.memberships.values())
+      .filter((membership) => membership.organizationId === organizationId)
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .slice(0, 101);
+  }
+
   public async updateUserPasswordCredentials(
     userId: string,
     organizationId: string,
