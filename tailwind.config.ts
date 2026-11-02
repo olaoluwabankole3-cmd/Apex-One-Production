@@ -9,20 +9,20 @@ const config: Config = {
     extend: {
       colors: {
         matte: {
-          DEFAULT: "#0A0A0B",
-          950: "#050506",
+          DEFAULT: "#171715",
+          950: "#11110F",
         },
         charcoal: {
-          DEFAULT: "#16161A",
-          light: "#1C1C22",
-          lighter: "#232329",
+          DEFAULT: "#24231F",
+          light: "#302D29",
+          lighter: "#3A352F",
         },
         gold: {
-          DEFAULT: "#C9A961",
-          bright: "#E8CD8A",
-          dim: "#8A7440",
+          DEFAULT: "#C58D5F",
+          bright: "#D9A06F",
+          dim: "#A65A2E",
         },
-        ivory: "#F7F5F0",
+        ivory: "#F5F1E8",
         emerald: {
           DEFAULT: "#3FBF8F",
         },
@@ -40,11 +40,11 @@ const config: Config = {
       },
       boxShadow: {
         glass: "0 8px 32px 0 rgba(0, 0, 0, 0.45)",
-        "gold-glow": "0 0 40px -8px rgba(201, 169, 97, 0.35)",
+        "gold-glow": "0 0 40px -8px rgba(197, 141, 95, 0.27)",
       },
       backgroundImage: {
-        "gold-gradient": "linear-gradient(135deg, #E8CD8A 0%, #C9A961 45%, #8A7440 100%)",
-        "grain-radial": "radial-gradient(circle at 50% 0%, rgba(201,169,97,0.08), transparent 60%)",
+        "gold-gradient": "linear-gradient(135deg, #D9A06F 0%, #C58D5F 45%, #A65A2E 100%)",
+        "grain-radial": "radial-gradient(circle at 50% 0%, rgba(197,141,95,0.09), transparent 60%)",
       },
       animation: {
         "scan-line": "scan-line 3s ease-in-out infinite",
