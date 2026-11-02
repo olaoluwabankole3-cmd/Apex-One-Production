@@ -678,3 +678,32 @@ export interface FinancialSourceSnapshotRecord {
   coverageVerified: false;
   financialLossAssessed: false;
 }
+
+
+/** Recovery-journal metadata only: NEVER persist raw financial transaction data. */
+export interface FinancialSourceImportRecord {
+  id: string;
+  organizationId: string;
+  sourceRegistryId: string;
+  idempotencyKeySha256: string;
+  sourceId: string;
+  snapshotId: string;
+  kind: "settlement" | "fee";
+  role: "expected" | "observed";
+  expectedSha256: string;
+  expectedBytes: number;
+  rowCount: number;
+  initiatedByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  revision: number;
+  state: "prepared" | "uploading" | "stored" | "committed" | "quarantined";
+  storageVersionId?: string;
+  manifestFingerprintSha256: string;
+  signingKeyFingerprintSha256: string;
+  quarantineCode?: "upload_interrupted" | "storage_verification_failed" | "source_policy_changed";
+  /** No external source authority, financial loss or completeness is inferred. */
+  sourceAuthenticityVerified: false;
+  coverageVerified: false;
+  financialLossAssessed: false;
+}
