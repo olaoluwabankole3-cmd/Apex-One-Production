@@ -2,7 +2,8 @@
 
 /**
  * Operator preview. The server independently denies this endpoint outside
- * explicitly enabled staging and authorizes financial:read + financial:write.
+ * explicitly enabled staging and requires financial:read plus a scoped
+ * financial:preview (or legacy financial:write) capability.
  * No feed storage, bank connector, loss certification or cash movement.
  */
 import { FormEvent, useState } from "react";
@@ -28,7 +29,7 @@ const OBSERVED = [
 
 function PreviewScreen() {
   const { hasPermission } = useAuth();
-  const mayRun = hasPermission("financial:write");
+  const mayRun = hasPermission("financial:preview") || hasPermission("financial:write");
   const [kind, setKind] = useState<"settlement" | "fee">("settlement");
   const [expected, setExpected] = useState("");
   const [observed, setObserved] = useState("");
@@ -90,7 +91,7 @@ function PreviewScreen() {
       {!mayRun ? (
         <section className="rounded-xl border border-white/10 bg-[#292823] p-6 text-sm text-[#D3C9BD]">
           Your role can view financial operations context, but cannot submit preview data.
-          A financial-data writer permission is required.
+          A financial preview permission is required; this does not grant access to financial imports or writes.
         </section>
       ) : (
         <form onSubmit={(event) => void run(event)} className="space-y-5 rounded-xl border border-white/10 bg-[#292823] p-5 sm:p-7">
