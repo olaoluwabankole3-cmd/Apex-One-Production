@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTenantContext } from "@/lib/backend/core/security";
-import { ValidationError } from "@/lib/backend/core/errors";
+import { NotFoundError, ValidationError } from "@/lib/backend/core/errors";
 import { assertAllowedQueryKeys } from "@/lib/backend/core/requestValidation";
 import { serializeApiError, toApiSuccessResponse } from "@/lib/backend/core/httpContract";
 import { createApplicationInfrastructure } from "@/lib/backend/infrastructure/composition";
@@ -61,6 +61,11 @@ async function readBoundedJson(req: NextRequest): Promise<unknown> {
 export async function POST(req: NextRequest) {
   let requestId: string | undefined;
   try {
+    // Explicit opt-in and staging-only: never accept real bank feeds in production.
+    if (process.env.APEX_DEPLOYMENT_ENVIRONMENT !== "staging" ||
+        process.env.CORTEX_FINANCIAL_PREVIEW_ENABLED !== "true") {
+      throw new NotFoundError("Financial preview");
+    }
     const ctx = await resolveTenantContext(req.headers);
     requestId = ctx.requestId;
     assertAllowedQueryKeys(req.nextUrl.searchParams, []);
