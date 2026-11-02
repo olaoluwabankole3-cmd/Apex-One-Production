@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { apiClient } from "@/lib/apiClient";
+import type { InstitutionTeamSnapshot } from "@/lib/backend/domains/organization/institutionTeamService";
 import {
   ArrowUpRight,
   Building2,
@@ -22,6 +25,27 @@ import { useAuth } from "@/components/auth/AuthContext";
  */
 export default function SettingsWorkspace() {
   const { user, organization, availableOrganizations, hasPermission } = useAuth();
+  const [team, setTeam] = useState<InstitutionTeamSnapshot | null>(null);
+  const [teamLoading, setTeamLoading] = useState(true);
+  const [teamError, setTeamError] = useState(false);
+  useEffect(() => {
+    let active = true;
+    setTeam(null);
+    setTeamLoading(true);
+    setTeamError(false);
+    void apiClient.getData<InstitutionTeamSnapshot>("/api/v1/organization/team")
+      .then((result) => {
+        if (active) setTeam(result);
+      })
+      .catch(() => {
+        if (active) setTeamError(true);
+      })
+      .finally(() => {
+        if (active) setTeamLoading(false);
+      });
+    return () => { active = false; };
+  }, [organization?.id]);
+
   const canReadDocuments = hasPermission("document:read");
   const canReviewWorkflows = hasPermission("workflow:read");
   const canReviewValue = hasPermission("value:read");
@@ -73,6 +97,49 @@ export default function SettingsWorkspace() {
             </div>
           ))}
         </dl>
+      </section>
+
+      <section aria-labelledby="institution-team-heading" className="border border-[#C8B9A7] bg-[#F5F1E8] px-6 py-7 text-[#24231F] sm:px-8">
+        <div className="flex items-center gap-3">
+          <UsersRound size={21} className="text-[#A65A2E]" aria-hidden="true" />
+          <h2 id="institution-team-heading" className="font-display text-xl font-bold tracking-tight">Your institution team</h2>
+        </div>
+        <p className="mt-3 max-w-3xl text-[13px] leading-6 text-[#63594E]">
+          Members below are read from the authenticated organization records.
+          This is a read-only directory, not a staff invitation or approval tool.
+        </p>
+        {teamLoading ? (
+          <p role="status" className="mt-5 text-sm text-[#665B50]">Checking institution membership…</p>
+        ) : teamError || !team ? (
+          <p role="alert" className="mt-5 border border-[#D3A7A0] bg-[#FFF0EB] p-4 text-sm text-[#8E2E31]">
+            Team records are unavailable. Please try reloading after confirming your administrator access.
+          </p>
+        ) : team.members.length === 0 ? (
+          <p className="mt-5 border border-[#D7CABB] bg-[#FFFCF8] p-4 text-sm text-[#665B50]">
+            No team members were returned. Confirm institutional provisioning with the platform administrator.
+          </p>
+        ) : (
+          <div className="mt-5 overflow-x-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="border-b border-[#D4C8B9] text-[11px] uppercase tracking-wider text-[#74695D]">
+                <tr><th scope="col" className="py-3 pr-4 font-semibold">Team member</th><th scope="col" className="py-3 pr-4 font-semibold">Role</th><th scope="col" className="py-3 font-semibold">Account</th></tr>
+              </thead>
+              <tbody>
+                {team.members.map((member) => (
+                  <tr key={member.email} className="border-b border-[#E1D8CE] align-top">
+                    <td className="py-3 pr-4">
+                      <span className="block font-semibold">{member.name}</span>
+                      <span className="block break-all text-xs text-[#74695D]">{member.email}</span>
+                    </td>
+                    <td className="py-3 pr-4 text-[#62584E]">{member.role}</td>
+                    <td className="py-3 text-[#62584E]">{member.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {team.hasMore && <p className="mt-3 text-xs text-[#74695D]">Showing the first 100 memberships. Additional members are not displayed on this pilot screen.</p>}
+          </div>
+        )}
       </section>
 
       <section aria-labelledby="institution-onboarding-heading" className="border border-[#C8B9A7] bg-[#FCFAF6] px-6 py-8 text-[#24231F] sm:px-8">
