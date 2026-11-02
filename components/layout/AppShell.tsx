@@ -241,7 +241,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <Topbar />
         <ApiFailureBanner />
         <main className="ml-0 flex-1 px-4 pb-12 pt-6 sm:px-6 lg:px-10 -mt-[8px]">
-          {pathname === "/" ? <CortexWelcome /> : children}
+          {children}
         </main>
       </div>
     </div>
