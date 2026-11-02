@@ -5,6 +5,7 @@
  */
 process.env.TEST_ENV = "true";
 import assert from "node:assert/strict";
+import { ForbiddenError } from "../lib/backend/core/errors";
 import { DatabaseStore } from "../lib/backend/database/store";
 import { getPermissionsForRole, type TenantContext } from "../lib/backend/core/security";
 import type { UserRecord, OrganizationMembershipRecord } from "../lib/backend/database/schema";
@@ -60,7 +61,7 @@ async function main() {
   assert.equal(exception.comparisonStatus,"amount_discrepancy");
   assert.equal(exception.verificationState,"unverified");
   assert.throws(() => validateFinancialCsvForInternalIntake(finance,"settlement","expected",expected),
-    /permission/i,"Scoped preview must not permit durable financial intake");
+    ForbiddenError,"Scoped preview must not permit durable financial intake");
 
   const href = caseDraftHref("settlement",exception.comparisonStatus);
   assert(href);
