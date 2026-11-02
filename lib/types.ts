@@ -1,6 +1,7 @@
 export type Role =
   | "CEO"
   | "Operations"
+  | "Finance"
   | "Relationship Manager"
   | "Compliance"
   | "Customer Service"
@@ -9,6 +10,7 @@ export type Role =
 export const ALL_ROLES: Role[] = [
   "CEO",
   "Operations",
+  "Finance",
   "Relationship Manager",
   "Compliance",
   "Customer Service",
