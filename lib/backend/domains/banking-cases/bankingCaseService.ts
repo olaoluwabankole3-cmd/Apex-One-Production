@@ -8,7 +8,7 @@
 import { randomUUID } from "node:crypto";
 import { createApplicationInfrastructure } from "../../infrastructure/composition";
 import { DatabaseStore } from "../../database/store";
-import type { BankingCaseRecord } from "../../database/schema";
+import type { BankingCaseRecord, BankingPreviewOrigin } from "../../database/schema";
 import type { PaginatedResult } from "../../database/querySpecification";
 import { TenantContext, getPermissionsForRole, requirePermission } from "../../core/security";
 import { ConflictError, CrossTenantViolationError, ForbiddenError, NotFoundError, ValidationError } from "../../core/errors";
@@ -54,10 +54,10 @@ function departmentForRole(role: string): BankingCaseRecord["department"] | null
  * Session permission AND currently persisted membership/active status must
  * agree. Demotions and disabled accounts fail closed even with stale cookies.
  */
-async function verifyCurrentAccess(
+export async function verifyCurrentAccess(
   ctx: TenantContext,
   database: DatabaseStore,
-  capability: "case:read" | "case:create" | "case:assign"
+  capability: "case:read" | "case:create" | "case:assign" | "case:approve"
 ): Promise<{ isAdministrator: boolean }> {
   requirePermission(ctx, capability);
   const [membership, user] = await Promise.all([
@@ -78,7 +78,7 @@ async function verifyCurrentAccess(
 export class BankingCaseService {
   constructor(private readonly database: DatabaseStore = createApplicationInfrastructure().database) {}
 
-  public async create(ctx: TenantContext, input: CreateBankingCaseInput): Promise<BankingCaseRecord> {
+  public async create(ctx: TenantContext, input: CreateBankingCaseInput, internal?: { id: string; previewOrigin: BankingPreviewOrigin }): Promise<BankingCaseRecord> {
     await verifyCurrentAccess(ctx, this.database, "case:create");
     const title = Validator.requireString(input.title, "title", { minLength: 8, maxLength: 160 });
     const description = Validator.requireString(input.description, "description", { minLength: 10, maxLength: 1200 });
@@ -115,7 +115,7 @@ export class BankingCaseService {
         throw error;
       }
       const now = new Date().toISOString();
-      const id = randomUUID();
+      const id = internal ? Validator.requireId(internal.id, "caseId") : randomUUID();
       const record = await this.database.bankingCasesRepo.create({
         id, title, description, department, priority,
         status: "open",
@@ -124,6 +124,11 @@ export class BankingCaseService {
         createdByUserId: ctx.userId,
         ownerUserId: ctx.userId,
         revision: 1,
+        ...(internal ? { previewOrigin: internal.previewOrigin } : {}),
+        timeline: [{ id: randomUUID(), type: "created", actorUserId: ctx.userId,
+          occurredAt: now, revision: 1,
+          note: internal ? "Metadata-only preview candidate routed for human investigation; source not retained or verified" : "Case recorded as open and unverified" }],
+        evidenceLinks: [],
         createdAt: now,
         updatedAt: now,
       }, ctx);
@@ -137,7 +142,10 @@ export class BankingCaseService {
         requestId: ctx.requestId,
         status: "success",
         metadata: { department, priority, evidenceState: "unverified",
-          ...(sourceType && sourceId ? { sourceType, sourceId } : {}) },
+          ...(sourceType && sourceId ? { sourceType, sourceId } : {}),
+          ...(internal ? { previewBatchId: internal.previewOrigin.batchId,
+            previewCandidateId: internal.previewOrigin.candidateId,
+            previewOnly: true, financialLossAssessed: false } : {}) },
         timestamp: now,
       });
       return record;
@@ -218,9 +226,16 @@ export class BankingCaseService {
         throw new NotFoundError("Eligible case recipient");
       }
       const now = new Date().toISOString();
+      if ((existing.timeline?.length ?? 0) >= 100) {
+        throw new ConflictError("Case timeline capacity reached; export and archive before more changes");
+      }
       const updated = await this.database.bankingCasesRepo.update(
         existing.id, { ownerUserId: recipientUserId, department,
-          revision: revision + 1, lastHandoffAt: now }, ctx, "BankingCase"
+          revision: revision + 1, lastHandoffAt: now,
+          timeline: [...(existing.timeline ?? []), {
+            id: randomUUID(), type: "handed_off", actorUserId: ctx.userId,
+            occurredAt: now, revision: revision + 1, note: reason,
+          }] }, ctx, "BankingCase"
       );
       await this.database.recordAuditLog({
         organizationId: ctx.organizationId,
