@@ -10,6 +10,10 @@ import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from ".
 import { PostgresConnectionManager } from "../lib/backend/database/adapters/postgres/PostgresPersistence";
 import { quotePostgresLiteral } from "../lib/backend/database/adapters/postgres/PostgresWireClient";
 import { FinancialPreviewCaseLedger } from "../lib/backend/domains/reconciliation/financialPreviewCaseLedger";
+import { getPermissionsForRole } from "../lib/backend/core/security";
+import { BankingCaseService } from "../lib/backend/domains/banking-cases/bankingCaseService";
+import { BankingCaseReviewService } from "../lib/backend/domains/banking-cases/bankingCaseReviewService";
+import { BankingCasePilotBridge } from "../lib/backend/domains/banking-cases/bankingCasePilotBridge";
 import type { CsvPreviewRequest } from "../lib/backend/domains/reconciliation/csvPreviewService";
 
 const url = process.env.DATABASE_URL;
@@ -209,6 +213,67 @@ async function main(): Promise<void> {
     }), ValidationError);
   });
 
+  await check("escalated preview candidate becomes audited PostgreSQL banking case with independent checker", async () => {
+    const makerId = "case-maker-" + salt;
+    const checkerId = "case-checker-" + salt;
+    for (const id of [makerId, checkerId]) {
+      await store.createUserRecord({
+        id, email: id + "@example.invalid", name: id,
+        title: "Synthetic reviewer", status: "active",
+        createdAt: new Date().toISOString(),
+      });
+      await store.createMembershipRecord({
+        id: "member-" + id, organizationId: org, userId: id,
+        role: "Administrator", joinedAt: new Date().toISOString(),
+      });
+    }
+    const bankCtx = (id: string): TenantContext => ({
+      organizationId: org, userId: id, userEmail: id + "@example.invalid",
+      userRole: "Administrator", permissions: [...getPermissionsForRole("Administrator")],
+      requestId: "bank-pilot-" + salt, timestamp: new Date().toISOString(),
+    });
+    const caseService = new BankingCaseService(store);
+    const reviewService = new BankingCaseReviewService(store);
+    const bridge = new BankingCasePilotBridge(caseService, ledger);
+
+    const candidate = await bridge.createEscalatedCandidate(bankCtx(makerId), {
+      batchId, candidateId: caseId,
+    });
+    assert.equal(candidate.status, "open");
+    assert.equal(candidate.evidenceState, "unverified");
+    assert.equal(candidate.previewOrigin?.sourceStored, false);
+    assert.equal(candidate.previewOrigin?.coverageVerified, false);
+    assert.equal(candidate.previewOrigin?.financialLossAssessed, false);
+    assert.equal(candidate.timeline?.[0].type, "created");
+
+    await assert.rejects(() => bridge.createEscalatedCandidate(bankCtx(makerId), {
+      batchId, candidateId: caseId,
+    }), ConflictError);
+    const proposed = await reviewService.propose(bankCtx(makerId), candidate.id, {
+      disposition: "request_source_review",
+      rationale: "Retain the exception for independent source authenticity investigation",
+      expectedRevision: 1,
+    });
+    await assert.rejects(() => reviewService.review(bankCtx(makerId), candidate.id, {
+      decisionId: proposed.decision!.id, verdict: "approved",
+      note: "The maker cannot approve this investigation plan", expectedRevision: 2,
+    }), ForbiddenError);
+    const checked = await reviewService.review(bankCtx(checkerId), candidate.id, {
+      decisionId: proposed.decision!.id, verdict: "approved",
+      note: "Authorize further evidence collection, not financial correction",
+      expectedRevision: 2,
+    });
+    assert.equal(checked.decision?.state, "approved");
+    assert.equal(checked.decision?.reviewedByUserId, checkerId);
+    assert.equal(checked.status, "open");
+    assert.equal(checked.evidenceState, "unverified");
+    assert.equal(checked.previewOrigin?.financialLossAssessed, false);
+    assert.equal((await caseService.findById(bankCtx(checkerId), candidate.id)).revision, 3);
+    const audits = await store.auditLogsRepo.findMany(bankCtx(checkerId), { limit: 100 });
+    assert(audits.items.some(x => x.resourceId === candidate.id && x.action === "banking_case:create"));
+    assert(audits.items.some(x => x.resourceId === candidate.id && x.action === "banking_case:decision_reviewed"));
+  });
+
   await check("failed audit insertion rolls back both registration and cases", async () => {
     const sabotaged = new FinancialPreviewCaseLedger(url!);
     (sabotaged as any).audits.record = async () => { throw new Error("Synthetic audit authority failure"); };
@@ -276,7 +341,7 @@ async function main(): Promise<void> {
     }
   });
 
-  console.log("CORTEX FINANCIAL PREVIEW LEDGER: 15/15 PostgreSQL integration checks passed");
+  console.log("CORTEX FINANCIAL PREVIEW LEDGER: 16/16 PostgreSQL integration checks passed");
 }
 
 main().catch(error => {
