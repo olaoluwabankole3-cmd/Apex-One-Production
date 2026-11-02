@@ -40,6 +40,10 @@ export class ApiIntelligenceRepository implements IntelligenceRepository {
       return `${customers.length} authorized customer accounts are available to this workspace; ${atRiskCount} currently require attention based on account status or health score.`;
     }
 
+    if (role === "Finance") {
+      return "No independently verified finance briefing is connected to this summary. Review authorized cases and source records."; 
+    }
+
     if (role === "Operations") {
       return "No authoritative operations briefing is connected to this summary yet. Operational facts will appear here only when the corresponding source records are available.";
     }
@@ -62,6 +66,10 @@ export class ApiIntelligenceRepository implements IntelligenceRepository {
         "Summarize currently available workflow and action records",
         "Which operational records need follow-up?",
         "Show unresolved execution items with supporting evidence",
+      ],
+      Finance: [
+        "Which open banking cases are assigned to my team?",
+        "What authorized financial evidence is available to review?",
       ],
       "Relationship Manager": [
         "Show authorized at-risk customer accounts",
