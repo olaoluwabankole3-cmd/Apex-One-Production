@@ -41,7 +41,7 @@ assert.match(previewRoute, /CORTEX_FINANCIAL_PREVIEW_ENABLED !== "true"/);
 const reviews = load("app/reviews/page.tsx");
 assert.match(reviews, /requiredPermission="case:approve"/);
 assert.match(reviews, /BankingCaseReviewPanel/);
-assert.match(reviews, /record\.decision\?\.state === "pending"/);
+assert.match(reviews, /item\.decision\?\.state === "pending"/);
 const reports = load("app/reports/page.tsx");
 assert.match(reports, /requiredPermission="case:read"/);
 assert.match(reports, /api\/v1\/audit\?limit=25/);
