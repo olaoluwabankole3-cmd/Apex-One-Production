@@ -28,7 +28,8 @@ function CaseInbox() {
   const [description, setDescription] = useState("");
   const [department, setDepartment] = useState<"Operations" | "Finance">("Operations");
   const [priority, setPriority] = useState<"normal" | "high">("normal");
-  const mayCreate = hasPermission("workflow:write");
+  const mayCreate = hasPermission("case:create");
+  const mayAssign = hasPermission("case:assign");
   const administrator = hasPermission("org:admin");
 
   const refresh = useCallback(async (nextCursor?: string) => {
@@ -49,7 +50,7 @@ function CaseInbox() {
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
-    if (!mayCreate) return;
+    if (!mayAssign) return;
     let mounted = true;
     void apiClient.getData<BankingCaseAssigneeList>("/api/v1/banking-cases/assignees")
       .then((directory) => { if (mounted) setAssignees(directory); })
@@ -59,7 +60,7 @@ function CaseInbox() {
 
   async function sendHandoff(event: FormEvent<HTMLFormElement>, record: BankingCaseRecord) {
     event.preventDefault();
-    if (sendingHandoff || !mayCreate || !handoffRecipientId) return;
+    if (sendingHandoff || !mayAssign || !handoffRecipientId) return;
     setSendingHandoff(true);
     setError(null);
     setNotice(null);
@@ -153,7 +154,7 @@ function CaseInbox() {
             <RefreshCw size={13} /> Refresh
           </button>
         </div>
-        {assigneeError && mayCreate && <p className="rounded-lg border border-white/10 p-3 text-sm text-ivory/60">The institution assignment list is unavailable. Your existing cases remain readable.</p>}
+        {assigneeError && mayAssign && <p className="rounded-lg border border-white/10 p-3 text-sm text-ivory/60">The institution assignment list is unavailable. Your existing cases remain readable.</p>}
         {assignees?.hasMore && <p className="rounded-lg border border-white/10 p-3 text-xs text-ivory/60">The assignment list is limited to the first 100 eligible employees; contact your administrator if the recipient is not shown.</p>}
         {notice && <p role="status" className="rounded-lg border border-white/10 p-3 text-sm text-[#D9A06F]">{notice}</p>}
         {error && <p role="alert" className="rounded-lg border border-red-400/30 p-3 text-sm text-red-300">{error}</p>}
@@ -179,7 +180,7 @@ function CaseInbox() {
                   Assigned to: {assignees?.members.find((candidate) => candidate.userId === item.ownerUserId)?.name || (item.ownerUserId === user?.id ? "You" : "Institution staff")}
                 </p>
                 {!item.sourceId && <p className="mt-3 flex items-center gap-2 text-xs text-ivory/40"><FileWarning size={13} /> No source evidence linked yet</p>}
-                {mayCreate && (administrator || item.ownerUserId === user?.id) && assignees && (
+                {mayAssign && (administrator || item.ownerUserId === user?.id) && assignees && (
                   <div className="mt-4 border-t border-white/10 pt-4">
                     {handoffCaseId !== item.id ? (
                       <button type="button" disabled={sendingHandoff} onClick={() => {
@@ -230,5 +231,5 @@ function CaseInbox() {
 }
 
 export default function BankingCasesPage() {
-  return <InternalOnlyShield requiredPermission="workflow:read"><CaseInbox /></InternalOnlyShield>;
+  return <InternalOnlyShield requiredPermission="case:read"><CaseInbox /></InternalOnlyShield>;
 }
