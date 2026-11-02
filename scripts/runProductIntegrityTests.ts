@@ -108,7 +108,7 @@ for (const navigationFile of ["components/layout/Sidebar.tsx", "components/layou
 // reachable only through permission-filtered links in their parent journeys.
 const navigation = readFileSync(join(root, "components/layout/navigation.ts"), "utf8");
 const primaryDestinations = [
-  ...navigation.matchAll(/\\{ href: "([^"]+)", label: "([^"]+)", icon:/g),
+  ...navigation.matchAll(/[{] href: "([^"]+)", label: "([^"]+)", icon:/g),
 ].map((match) => [match[1], match[2]]);
 const expectedDestinations = [
   ["/", "Home"],
