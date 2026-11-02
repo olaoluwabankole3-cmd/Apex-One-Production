@@ -43,7 +43,8 @@
     "test:infra-connection": "tsx scripts/runInfrastructureConnectionTests.ts",
     "test:staging-http": "node --test scripts/verifyStagingHttp.test.mjs",
     "staging:verify": "node scripts/verifyStagingHttp.mjs",
-    "test:financial-reconciliation": "tsx scripts/runFinancialReconciliationFoundationTests.ts"
+    "test:financial-reconciliation": "tsx scripts/runFinancialReconciliationFoundationTests.ts",
+    "test:financial-preview": "tsx scripts/runFinancialCsvPreviewTests.ts"
   },
   "dependencies": {
     "@google/genai": "^2.16.0",
