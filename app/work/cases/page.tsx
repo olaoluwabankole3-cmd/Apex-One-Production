@@ -56,7 +56,7 @@ function CaseInbox() {
       .then((directory) => { if (mounted) setAssignees(directory); })
       .catch(() => { if (mounted) setAssigneeError(true); });
     return () => { mounted = false; };
-  }, [mayCreate]);
+  }, [mayAssign]);
 
   async function sendHandoff(event: FormEvent<HTMLFormElement>, record: BankingCaseRecord) {
     event.preventDefault();
