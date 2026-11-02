@@ -80,6 +80,9 @@ function orgScope(organizationId: string): string {
 
 function assertDescriptor(value: FinancialSourceSnapshotDescriptor): void {
   if (!value || typeof value !== "object" ||
+      typeof value.sourceId !== "string" ||
+      typeof value.expectedSha256 !== "string" ||
+      typeof value.expectedBytes !== "number" ||
       !SOURCE_ID.test(value.sourceId) ||
       !DIGEST.test(value.expectedSha256) ||
       !Number.isSafeInteger(value.expectedBytes) ||
