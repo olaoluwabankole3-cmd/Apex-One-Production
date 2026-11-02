@@ -494,7 +494,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     from: FinancialSignerOnboardingRecord["status"], revision: number,
     to: FinancialSignerOnboardingRecord["status"],
     extra: Partial<Pick<FinancialSignerOnboardingRecord,
-      "proofVerifiedAt" | "proofSignatureSha256" |
+      "proofVerifiedAt" | "proofSubmittedByUserId" | "proofSignatureSha256" |
       "reviewedByUserId" | "reviewedAt" | "reviewReason" |
       "externalEvidenceRef" | "externalEvidenceSha256">> = {}
   ): Promise<FinancialSignerOnboardingRecord> {
