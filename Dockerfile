@@ -29,6 +29,8 @@ LABEL io.apex.release.id=$APEX_RELEASE_ID
 
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+# Next standalone output does not include public/; ship branded static assets.
+COPY --from=builder --chown=node:node /app/public ./public
 
 # @google/genai loads ws dynamically at runtime; Next standalone tracing
 # does not reliably include it, so carry the production package explicitly.
