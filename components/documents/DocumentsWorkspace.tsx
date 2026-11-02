@@ -10,7 +10,6 @@ import {
   FileStack,
   FolderOpen,
   Loader2,
-  LockKeyhole,
   RefreshCw,
   Search,
   ShieldAlert,
@@ -116,55 +115,17 @@ export default function DocumentsWorkspace() {
 
   return (
     <div className="mx-auto w-full max-w-[1480px] space-y-6" id="cortex-documents-workspace">
-      <header className="relative isolate overflow-hidden rounded-[22px] border border-[#785D46]/40 bg-[#24231F] px-6 pb-8 pt-7 text-[#F5F1E8] sm:px-9 sm:pb-10 sm:pt-9">
-        <div aria-hidden="true" className="cortex-welcome-grid pointer-events-none absolute inset-0 -z-10 opacity-60" />
-        <div aria-hidden="true" className="pointer-events-none absolute -right-20 top-0 -z-10 h-72 w-72 rounded-full bg-[#A65A2E]/20 blur-[90px]" />
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E5E1D8]/15 pb-5">
-          <p className="font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#D9A06F]">
-            QORVEX / CORTEX / EVIDENCE
-          </p>
-          <span className="inline-flex items-center gap-2 rounded-full border border-[#C58D5F]/35 bg-[#C58D5F]/10 px-3 py-1.5 text-[11px] text-[#EED6BF]">
-            <LockKeyhole size={13} aria-hidden="true" /> Organization-authorized records
-          </span>
-        </div>
-        <div className="mt-8 grid gap-7 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.44fr)] lg:items-end">
-          <div>
-            <p className="font-mono text-[11px] uppercase tracking-[.15em] text-[#D9A06F]">01 / Understand your sources</p>
-            <h1 className="mt-3 font-display text-[clamp(34px,4.4vw,56px)] font-bold leading-[1.09] tracking-[-.055em]">
-              Documents <span className="text-[#C58D5F]">& Evidence.</span>
-            </h1>
-            <p className="mt-4 max-w-2xl text-[14px] leading-7 text-[#CEC5B9]">
-              Begin with what your organization has actually stored. Find a document, inspect its record,
-              and check the available summary or extracted fields before deciding what to do next.
-            </p>
-          </div>
-          <div className="rounded-xl border border-[#C58D5F]/25 bg-[#151513]/65 p-5">
-            <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[.12em] text-[#D9A06F]">
-              <ShieldAlert size={15} aria-hidden="true" /> Source assurance
-            </div>
-            <p className="mt-2 text-[13px] leading-6 text-[#E5E1D8]">
-              Indexed is <strong>not</strong> verified. No stored summary or extracted field should be treated as
-              independently confirmed evidence.
-            </p>
-          </div>
-        </div>
+      <header className="rounded-2xl border border-[#CDBEAD] bg-[#F5F1E8] px-6 py-7 text-[#24231F] sm:px-9 sm:py-9">
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#95502B]">Documents</p>
+        <h1 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-4xl">Review your records</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-[#635A51]">
+          Search for a document and select it to see what has been stored.
+          Check any summary or extracted information against the original before relying on it.
+        </p>
+        <p className="mt-4 text-xs font-semibold text-[#95502B]">
+          Important: a stored or indexed document has not been independently verified.
+        </p>
       </header>
-
-      <section aria-label="How to use this workspace" className="grid gap-3 md:grid-cols-3">
-        {[
-          { step: "01", title: "Find a record", description: "Search only the documents your session is authorized to list." },
-          { step: "02", title: "Inspect what is stored", description: "Review metadata, an existing summary and any extracted fields. Check claims against originals." },
-          { step: "03", title: "Choose a next step", description: "Move to knowledge or an authorized workflow when source context is sufficient." },
-        ].map((step) => (
-          <div key={step.step} className="flex gap-4 rounded-xl border border-[#BFAE99]/25 bg-[#302D29] p-4 sm:p-5">
-            <span className="font-mono text-[20px] font-semibold text-[#C58D5F]">{step.step}</span>
-            <div>
-              <h2 className="text-sm font-semibold text-[#F5F1E8]">{step.title}</h2>
-              <p className="mt-1 text-xs leading-5 text-[#C8BDB1]">{step.description}</p>
-            </div>
-          </div>
-        ))}
-      </section>
 
       <div className="rounded-2xl border border-[#CDBEAD] bg-[#F5F1E8] p-4 text-[#24231F] sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
