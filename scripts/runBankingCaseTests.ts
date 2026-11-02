@@ -51,6 +51,10 @@ async function rejects(work: () => Promise<unknown>, pattern: RegExp) {
 }
 
 async function main() {
+  assert(getPermissionsForRole("Finance").includes("case:read"));
+  assert(getPermissionsForRole("Finance").includes("case:assign"));
+  assert(!getPermissionsForRole("Finance").includes("workflow:write"));
+  assert(!getPermissionsForRole("Finance").includes("audit:read"));
   const one = await service.create(ctx("ops-a", "org-a", "Operations"), sourceFree);
   assert.equal(one.organizationId, "org-a");
   assert.equal(one.ownerUserId, "ops-a");
