@@ -6,11 +6,13 @@
  * No feed storage, bank connector, loss certification or cash movement.
  */
 import { FormEvent, useState } from "react";
-import { ArrowLeftRight, CircleAlert, Play, ShieldAlert } from "lucide-react";
+import Link from "next/link";
+import { ArrowLeftRight, ArrowRight, CircleAlert, Play, ShieldAlert } from "lucide-react";
 import InternalOnlyShield from "@/components/layout/InternalOnlyShield";
 import { useAuth } from "@/components/auth/AuthContext";
 import { apiClient, ApiClientError } from "@/lib/apiClient";
 import type { CsvPreviewResult } from "@/lib/backend/domains/reconciliation/csvPreviewService";
+import { caseDraftHref } from "@/lib/financialCaseDraft";
 
 const HEADER = "reference,currency,amount_minor,record_id,recorded_at";
 const EXPECTED = [
@@ -156,24 +158,43 @@ function PreviewScreen() {
                   <th className="px-4 py-3">Expected (minor)</th>
                   <th className="px-4 py-3">Observed (minor)</th>
                   <th className="px-4 py-3">State</th>
+                  <th className="px-4 py-3">Next step</th>
                 </tr>
               </thead>
               <tbody>
-                {result.reconciliation.cases.map(item => (
-                  <tr key={item.caseId} className="border-t border-white/[0.07]">
-                    <td className="px-4 py-3 font-mono">{item.reference}</td>
-                    <td className="px-4 py-3">{item.comparisonStatus.replaceAll("_", " ")}</td>
-                    <td className="px-4 py-3 font-mono">{item.expectedAmountMinor ?? "—"}</td>
-                    <td className="px-4 py-3 font-mono">{item.observedAmountMinor ?? "—"}</td>
-                    <td className="px-4 py-3 text-[#D9A06F]">{item.verificationState}</td>
-                  </tr>
-                ))}
+                {result.reconciliation.cases.map(item => {
+                  const draftHref = hasPermission("case:create")
+                    ? caseDraftHref(kind, item.comparisonStatus) : null;
+                  return (
+                    <tr key={item.caseId} className="border-t border-white/[0.07]">
+                      <td className="px-4 py-3 font-mono">{item.reference}</td>
+                      <td className="px-4 py-3">{item.comparisonStatus.replaceAll("_", " ")}</td>
+                      <td className="px-4 py-3 font-mono">{item.expectedAmountMinor ?? "—"}</td>
+                      <td className="px-4 py-3 font-mono">{item.observedAmountMinor ?? "—"}</td>
+                      <td className="px-4 py-3 text-[#D9A06F]">{item.verificationState}</td>
+                      <td className="px-4 py-3">
+                        {draftHref ? (
+                          <Link href={draftHref}
+                            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-[#C58D5F]/45 px-3 py-2 font-semibold text-[#D9A06F] hover:bg-[#C58D5F]/10">
+                            Prepare case <ArrowRight size={13}/>
+                          </Link>
+                        ) : (
+                          <span className="text-[#D3C9BD]/45">
+                            {item.comparisonStatus === "balanced" ? "No issue" : "No case access"}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
           <p className="mt-5 text-xs leading-6 text-[#D3C9BD]/65">
-            This request-scoped result is not a persisted case. Use the authorized Cases workspace
-            to record an investigation; do not treat these provisional amounts as a verified loss.
+            Select <strong>Prepare case</strong> to open a draft investigation for an exception.
+            Only the comparison category is carried forward—not the transaction reference, amount,
+            CSV bytes, digest, or evidence. You must review and explicitly create the case; this
+            preview is not a persisted source or a verified financial loss.
           </p>
         </section>
       )}
