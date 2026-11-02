@@ -2,13 +2,14 @@
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ClipboardList, FileWarning, RefreshCw } from "lucide-react";
+import { ArrowLeft, ClipboardList, FileWarning, Plus, RefreshCw } from "lucide-react";
 import InternalOnlyShield from "@/components/layout/InternalOnlyShield";
 import { useAuth } from "@/components/auth/AuthContext";
 import { apiClient } from "@/lib/apiClient";
 import type { BankingCaseRecord } from "@/lib/backend/database/schema";
 import type { BankingCaseAssigneeList } from "@/lib/backend/domains/banking-cases/bankingCaseService";
 import BankingCaseReviewPanel from "@/components/banking-cases/BankingCaseReviewPanel";
+import { readCaseDraft } from "@/lib/financialCaseDraft";
 
 function CaseInbox() {
   const { hasPermission, user } = useAuth();
@@ -30,10 +31,27 @@ function CaseInbox() {
   const [description, setDescription] = useState("");
   const [department, setDepartment] = useState<"Operations" | "Finance">("Operations");
   const [priority, setPriority] = useState<"normal" | "high">("normal");
+  const [showCreate, setShowCreate] = useState(false);
+  const [draftFromPreview, setDraftFromPreview] = useState(false);
+  const [justCreatedId, setJustCreatedId] = useState<string | null>(null);
   const mayCreate = hasPermission("case:create");
   const mayAssign = hasPermission("case:assign");
   const administrator = hasPermission("org:admin");
   const mayApprove = hasPermission("case:approve");
+
+  useEffect(() => {
+    if (!mayCreate) return;
+    // No untrusted transaction data is copied from the URL. Only a strict
+    // kind/status whitelist is accepted, and form submission is still manual.
+    const draft = readCaseDraft(window.location.search);
+    if (!draft) return;
+    setTitle(draft.title);
+    setDescription(draft.description);
+    setDepartment(draft.department);
+    setPriority(draft.priority);
+    setShowCreate(true);
+    setDraftFromPreview(true);
+  }, [mayCreate]);
 
   const refresh = useCallback(async (nextCursor?: string) => {
     setLoading(true);
@@ -92,15 +110,19 @@ function CaseInbox() {
     setError(null);
     setNotice(null);
     try {
-      await apiClient.postData<BankingCaseRecord>("/api/v1/banking-cases", {
+      const created = await apiClient.postData<BankingCaseRecord>("/api/v1/banking-cases", {
         title, description, department, priority,
       });
       setTitle("");
       setDescription("");
-      setNotice("Case recorded as open and unverified. No financial discrepancy has been confirmed.");
+      setDraftFromPreview(false);
+      setShowCreate(false);
+      setJustCreatedId(created.id);
+      setExpandedCaseId(created.id);
+      setNotice("Investigation recorded as open and unverified. No preview source was attached. Link permitted evidence before proposing an investigation plan.");
       await refresh();
     } catch {
-      setError("The case could not be created. No successful creation was confirmed.");
+      setError("Creation could not be confirmed. Refresh the case list before submitting again to avoid duplicate investigations.");
     } finally {
       setSaving(false);
     }
@@ -109,7 +131,7 @@ function CaseInbox() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-10">
       <header className="rounded-xl border border-[#775A43]/35 bg-[#24231F] p-7 text-[#F5F1E8]">
-        <Link href={hasPermission("workflow:read") ? "/workflows" : "/"} className="inline-flex items-center gap-2 text-xs text-[#D9A06F]"><ArrowLeft size={13} /> {hasPermission("workflow:read") ? "Action Center" : "Command Center"}</Link>
+        <Link href="/" className="inline-flex items-center gap-2 text-xs text-[#D9A06F]"><ArrowLeft size={13} /> Overview</Link>
         <p className="mt-7 text-[10px] font-bold uppercase tracking-[0.17em] text-[#D9A06F]">QORVEX / CORTEX / BANKING OPERATIONS</p>
         <h1 className="mt-2 font-display text-3xl font-bold">Cases & Investigations</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-[#D3C9BD]">
@@ -117,11 +139,37 @@ function CaseInbox() {
           Operations and Finance. Independent review decisions are recorded against each case.
           Every case remains open and unverified; review does not authorize movement of funds.
         </p>
+        <div aria-label="Investigation journey" className="mt-6 flex flex-wrap gap-2 text-[11px] text-[#D3C9BD]/80">
+          <span className="rounded-md border border-white/10 px-3 py-2">01 · Compare</span>
+          <span className="rounded-md border border-[#C58D5F]/45 bg-[#C58D5F]/10 px-3 py-2 text-[#D9A06F]">02 · Investigate</span>
+          <span className="rounded-md border border-white/10 px-3 py-2">03 · Independent review</span>
+          <span className="rounded-md border border-white/10 px-3 py-2">04 · Audit</span>
+        </div>
       </header>
       {mayCreate && (
-        <form onSubmit={(event) => void createCase(event)} className="space-y-4 rounded-xl border border-[#785D46]/30 bg-[#302D29] p-6 text-[#F5F1E8]">
-          <h2 className="text-lg font-semibold">Record an operational issue</h2>
-          <p className="text-xs text-[#D3C9BD]">Creating a case does not verify a loss or execute an external banking action.</p>
+        <section className="rounded-xl border border-[#785D46]/30 bg-[#302D29] p-5 text-[#F5F1E8] sm:p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-display text-lg font-semibold">New investigation</h2>
+              <p className="mt-1 text-xs text-[#D3C9BD]/80">Record only the operational question. Evidence must be linked and checked separately.</p>
+            </div>
+            <button type="button" onClick={() => setShowCreate(old => !old)}
+              aria-expanded={showCreate} aria-controls="cortex-case-create-form"
+              className="inline-flex items-center gap-2 rounded-lg border border-[#C58D5F]/40 px-4 py-2.5 text-xs font-semibold text-[#D9A06F] hover:bg-[#C58D5F]/10">
+              <Plus size={14}/> {showCreate ? "Close form" : "Create investigation"}
+            </button>
+          </div>
+          {showCreate && (
+            <form id="cortex-case-create-form" onSubmit={(event) => void createCase(event)}
+              className="mt-6 space-y-4 border-t border-white/10 pt-5">
+              {draftFromPreview && (
+                <p role="status" className="rounded-lg border border-[#C58D5F]/35 bg-[#C58D5F]/[0.06] p-4 text-xs leading-6 text-[#F5E3D1]">
+                  <strong>Draft prepared from a preview classification only.</strong> No transaction references,
+                  amounts, source files, hashes or evidence were transferred. Review the form before creating
+                  an independent, unverified investigation.
+                </p>
+              )}
+              <p className="text-xs text-[#D3C9BD]">Creating a case does not verify a loss or execute an external banking action.</p>
           <label className="block text-sm">Issue title
             <input required minLength={8} maxLength={160} value={title} onChange={(e) => setTitle(e.target.value)}
               className="mt-2 w-full rounded-lg border border-white/15 bg-[#24231F] px-4 py-3" placeholder="For example: settlement report requires review" />
@@ -145,7 +193,9 @@ function CaseInbox() {
           <button type="submit" disabled={saving} className="rounded-lg bg-[#C58D5F] px-5 py-3 text-sm font-bold text-[#171715] disabled:opacity-40">
             {saving ? "Recording…" : "Create case"}
           </button>
-        </form>
+            </form>
+          )}
+        </section>
       )}
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -167,7 +217,9 @@ function CaseInbox() {
          </div> : (
           <div className="grid gap-3">
             {cases.map((item) => (
-              <article key={item.id} className="rounded-xl border border-white/10 bg-white/[0.025] p-5 text-ivory">
+              <article key={item.id} className={item.id === justCreatedId
+                ? "rounded-xl border border-[#C58D5F]/50 bg-[#C58D5F]/[0.06] p-5 text-ivory"
+                : "rounded-xl border border-white/10 bg-white/[0.025] p-5 text-ivory"}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="font-semibold">{item.title}</h3>
                   <span className="rounded-full border border-[#C58D5F]/30 px-2.5 py-1 text-[10px] text-[#D9A06F]">OPEN · UNVERIFIED</span>

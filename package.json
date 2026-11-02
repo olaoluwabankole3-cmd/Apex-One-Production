@@ -36,7 +36,7 @@
     "test:auth-experience": "tsx scripts/runAuthenticationExperienceTests.ts",
     "test:banking-cases": "tsx scripts/runBankingCaseTests.ts",
     "test:banking-reviews": "tsx scripts/runBankingCaseReviewTests.ts",
-    "test:financial-workspace": "tsx scripts/runFinancialWorkspaceNavigationTests.ts",
+    "test:financial-workspace": "tsx scripts/runFinancialWorkspaceNavigationTests.ts && tsx scripts/runFinancialCaseDraftHandoffTests.ts",
     "infra:dev:up": "docker compose --env-file deploy/development/development.env -f deploy/development/docker-compose.infrastructure.yml up -d",
     "infra:dev:down": "docker compose --env-file deploy/development/development.env -f deploy/development/docker-compose.infrastructure.yml down",
     "infra:dev:destroy": "docker compose --env-file deploy/development/development.env -f deploy/development/docker-compose.infrastructure.yml down -v",
