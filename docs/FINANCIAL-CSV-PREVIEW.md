@@ -6,7 +6,9 @@ This is the next prototype-safe step toward issue #26. It is a **read-only, requ
 
 `POST /api/v1/reconciliation/preview`
 
-**Disabled by default and unavailable in production.** The server must run with both `APEX_DEPLOYMENT_ENVIRONMENT=staging` and `CORTEX_FINANCIAL_PREVIEW_ENABLED=true` for this route to exist. No environment change or staging enablement is made by this PR. Any non-staging environment receives a not-found response irrespective of the flag.\n\nRequires **authenticated same-organization session** with both `financial:read` and `financial:write`. No guest access, no client-supplied organization identifier, no override of model evidence verification. Request body is at most 320 KiB of UTF-8 JSON; each CSV input is at most 128 KiB and 1,000 data rows, 2,000 total. The endpoint never stores raw CSV data and uses `Cache-Control: no-store, private` for all responses. It writes **metadata-only** audit history to the composed durable audit authority before returning success; audit failure blocks the response. The request is not an idempotent durable import.
+**Disabled by default and unavailable in production.** The server must run with both `APEX_DEPLOYMENT_ENVIRONMENT=staging` and `CORTEX_FINANCIAL_PREVIEW_ENABLED=true` for this route to exist. No environment change or staging enablement is made by this PR. Any non-staging environment receives a not-found response irrespective of the flag.
+
+Requires **authenticated same-organization session** with both `financial:read` and `financial:write`. No guest access, no client-supplied organization identifier, no override of model evidence verification. Request body is at most 320 KiB of UTF-8 JSON; each CSV input is at most 128 KiB and 1,000 data rows, 2,000 total. The endpoint never stores raw CSV data and uses `Cache-Control: no-store, private` for all responses. It writes **metadata-only** audit history to the composed durable audit authority before returning success; audit failure blocks the response. The request is not an idempotent durable import.
 
 Request:
 
