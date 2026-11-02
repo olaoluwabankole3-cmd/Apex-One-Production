@@ -67,7 +67,7 @@ export default function CortexWelcome() {
   const canReviewValue = hasPermission("value:read") && isFeatureEnabled("valueIntelligence");
 
   return (
-    <main
+    <div
       className="cortex-welcome mx-auto w-full max-w-[1480px] overflow-hidden rounded-[22px] border border-[#6a5b4b]/25 bg-[#F5F1E8] text-[#24231F] shadow-[0_24px_80px_rgba(0,0,0,0.15)]"
       id="cortex-executive-command-center"
     >
@@ -215,6 +215,6 @@ export default function CortexWelcome() {
         <span>QORVEX / CORTEX · Financial institution intelligence in development</span>
         <span>Authorized records only · No fabricated financial outcomes</span>
       </footer>
-    </main>
+    </div>
   );
 }
