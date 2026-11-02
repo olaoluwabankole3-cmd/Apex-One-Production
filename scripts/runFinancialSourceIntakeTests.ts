@@ -93,6 +93,25 @@ async function exercise(storage: IObjectStorageService, label: string) {
     registryId: oPolicy.id, expectedRevision: 1, verdict: "approved",
     reason: "Independently allow synthetic observed-source intake",
   });
+  // Competing approvals must have exactly one winner. PostgreSQL uses an
+  // atomic status/revision CAS; memory uses its serialized transaction lock.
+  const race = await service.proposeSource(ctx("registrar"), {
+    sourceLabel: label + "-competing-checkers", kind: "fee", role: "observed",
+  });
+  const concurrent = await Promise.allSettled([
+    service.decideSource(ctx("checker"), {
+      registryId: race.id, expectedRevision: 1, verdict: "approved",
+      reason: "First reviewer attempts policy authorization",
+    }),
+    service.decideSource(ctx("custodian"), {
+      registryId: race.id, expectedRevision: 1, verdict: "rejected",
+      reason: "Second reviewer attempts competing rejection",
+    }),
+  ]);
+  assert.equal(concurrent.filter(x => x.status === "fulfilled").length, 1);
+  assert.equal(concurrent.filter(x => x.status === "rejected").length, 1);
+  assert.equal((await db.financialSourceRegistryRepo.findById(race.id, ctx("checker"))).revision, 2);
+
   const rejected = await service.proposeSource(ctx("registrar"), {
     sourceLabel: label + "-not-authorized", kind: "fee", role: "expected",
   });
@@ -176,6 +195,17 @@ async function exercise(storage: IObjectStorageService, label: string) {
 }
 
 async function main() {
+  const originalEnv = process.env.APEX_DEPLOYMENT_ENVIRONMENT;
+  process.env.APEX_DEPLOYMENT_ENVIRONMENT = "production";
+  try {
+    const gated = new FinancialSourceIntakeService(db, new InMemoryObjectStorageAdapter());
+    await rejects(() => gated.proposeSource(ctx("registrar"), {
+      sourceLabel: "should-not-work", kind: "settlement", role: "expected",
+    }), /not found/i);
+  } finally {
+    if (originalEnv === undefined) delete process.env.APEX_DEPLOYMENT_ENVIRONMENT;
+    else process.env.APEX_DEPLOYMENT_ENVIRONMENT = originalEnv;
+  }
   await exercise(new InMemoryObjectStorageAdapter(), "memory");
   const env = process.env;
   for (const key of ["S3_BUCKET", "S3_REGION", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "DOCUMENT_STORAGE_ENCRYPTION_KEY", "S3_ENDPOINT"]) {
