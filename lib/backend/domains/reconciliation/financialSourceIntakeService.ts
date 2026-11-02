@@ -34,6 +34,10 @@ type Kind = FinancialSourceRegistryRecord["kind"];
 type Role = FinancialSourceRegistryRecord["role"];
 
 function gateIntake(): void {
+  // A mistakenly enabled test flag may never bypass the production NO-GO.
+  if (process.env.APEX_DEPLOYMENT_ENVIRONMENT === "production") {
+    throw new NotFoundError("Internal financial source intake");
+  }
   if (process.env.TEST_ENV === "true") return;
   if (process.env.APEX_DEPLOYMENT_ENVIRONMENT !== "staging" ||
       process.env.CORTEX_INTERNAL_FINANCIAL_SOURCE_INTAKE_ENABLED !== "true") {
@@ -159,10 +163,10 @@ export class FinancialSourceIntakeService {
         throw new ForbiddenError("Source proposer may not approve or reject their own source definition");
       }
       const now = new Date().toISOString();
-      const updated = await this.db.financialSourceRegistryRepo.update(before.id, {
+      const updated = await this.db.decideFinancialSourceRegistry(ctx, before.id, input.expectedRevision, {
         status: input.verdict, reviewedByUserId: ctx.userId,
-        reviewedAt: now, reviewReason: input.reason, revision: 2,
-      }, ctx);
+        reviewedAt: now, reviewReason: input.reason, revision: 2, updatedAt: now,
+      });
       await this.db.recordAuditLog(audit(ctx, "financial_source:reviewed", before.id, {
         verdict: input.verdict, reviewerId: ctx.userId,
         proposedById: before.createdByUserId, revision: 2,
