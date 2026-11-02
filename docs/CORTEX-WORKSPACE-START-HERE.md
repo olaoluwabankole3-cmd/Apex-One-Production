@@ -7,7 +7,7 @@ The intended flagship workflow is: **Compare → Investigate → Hand off → Re
 ## Seven task-first navigation destinations
 
 1. **Overview** (`/`) — explain CORTEX, show role-appropriate next actions, and display up to five real authorized case records. No invented financial totals.
-2. **Reconciliation** (`/reconciliation`) — strict settlement/mapped-fee comparison against the existing staging-only audited API. Requires `financial:read` to view and `financial:write` to submit; no raw source retention.
+2. **Reconciliation** (`/reconciliation`) — strict settlement/mapped-fee comparison against the existing staging-only audited API. Requires `financial:read` to view and scoped `financial:preview` (or existing `financial:write`) to submit; Finance staff can compare synthetic records without receiving broader write permissions. No raw source retention.
 3. **Cases** (`/work/cases`) — create operational issues; inspect authorized cases, evidence links and history; hand off ownership between Operations and Finance.
 4. **Reviews** (`/reviews`) — checker role (`case:approve`) examines pending investigation-plan decisions. An authorized reviewer cannot check their own plan; the server enforces maker–checker rules.
 5. **Evidence** (`/documents`) — inspect authorized institutional document records and their current status.
