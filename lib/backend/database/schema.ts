@@ -580,3 +580,45 @@ export interface BankingCaseRecord {
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * Pilot financial-source intake registry. A two-person approval authorizes
+ * internal synthetic intake only; it does NOT authenticate a bank or prove
+ * provider custody, object immutability, source completeness or financial loss.
+ */
+export interface FinancialSourceRegistryRecord {
+  id: string;
+  organizationId: string;
+  sourceLabel: string;
+  kind: "settlement" | "fee";
+  role: "expected" | "observed";
+  status: "pending" | "approved" | "rejected";
+  createdByUserId: string;
+  createdAt: string;
+  reviewedByUserId?: string;
+  reviewedAt?: string;
+  reviewReason?: string;
+  revision: number;
+  updatedAt: string;
+  externalSourceAuthorityVerified: false;
+}
+
+export interface FinancialSourceSnapshotRecord {
+  id: string;
+  organizationId: string;
+  sourceRegistryId: string;
+  kind: "settlement" | "fee";
+  role: "expected" | "observed";
+  sourceId: string;
+  expectedSha256: string;
+  expectedBytes: number;
+  rowCount: number;
+  recordedByUserId: string;
+  createdAt: string;
+  encryption: "AES-256-GCM" | "none";
+  byteIntegrityCheckedAtIntake: true;
+  storageImmutabilityVerified: false;
+  sourceAuthenticityVerified: false;
+  coverageVerified: false;
+  financialLossAssessed: false;
+}

@@ -162,6 +162,31 @@ function mapFeed(ctx: TenantContext, kind: ReconciliationKind,
   return { lines, summary: { role, feedId: feed.feedId, sha256, rows: lines.length } };
 }
 
+/**
+ * Validate a single internal snapshot using the same strict CSV parser,
+ * mapped money/reference rules and deterministic reconciliation engine.
+ * No source completeness, custody, authentication or monetary outcome is
+ * established. Callers must already have an authenticated institutional role.
+ */
+export function validateFinancialCsvForInternalIntake(
+  ctx: TenantContext, kind: ReconciliationKind,
+  role: "expected" | "observed", feed: CsvPreviewFeed
+): { sha256: string; rows: number } {
+  requirePermission(ctx, "financial:read");
+  requirePermission(ctx, "financial:write");
+  if (kind !== "settlement" && kind !== "fee") throw new ValidationError("Unsupported financial source kind");
+  if (role !== "expected" && role !== "observed") throw new ValidationError("Unsupported financial source role");
+  const validated = readFeed(feed, "internal intake");
+  const result = mapFeed(ctx, kind, role, validated);
+  // One feed is deliberately incomplete. Comparison is used ONLY for strict
+  // validation of line values; generated candidates are not retained here.
+  reconcileFinancialSourceLines(ctx, {
+    lines: result.lines,
+    declaredCoverage: { expectedFeedComplete: false, observedFeedComplete: false },
+  });
+  return { sha256: result.summary.sha256, rows: result.summary.rows };
+}
+
 /** Strict, non-persistent preview. Only authenticated financial-data writers can submit data. */
 export function prepareFinancialCsvPreview(
   ctx: TenantContext, input: unknown
