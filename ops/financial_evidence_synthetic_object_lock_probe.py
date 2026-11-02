@@ -94,10 +94,10 @@ def synthetic_payload(run_id: str, generation: int) -> bytes:
         raise ValueError("Invalid synthetic fixture identifier")
     # Deliberately not a financial CSV or a record with a bank reference.
     return (
-        "CORTEX-SYNTHETIC-OBJECT-LOCK-PROBE-V1\\n"
-        + "NOT-A-BANK-FEED\\n"
-        + "run=" + run_id + "\\n"
-        + "generation=" + str(generation) + "\\n"
+        "CORTEX-SYNTHETIC-OBJECT-LOCK-PROBE-V1\n"
+        + "NOT-A-BANK-FEED\n"
+        + "run=" + run_id + "\n"
+        + "generation=" + str(generation) + "\n"
     ).encode("ascii")
 
 
