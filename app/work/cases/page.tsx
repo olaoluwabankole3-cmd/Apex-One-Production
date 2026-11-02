@@ -106,7 +106,7 @@ function CaseInbox() {
   return (
     <div className="mx-auto max-w-6xl space-y-6 pb-10">
       <header className="rounded-xl border border-[#775A43]/35 bg-[#24231F] p-7 text-[#F5F1E8]">
-        <Link href="/workflows" className="inline-flex items-center gap-2 text-xs text-[#D9A06F]"><ArrowLeft size={13} /> Action Center</Link>
+        <Link href={hasPermission("workflow:read") ? "/workflows" : "/"} className="inline-flex items-center gap-2 text-xs text-[#D9A06F]"><ArrowLeft size={13} /> {hasPermission("workflow:read") ? "Action Center" : "Command Center"}</Link>
         <p className="mt-7 text-[10px] font-bold uppercase tracking-[0.17em] text-[#D9A06F]">QORVEX / CORTEX / BANKING OPERATIONS</p>
         <h1 className="mt-2 font-display text-3xl font-bold">My Cases</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-[#D3C9BD]">
