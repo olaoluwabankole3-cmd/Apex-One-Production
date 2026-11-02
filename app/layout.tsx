@@ -8,9 +8,9 @@ import AppShell from "@/components/layout/AppShell";
 import { ClientErrorBoundary } from "@/components/layout/ClientErrorBoundary";
 
 export const metadata: Metadata = {
-  title: "CORTEX — Executive Intelligence Operating System",
+  title: "CORTEX by QORVEX — Financial Intelligence Workspace",
   description:
-    "A secure enterprise intelligence and execution operating system by QORVEX.",
+    "A secure institutional workspace for evidence, context, authorized analysis and accountable action. Financial source connectors remain in development.",
 };
 
 export default function RootLayout({
