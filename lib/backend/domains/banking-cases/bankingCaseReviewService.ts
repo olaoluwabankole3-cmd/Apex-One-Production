@@ -8,7 +8,7 @@
  * in-memory adapter serializes full transactions with rollback snapshots.
  */
 import { randomUUID } from "node:crypto";
-import { BankingCaseService, verifyCurrentAccess } from "./bankingCaseService";
+import { verifyCurrentAccess } from "./bankingCaseService";
 import { DatabaseStore } from "../../database/store";
 import { createApplicationInfrastructure } from "../../infrastructure/composition";
 import type {
@@ -142,6 +142,10 @@ export class BankingCaseReviewService {
       }
       if (item.decision) throw new ConflictError("This review cycle is already concluded; new cycles require a separate workflow");
       // A preview candidate is unverified source metadata, not bank evidence.
+      if (item.previewOrigin && !item.evidenceLinks?.length && !item.sourceId &&
+          disposition !== "request_source_review") {
+        throw new ConflictError("Metadata-only preview candidates permit source-review requests only");
+      }
       if (!(item.evidenceLinks?.length || item.sourceId || item.previewOrigin)) {
         throw new ConflictError("Link source evidence or an authorized preview candidate before proposing a review");
       }
@@ -189,6 +193,14 @@ export class BankingCaseReviewService {
       }
       if (item.createdByUserId === ctx.userId || item.decision.proposedByUserId === ctx.userId) {
         throw new ForbiddenError("Maker-checker separation: the originator or proposer cannot review this case plan");
+      }
+      // Even a procedural sign-off may not rely on a deleted or foreign source.
+      // Verifying existence is NOT authenticating its financial contents.
+      for (const link of item.evidenceLinks ?? []) {
+        await this.validateSource(ctx, link.sourceType, link.sourceId);
+      }
+      if (item.sourceType && item.sourceId) {
+        await this.validateSource(ctx, item.sourceType, item.sourceId);
       }
       ensureCapacity(item);
       const now = new Date().toISOString(), nextRevision = (item.revision ?? 1) + 1;
