@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth/AuthContext";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import ApiFailureBanner from "@/components/layout/ApiFailureBanner";
+import CortexWelcome from "@/components/dashboard/CortexWelcome";
 
 function BrandMark() {
   return (
@@ -240,7 +241,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <Topbar />
         <ApiFailureBanner />
         <main className="ml-0 flex-1 px-4 pb-12 pt-6 sm:px-6 lg:px-10 -mt-[8px]">
-          {children}
+          {pathname === "/" ? <CortexWelcome /> : children}
         </main>
       </div>
     </div>
