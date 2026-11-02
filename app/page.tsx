@@ -22,14 +22,19 @@ const journeys = [
     permission: "case:read", icon: ClipboardList, number: "02",
   },
   {
-    href: "/reviews", title: "Make a review decision",
-    description: "Inspect evidence and respond to a colleague's pending investigation plan.",
-    permission: "case:approve", icon: ShieldCheck, number: "03",
+    href: "/documents", title: "Check supporting evidence",
+    description: "Find authorized institutional documents and examine their available source status.",
+    permission: "document:read", icon: FileStack, number: "03",
   },
   {
-    href: "/documents", title: "Inspect evidence",
-    description: "Access documents available to your institution and check their recorded state.",
-    permission: "document:read", icon: FileStack, number: "04",
+    href: "/reviews", title: "Independently review a plan",
+    description: "As an eligible checker, approve or reject a colleague's internal investigation proposal.",
+    permission: "case:approve", icon: ShieldCheck, number: "04",
+  },
+  {
+    href: "/reports", title: "Inspect the accountability trail",
+    description: "Read the authorized case register and any audit events your role permits.",
+    permission: "case:read", icon: ClipboardList, number: "05",
   },
 ];
 
@@ -101,7 +106,7 @@ export default function FinancialOperationsOverview() {
               Start with a task
             </h2>
           </div>
-          <span className="hidden text-xs text-ivory/40 sm:block">Only authorized actions appear</span>
+          <span className="hidden text-xs text-ivory/40 sm:block">Follow the investigation from comparison to audit · Authorized tasks only</span>
         </div>
         <div className="grid gap-3 md:grid-cols-2">
           {allowedJourneys.map(({ href, title, description, icon: Icon, number }) => (
