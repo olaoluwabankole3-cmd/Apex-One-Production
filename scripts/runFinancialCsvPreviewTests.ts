@@ -174,6 +174,8 @@ const checks: Array<[string, () => void]> = [
   ["financial-preview route requires authoritative session, bounded body and durable audit before success", () => {
     const code = readFileSync("app/api/v1/reconciliation/preview/route.ts", "utf8");
     assert(code.includes("resolveTenantContext(req.headers)"));
+    assert(code.includes('process.env.APEX_DEPLOYMENT_ENVIRONMENT !== "staging"'));
+    assert(code.includes('process.env.CORTEX_FINANCIAL_PREVIEW_ENABLED !== "true"'));
     assert(code.includes("MAX_BODY_BYTES"));
     assert(code.includes("reader.cancel()"));
     assert(code.includes("createApplicationInfrastructure().database.recordAuditLog"));
