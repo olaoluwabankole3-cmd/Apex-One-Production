@@ -153,11 +153,11 @@ async function main() {
     verdict: "approved", reason: "Synthetic signed source approved by independent bank tester",
   });
   const bytes = Buffer.from(
-    "reference,currency,amount_minor,record_id,recorded_at\\nSETTLEMENT-001,NGN,10000,record-ref-1,2026-11-01T09:00:00Z\\n",
+    "reference,currency,amount_minor,record_id,recorded_at\nSETTLEMENT-001,NGN,10000,record-ref-1,2026-11-01T09:00:00Z\n",
     "utf8"
   );
   const digest = createHash("sha256").update(bytes).digest("hex");
-  const iso = (offset: number) => new Date(Date.now() + offset).toISOString().replace(/\\.\\d{3}Z$/, "Z");
+  const iso = (offset: number) => new Date(Date.now() + offset).toISOString().replace(/\.\d{3}Z$/, "Z");
   const manifest: SignedFinancialSourceManifest = {
     schemaVersion: 1, organizationId: org, registryId: signedPolicy.id,
     sourceReference: "pg-integration-fixture-" + suffix,
