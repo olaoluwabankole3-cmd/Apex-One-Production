@@ -176,6 +176,12 @@ async function main() {
   await db.runInTransaction(ctx("custodian"), async () => {
     await db.transitionFinancialSourceImport(ctx("custodian"), fifth.id, "prepared", 1, "uploading");
   });
+  // A recently claimed upload may still be active. Recovery does not race it.
+  assert.equal((await svc.recover(ctx("custodian"), fifth.id)).state, "uploading");
+  const aged = await db.financialSourceImportsRepo.findById(fifth.id, ctx("custodian"));
+  db.financialSourceImports.set(fifth.id, {
+    ...aged, updatedAt: new Date(Date.now() - 10 * 60_000).toISOString(),
+  });
   assert.equal((await svc.recover(ctx("custodian"), fifth.id)).state, "quarantined");
 
   // A once-verified object that is later tampered with cannot be committed.
