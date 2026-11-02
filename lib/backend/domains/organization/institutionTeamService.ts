@@ -47,6 +47,11 @@ export async function listInstitutionTeam(
     throw new ForbiddenError("Institution administration access is no longer available");
   }
 
+  const currentUser = await database.findUserById(ctx.userId);
+  if (!currentUser || currentUser.status !== "active") {
+    throw new ForbiddenError("Institution administrator account is no longer active");
+  }
+
   const memberships = await database.findMembershipsForOrganization(ctx.organizationId);
   const scoped = memberships
     .filter((membership) => membership.organizationId === ctx.organizationId)
