@@ -1,0 +1,163 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "CORTEX staging-only synthetic financial evidence WORM bucket. Creates a new bucket: do not apply without retention policy and cost sign-off.",
+  "Parameters": {
+    "BucketName": {
+      "Type": "String",
+      "Description": "New, unused globally unique staging financial evidence bucket name",
+      "AllowedPattern": "^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"
+    },
+    "ApprovedChangeTicket": {
+      "Type": "String",
+      "MinLength": 6,
+      "Description": "Approved infrastructure/legal retention change record. Never enter a secret."
+    },
+    "SyntheticRetentionDays": {
+      "Type": "Number",
+      "MinValue": 7,
+      "MaxValue": 90,
+      "Default": 7,
+      "Description": "Synthetic-only retention demonstration; NOT approved bank financial retention."
+    }
+  },
+  "Resources": {
+    "FinancialEvidenceBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BucketName": {
+          "Ref": "BucketName"
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "ObjectLockEnabled": true,
+        "ObjectLockConfiguration": {
+          "ObjectLockEnabled": "Enabled",
+          "Rule": {
+            "DefaultRetention": {
+              "Mode": "COMPLIANCE",
+              "Days": {
+                "Ref": "SyntheticRetentionDays"
+              }
+            }
+          }
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Application",
+            "Value": "CORTEX"
+          },
+          {
+            "Key": "Environment",
+            "Value": "staging"
+          },
+          {
+            "Key": "DataClass",
+            "Value": "synthetic-only"
+          },
+          {
+            "Key": "RetentionChangeTicket",
+            "Value": {
+              "Ref": "ApprovedChangeTicket"
+            }
+          }
+        ]
+      }
+    },
+    "FinancialEvidenceBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Ref": "FinancialEvidenceBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyNonTLS",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "FinancialEvidenceBucket",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Sub": "${FinancialEvidenceBucket.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            },
+            {
+              "Sid": "DenyUnencryptedTransport",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": [
+                "s3:PutObject"
+              ],
+              "Resource": [
+                {
+                  "Fn::Sub": "${FinancialEvidenceBucket.Arn}/*"
+                }
+              ],
+              "Condition": {
+                "NumericLessThan": {
+                  "s3:TlsVersion": 1.2
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "BucketName": {
+      "Value": {
+        "Ref": "FinancialEvidenceBucket"
+      }
+    },
+    "BucketArn": {
+      "Value": {
+        "Fn::GetAtt": [
+          "FinancialEvidenceBucket",
+          "Arn"
+        ]
+      }
+    },
+    "SyntheticOnly": {
+      "Value": "STAGING SYNTHETIC ONLY; NEVER CONNECT LIVE BANK INPUTS WITHOUT EXTERNAL POLICY APPROVAL"
+    }
+  }
+}

@@ -14,6 +14,7 @@ import {
   BankingCaseRecord,
   FinancialSourceRegistryRecord,
   FinancialSourceSnapshotRecord,
+  FinancialSourceImportRecord,
   CustomerRecord,
   ContractRecord,
   TransactionRecord,
@@ -118,6 +119,7 @@ export interface DatabaseStateSnapshot {
   bankingCases: Map<string, BankingCaseRecord>;
   financialSourceRegistry: Map<string, FinancialSourceRegistryRecord>;
   financialSourceSnapshots: Map<string, FinancialSourceSnapshotRecord>;
+  financialSourceImports: Map<string, FinancialSourceImportRecord>;
 }
 
 export interface DatabaseStoreOptions {
@@ -155,6 +157,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
   public bankingCases: Map<string, BankingCaseRecord> = new Map();
   public financialSourceRegistry: Map<string, FinancialSourceRegistryRecord> = new Map();
   public financialSourceSnapshots: Map<string, FinancialSourceSnapshotRecord> = new Map();
+  public financialSourceImports: Map<string, FinancialSourceImportRecord> = new Map();
 
   public customersRepo: ICustomerRepository;
   public contractsRepo: IContractRepository;
@@ -175,6 +178,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
   public bankingCasesRepo: ITenantScopedRepository<BankingCaseRecord>;
   public financialSourceRegistryRepo: ITenantScopedRepository<FinancialSourceRegistryRecord>;
   public financialSourceSnapshotsRepo: ITenantScopedRepository<FinancialSourceSnapshotRecord>;
+  public financialSourceImportsRepo: ITenantScopedRepository<FinancialSourceImportRecord>;
 
   private readonly postgresPersistence?: PostgresIntegrityPersistence;
   private readonly inMemoryTransactionState = new AsyncLocalStorage<InMemoryTransactionState>();
@@ -220,6 +224,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
       this.bankingCasesRepo = new PostgresTenantRepository<BankingCaseRecord>("BankingCase", pg.manager);
       this.financialSourceRegistryRepo = new PostgresTenantRepository<FinancialSourceRegistryRecord>("FinancialSourceRegistry", pg.manager);
       this.financialSourceSnapshotsRepo = new PostgresTenantRepository<FinancialSourceSnapshotRecord>("FinancialSourceSnapshot", pg.manager);
+      this.financialSourceImportsRepo = new PostgresTenantRepository<FinancialSourceImportRecord>("FinancialSourceImport", pg.manager);
       return;
     }
 
@@ -257,6 +262,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     this.bankingCasesRepo = new InMemoryTenantRepository<BankingCaseRecord>("BankingCase", this.bankingCases, handleViolation);
     this.financialSourceRegistryRepo = new InMemoryTenantRepository<FinancialSourceRegistryRecord>("FinancialSourceRegistry", this.financialSourceRegistry, handleViolation);
     this.financialSourceSnapshotsRepo = new InMemoryTenantRepository<FinancialSourceSnapshotRecord>("FinancialSourceSnapshot", this.financialSourceSnapshots, handleViolation);
+    this.financialSourceImportsRepo = new InMemoryTenantRepository<FinancialSourceImportRecord>("FinancialSourceImport", this.financialSourceImports, handleViolation);
 
     dataProvider.seedInitialTenants(this);
   }
@@ -308,6 +314,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     this.bankingCases.clear();
     this.financialSourceRegistry.clear();
     this.financialSourceSnapshots.clear();
+    this.financialSourceImports.clear();
     if (this.auditLogsRepo instanceof InMemoryAuditLogRepository) this.auditLogsRepo.clear();
   }
 
@@ -429,6 +436,64 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     }
     const { updatedAt: _generatedByRepository, ...safeUpdates } = updates;
     return this.financialSourceRegistryRepo.update(id, safeUpdates, ctx, "FinancialSourceRegistry");
+  }
+
+  /**
+   * Dedicated CAS for financial import journal. Invoke inside runInTransaction
+   * to atomically couple journal state transition and audit insertion.
+   * No caller can promote a quarantined import or skip a state.
+   */
+  public async transitionFinancialSourceImport(
+    ctx: TenantContext,
+    id: string,
+    from: FinancialSourceImportRecord["state"],
+    expectedRevision: number,
+    to: FinancialSourceImportRecord["state"],
+    extra: Partial<Pick<FinancialSourceImportRecord, "storageVersionId" | "quarantineCode">> = {}
+  ): Promise<FinancialSourceImportRecord> {
+    const legal: Record<FinancialSourceImportRecord["state"], FinancialSourceImportRecord["state"][]> = {
+      prepared: ["uploading"],
+      uploading: ["stored", "quarantined"],
+      stored: ["committed", "quarantined"],
+      committed: [],
+      quarantined: [],
+    };
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1 ||
+        !legal[from].includes(to) ||
+        (to === "stored" && (!extra.storageVersionId || !/^[A-Za-z0-9+./=_-]{1,256}$/.test(extra.storageVersionId) || extra.storageVersionId === "null")) ||
+        (to === "quarantined" && !["upload_interrupted", "storage_verification_failed", "source_policy_changed"].includes(extra.quarantineCode ?? "")) ||
+        (to !== "stored" && extra.storageVersionId !== undefined) ||
+        (to !== "quarantined" && extra.quarantineCode !== undefined)) {
+      throw new ValidationError("Invalid financial import journal transition");
+    }
+    const updates = {
+      state: to, revision: expectedRevision + 1,
+      updatedAt: new Date().toISOString(),
+      ...extra,
+    };
+    if (this.postgresPersistence) {
+      const json = JSON.stringify(updates);
+      return this.postgresPersistence.manager.withConnection(async connection => {
+        const output = await connection.query(
+          `UPDATE apex_domain_records SET record = record || ${quotePostgresLiteral(json)}::jsonb,
+            updated_at = NOW()
+          WHERE entity_type = 'FinancialSourceImport'
+            AND organization_id = ${quotePostgresLiteral(ctx.organizationId)}
+            AND id = ${quotePostgresLiteral(id)}
+            AND record->>'state' = ${quotePostgresLiteral(from)}
+            AND (record->>'revision')::integer = ${expectedRevision}
+          RETURNING record::text AS record`
+        );
+        if (output.rows.length !== 1) throw new ConflictError("Financial import state changed; reload journal");
+        return JSON.parse(output.rows[0].record!) as FinancialSourceImportRecord;
+      });
+    }
+    const existing = await this.financialSourceImportsRepo.findById(id, ctx, "FinancialSourceImport");
+    if (existing.state !== from || existing.revision !== expectedRevision) {
+      throw new ConflictError("Financial import state changed; reload journal");
+    }
+    const { updatedAt: _generatedByRepository, ...safe } = updates;
+    return this.financialSourceImportsRepo.update(id, safe, ctx, "FinancialSourceImport");
   }
 
   public async findMembershipsForUser(userId: string): Promise<OrganizationMembershipRecord[]> {
@@ -560,6 +625,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
       bankingCases: this.cloneMap(this.bankingCases),
       financialSourceRegistry: this.cloneMap(this.financialSourceRegistry),
       financialSourceSnapshots: this.cloneMap(this.financialSourceSnapshots),
+      financialSourceImports: this.cloneMap(this.financialSourceImports),
     };
   }
 
@@ -575,6 +641,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     this.restoreMap(this.bankingCases, snapshot.bankingCases);
     this.restoreMap(this.financialSourceRegistry, snapshot.financialSourceRegistry);
     this.restoreMap(this.financialSourceSnapshots, snapshot.financialSourceSnapshots);
+    this.restoreMap(this.financialSourceImports, snapshot.financialSourceImports);
     if (this.auditLogsRepo instanceof InMemoryAuditLogRepository) this.auditLogsRepo.restoreSnapshot(snapshot.auditLogs);
   }
 

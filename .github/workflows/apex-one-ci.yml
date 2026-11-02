@@ -43,6 +43,8 @@ jobs:
         run: bun run test:financial-reconciliation
       - name: Verify signed financial manifests and exact S3 Object Lock custody predicates
         run: bun run test:financial-provenance
+      - name: Verify financial source import journal and fail-closed crash recovery
+        run: bun run test:financial-import-journal
       - name: Test bounded financial CSV preview and audit requirements
         run: bun run test:financial-preview
       - name: Reject fabricated document extraction evidence
