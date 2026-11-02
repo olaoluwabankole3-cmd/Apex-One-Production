@@ -68,9 +68,9 @@ export const defaultOrganizationConfig: OrganizationConfig = {
   description: "Enterprise intelligence workspace powered by QORVEX.",
 
   branding: {
-    primaryColor: "#0a0a0b",
-    secondaryColor: "#1c1c22",
-    accentColor: "#c9a961",
+    primaryColor: "#171715",
+    secondaryColor: "#F5F1E8",
+    accentColor: "#C58D5F",
   },
 
   // Locale is a UI fallback until organization-specific locale configuration
