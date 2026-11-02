@@ -102,7 +102,10 @@ export default function DocumentsWorkspace() {
       const deleted = await documentRepository.deleteDocument(id);
       if (!deleted) throw new Error("Deletion was not confirmed");
       setConfirmDeleteId(null);
-      await load();
+      // The delete API already confirms the exact record ID. Update only the
+      // in-session list; do not claim deletion failed if a follow-up GET fails.
+      setDocuments((current) => current.filter((document) => document.id !== id));
+      setSelectedId((current) => current === id ? null : current);
       setNotice("The document service confirmed deletion of the selected record.");
     } catch {
       setError("The document could not be deleted. No successful deletion was confirmed.");
