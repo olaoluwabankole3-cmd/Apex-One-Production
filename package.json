@@ -44,7 +44,8 @@
     "test:staging-http": "node --test scripts/verifyStagingHttp.test.mjs",
     "staging:verify": "node scripts/verifyStagingHttp.mjs",
     "test:financial-reconciliation": "tsx scripts/runFinancialReconciliationFoundationTests.ts",
-    "test:financial-preview": "tsx scripts/runFinancialCsvPreviewTests.ts"
+    "test:financial-preview": "tsx scripts/runFinancialCsvPreviewTests.ts",
+    "test:financial-ledger": "tsx scripts/runFinancialPreviewLedgerTests.ts"
   },
   "dependencies": {
     "@google/genai": "^2.16.0",

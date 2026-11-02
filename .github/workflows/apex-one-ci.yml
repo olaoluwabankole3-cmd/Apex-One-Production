@@ -118,6 +118,8 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Run PostgreSQL durability and isolation integration tests
         run: bun run test:postgres
+      - name: Test financial preview case ledger atomicity and tenant isolation
+        run: bun run test:financial-ledger
 
   transaction-repository-integrity:
     name: Transaction & Repository Integrity
