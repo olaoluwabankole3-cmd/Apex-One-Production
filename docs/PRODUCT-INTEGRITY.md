@@ -44,15 +44,19 @@ supervisory observations guide prioritization but do not certify CORTEX:
 
 ## CORTEX information architecture
 
-**Seven permission-filtered primary destinations:**
+**Five permission-filtered primary destinations:**
 
-- Command Center (`/`)
-- CORTEX Intelligence (`/ai-workspace`)
-- Institutional Memory (`/knowledge-hub`)
-- Documents & Evidence (`/documents`)
+- Home (`/`)
+- Documents (`/documents`)
 - Value & Risk (`/value-intelligence`)
-- Action Center (`/workflows`)
-- Recorded Outcomes (`/value-intelligence/captured`)
+- Ask CORTEX (`/ai-workspace`)
+- Actions (`/workflows`)
+
+Institutional knowledge (`/knowledge-hub`) and recorded outcomes
+(`/value-intelligence/captured`) remain discoverable through authorized
+contextual links, rather than separate permanent navigation items.
+The home screen introduces the intended financial investigation journey
+without claiming live bank feeds or verified outcomes.
 
 Account Settings are accessible to `org:admin` users through the account menu;
 password/security controls and organization switching remain there. The
