@@ -2,18 +2,26 @@
 
 CORTEX, a product in development by QORVEX, is intended to help financial-institution teams work from **authorized records to evidence-aware understanding, decisions and follow-up**. It is not a connected core-banking system, a money-transfer tool, an automated collection engine or a certified loss-recovery platform.
 
-## First visit: the Command Center
+## First visit: the CORTEX home screen
 
-The first authenticated screen deliberately does **not** show invented financial totals, arbitrary synthetic chart data or promises of a connected bank source. It presents four real, role-gated starting points, in order:
+The first screen answers a single question: **what is CORTEX for, and where do I begin?**
+It explains the intended financial-institution journey without implying that
+live bank integrations or verified recoveries already exist.
 
-1. **Documents & Evidence** (`/documents`): view authorized source documents. Upload and deletion depend on separate permissions. Documents and extracted fields are not independently certified simply because they are stored.
-2. **Institutional Memory** (`/knowledge-hub`): explore information published to your authorized organization. Items may be missing, unpublished or quarantined.
-3. **CORTEX Intelligence** (`/ai-workspace`): ask questions about authorized records. Coverage, confidence and source-backed verification are constrained by data availability and the model trust boundary.
-4. **Action Center** (`/workflows`): view and manage permitted workflows or follow-ups, subject to capability checks and human approvals where applicable.
+The recommended three-step journey is:
 
-Users with the appropriate permission may also open **Value & Risk** (`/value-intelligence`) to review recorded opportunity and risk context. **Recorded Outcomes** (`/value-intelligence/captured`) are lifecycle records, **not** proof of independently verified financial recovery.
+1. **Review the records** (`/documents`): find authorized documents and check stored summaries or extracted fields against originals.
+2. **Look into possible issues** (`/value-intelligence`): review recorded potential risks, fee-related opportunities and source limitations. A recorded amount is not confirmed loss.
+3. **Follow up** (`/workflows`): view authorized actions, owners and next steps.
 
-Access to a journey is derived from the authenticated session and the organization's enabled features. An unavailable step is shown as unavailable, not linked to an unauthorized page.
+The five primary menu destinations are **Home**, **Documents**, **Value & Risk**,
+**Ask CORTEX** and **Actions**. AI analysis still distinguishes retrieved facts
+from generated synthesis. Institutional knowledge and recorded outcomes remain
+available through authorized contextual links, not top-level menu items.
+
+All destinations and actions remain filtered by authenticated permissions
+and enabled organization features. Disabled tasks explain their unavailability
+instead of linking to inaccessible pages.
 
 ## Capabilities: available versus experimental
 
