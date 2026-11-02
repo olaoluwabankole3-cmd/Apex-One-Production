@@ -554,3 +554,26 @@ export interface UpdateWorkflowRunInput {
   completedAt?: string;
 }
 
+
+
+/**
+ * Initial banking-operations case intake. This is an unverified work item,
+ * never a validated reconciliation, regulatory finding or recovery.
+ * Future cross-department access/approval must not be inferred from this type.
+ */
+export interface BankingCaseRecord {
+  id: string;
+  organizationId: string;
+  title: string;
+  description: string;
+  department: "Operations" | "Finance";
+  priority: "normal" | "high";
+  status: "open";
+  evidenceState: "unverified";
+  sourceType?: "Document" | "ValueOpportunity";
+  sourceId?: string;
+  createdByUserId: string;
+  ownerUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
