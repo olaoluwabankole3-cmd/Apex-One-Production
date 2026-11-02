@@ -24,8 +24,9 @@ assert.equal(isNavigationItemActive("/", "/"), true);
 const overview = load("app/page.tsx");
 assert.match(overview, /api\/v1\/banking-cases\?limit=5/);
 const authenticatedShell = load("components/layout/AppShell.tsx");
-assert.match(authenticatedShell, /<main[^>]*>[\\s\\S]*?\\{children\\}[\\s\\S]*?<\\/main>/,
-  "The banking home route must render the actual Financial Operations page");
+assert(authenticatedShell.includes("{children}"), "Authenticated shell must render the actual route");
+assert(!authenticatedShell.includes('pathname === "/" ?'),
+  "Do not replace the banking overview with an old welcome component");
 assert(!authenticatedShell.includes("CortexWelcome"),
   "Legacy knowledge/AI welcome screen must not replace financial operations home");
 for (const route of ["/reconciliation", "/work/cases", "/documents", "/reviews", "/reports"]) {
@@ -33,7 +34,8 @@ for (const route of ["/reconciliation", "/work/cases", "/documents", "/reviews",
 }
 assert(overview.indexOf('href: "/documents"') < overview.indexOf('href: "/reviews"'),
   "Authorized evidence inspection must precede independent plan review");
-assert.match(overview, /allowedJourneys = journeys\\.filter\\(item => hasPermission\\(item\\.permission\\)\\)/);
+assert(overview.includes("const allowedJourneys = journeys.filter(item => hasPermission(item.permission))"),
+  "Home task actions must be filtered by the authenticated role");
 assert.match(overview, /not an institution-wide total/);
 for (const obsolete of ["RevenueChart", "KpiGrid", "PortfolioBreakdown", "ExecutiveSummary"]) {
   assert(!overview.includes(obsolete), `Obsolete or unverified dashboard item: ${obsolete}`);
@@ -65,9 +67,9 @@ assert.match(reviews, /Load next 50 cases/,
 assert.match(reviews, /if \(nextCursor\) \{[\s\S]*?setPageError\(true\)/,
   "Failure loading another page must preserve cases already inspected");
 const casesWorkspace = load("app/work/cases/page.tsx");
-assert.match(casesWorkspace, /assignees && item\\.decision\\?\\.state !== "pending"/,
-  "Handoff controls must not be offered while checker review locks ownership");
-assert.match(casesWorkspace, /Independent checker review is pending\\. Ownership and evidence are locked/,
+assert(casesWorkspace.includes('assignees && item.decision?.state !== "pending"'),
+  "Case reassignment must be hidden while checker review locks ownership");
+assert(casesWorkspace.includes("Independent checker review is pending. Ownership and evidence are locked"),
   "Operators must understand why reassignment and evidence edits are unavailable");
 const reports = load("app/reports/page.tsx");
 assert.match(reports, /requiredPermission="case:read"/);
