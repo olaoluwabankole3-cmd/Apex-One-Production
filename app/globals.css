@@ -16,8 +16,8 @@
 
 html,
 body {
-  background-color: #0a0a0b;
-  color: #f7f5f0;
+  background-color: #171715;
+  color: #f5f1e8;
   scroll-behavior: smooth;
 }
 
@@ -27,8 +27,8 @@ body {
 }
 
 ::selection {
-  background: rgba(201, 169, 97, 0.35);
-  color: #f7f5f0;
+  background: rgba(197, 141, 95, 0.35);
+  color: #f5f1e8;
 }
 
 /* Thin, elegant scrollbars */
@@ -40,16 +40,16 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(201, 169, 97, 0.25);
+  background: rgba(197, 141, 95, 0.25);
   border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(201, 169, 97, 0.45);
+  background: rgba(197, 141, 95, 0.45);
 }
 
 /* Glass panel base */
 .glass-panel {
-  background: linear-gradient(180deg, rgba(28, 28, 34, 0.72) 0%, rgba(20, 20, 24, 0.72) 100%);
+  background: linear-gradient(180deg, rgba(44, 41, 38, 0.78) 0%, rgba(36, 35, 31, 0.82) 100%);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.07);
@@ -60,12 +60,12 @@ body {
 }
 
 .glass-panel-hover:hover {
-  border-color: rgba(201, 169, 97, 0.35);
-  box-shadow: 0 0 40px -12px rgba(201, 169, 97, 0.25);
+  border-color: rgba(197, 141, 95, 0.35);
+  box-shadow: 0 0 40px -12px rgba(197, 141, 95, 0.25);
 }
 
 .text-gradient-gold {
-  background-image: linear-gradient(135deg, #e8cd8a 0%, #c9a961 55%, #8a7440 100%);
+  background-image: linear-gradient(135deg, #d9a06f 0%, #c58d5f 55%, #a65a2e 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -79,7 +79,7 @@ body {
 a:focus-visible,
 button:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid #c9a961;
+  outline: 2px solid #c58d5f;
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -103,7 +103,7 @@ button:focus-visible,
   margin-bottom: 0.25rem;
 }
 .markdown-body strong {
-  color: #c9a961;
+  color: #c58d5f;
   font-weight: 600;
 }
 
@@ -129,4 +129,26 @@ button:focus-visible,
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* QORVEX corporate art direction: architectural charcoal grid + warm copper.
+   CORTEX's guided entry is a single cream editorial canvas; other authorized
+   workspaces retain high-contrast charcoal until their individual redesign. */
+.cortex-welcome-grid {
+  background-image:
+    linear-gradient(to right, rgba(245, 241, 232, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(245, 241, 232, 0.045) 1px, transparent 1px);
+  background-size: 68px 68px;
+  mask-image: linear-gradient(to right, transparent, black 20%, black 88%, transparent);
+}
+.cortex-welcome {
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+}
+.cortex-welcome h1,
+.cortex-welcome h2,
+.cortex-welcome h3 {
+  text-wrap: balance;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cortex-welcome-grid { background-image: none; }
 }
