@@ -258,6 +258,11 @@ function CaseInbox() {
                 {item.decision && <p className="mt-3 text-xs text-[#D9A06F]">
                   Investigation plan: {item.decision.state} — not a financial verification
                 </p>}
+                {item.decision?.state === "pending" && (
+                  <p role="status" className="mt-3 rounded-lg border border-[#C58D5F]/25 bg-[#C58D5F]/[0.06] p-3 text-xs leading-5 text-[#D9A06F]">
+                    Independent checker review is pending. Ownership and evidence are locked until an authorized checker responds.
+                  </p>
+                )}
                 {mayAssign && (administrator || item.ownerUserId === user?.id) && assignees && item.decision?.state !== "pending" && (
                   <div className="mt-4 border-t border-white/10 pt-4">
                     {handoffCaseId !== item.id ? (
