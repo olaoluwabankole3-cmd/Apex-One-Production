@@ -70,8 +70,7 @@ export default function BankingCaseReviewPanel({ record, currentUserId, canCreat
     void submit("proposal", { disposition, rationale },
       "Investigation plan sent for independent checker review.");
   }
-  function reviewPlan(event: FormEvent<HTMLFormElement>, verdict: "approved" | "rejected") {
-    event.preventDefault();
+  function reviewPlan(verdict: "approved" | "rejected") {
     if (!record.decision) return;
     void submit("decision", { decisionId: record.decision.id, verdict, note: reviewNote },
       "Checker response recorded. This did not verify financial facts or authorize a financial transaction.");
@@ -155,7 +154,7 @@ export default function BankingCaseReviewPanel({ record, currentUserId, canCreat
           </form>
         )}
         {mayCheck && record.decision?.state === "pending" && (
-          <form onSubmit={e => reviewPlan(e, "approved")} className="mt-4 grid gap-3">
+          <form onSubmit={e => { e.preventDefault(); reviewPlan("approved"); }} className="mt-4 grid gap-3">
             <label className="text-xs text-[#D3C9BD]">Independent checker note
               <textarea required minLength={10} maxLength={600} rows={3} value={reviewNote}
                 onChange={e => setReviewNote(e.target.value)} className={inputClass} />
@@ -163,7 +162,7 @@ export default function BankingCaseReviewPanel({ record, currentUserId, canCreat
             <div className="flex flex-wrap gap-2">
               <button disabled={working} className={buttonClass} type="submit">Approve internal plan</button>
               <button type="button" disabled={working || reviewNote.trim().length < 10}
-                className={buttonClass} onClick={e => reviewPlan(e as unknown as FormEvent<HTMLFormElement>, "rejected")}>
+                className={buttonClass} onClick={() => reviewPlan("rejected")}>
                 Reject plan
               </button>
             </div>
