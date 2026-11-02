@@ -328,10 +328,19 @@ export class FinancialSourceImportJournalService {
       return { state: "committed", snapshot: await this.finalize(ctx, importId) };
     }
     if (item.state === "uploading") {
+      // An active worker may legitimately be writing the object. Only a stale
+      // claim can be treated as an interrupted upload; never race an active
+      // worker and force it into quarantine mid-write.
+      const age = Date.now() - Date.parse(item.updatedAt);
+      if (!Number.isFinite(age) || age < 5 * 60_000) return { state: "uploading" };
       const quarantined = await this.db.runInTransaction(ctx, async () => {
         await access(ctx, this.db, "financial:write");
         const current = await getScoped(this.db.financialSourceImportsRepo, ctx, importId, "FinancialSourceImport");
-        if (current.state !== "uploading") throw new ConflictError("Import changed while recovering");
+        if (current.state !== "uploading" ||
+            !Number.isFinite(Date.parse(current.updatedAt)) ||
+            Date.now() - Date.parse(current.updatedAt) < 5 * 60_000) {
+          throw new ConflictError("Import still active or changed while recovering");
+        }
         const next = await this.db.transitionFinancialSourceImport(ctx, importId,
           "uploading", current.revision, "quarantined", { quarantineCode: "upload_interrupted" });
         await this.db.recordAuditLog(journalAudit(ctx, "financial_source:import_quarantined", importId, {
