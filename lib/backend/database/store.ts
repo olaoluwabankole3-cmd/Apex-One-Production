@@ -11,6 +11,7 @@ import {
   OrganizationRecord,
   UserRecord,
   OrganizationMembershipRecord,
+  BankingCaseRecord,
   CustomerRecord,
   ContractRecord,
   TransactionRecord,
@@ -31,6 +32,9 @@ import type {
   ProvenanceRecord,
   VerificationRecord,
 } from "../domains/evidence/model";
+import { type ITenantScopedRepository } from "./repository";
+import { InMemoryTenantRepository } from "./adapters/inMemory/InMemoryTenantRepository";
+import { PostgresTenantRepository } from "./adapters/postgres/PostgresPersistence";
 import {
   ICustomerRepository,
   IContractRepository,
@@ -108,6 +112,7 @@ export interface DatabaseStateSnapshot {
   verifications: Map<string, VerificationRecord>;
   certifications: Map<string, CertificationRecord>;
   auditLogs: AuditLogRecord[];
+  bankingCases: Map<string, BankingCaseRecord>;
 }
 
 export interface DatabaseStoreOptions {
@@ -142,6 +147,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
   public provenance: Map<string, ProvenanceRecord> = new Map();
   public verifications: Map<string, VerificationRecord> = new Map();
   public certifications: Map<string, CertificationRecord> = new Map();
+  public bankingCases: Map<string, BankingCaseRecord> = new Map();
 
   public customersRepo: ICustomerRepository;
   public contractsRepo: IContractRepository;
@@ -159,6 +165,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
   public verificationsRepo: IVerificationRepository;
   public certificationsRepo: ICertificationRepository;
   public auditLogsRepo: IAuditLogRepository;
+  public bankingCasesRepo: ITenantScopedRepository<BankingCaseRecord>;
 
   private readonly postgresPersistence?: PostgresIntegrityPersistence;
   private readonly inMemoryTransactionState = new AsyncLocalStorage<InMemoryTransactionState>();
@@ -201,6 +208,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
       this.verificationsRepo = new PostgresVerificationRepository(pg.manager);
       this.certificationsRepo = new PostgresCertificationRepository(pg.manager);
       this.auditLogsRepo = pg.auditLogsRepo;
+      this.bankingCasesRepo = new PostgresTenantRepository<BankingCaseRecord>("BankingCase", pg.manager);
       return;
     }
 
@@ -235,6 +243,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     this.verificationsRepo = new InMemoryVerificationRepository("Verification", this.verifications, handleViolation);
     this.certificationsRepo = new InMemoryCertificationRepository("Certification", this.certifications, handleViolation);
     this.auditLogsRepo = new InMemoryAuditLogRepository();
+    this.bankingCasesRepo = new InMemoryTenantRepository<BankingCaseRecord>("BankingCase", this.bankingCases, handleViolation);
 
     dataProvider.seedInitialTenants(this);
   }
@@ -283,6 +292,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     this.provenance.clear();
     this.verifications.clear();
     this.certifications.clear();
+    this.bankingCases.clear();
     if (this.auditLogsRepo instanceof InMemoryAuditLogRepository) this.auditLogsRepo.clear();
   }
 
@@ -477,6 +487,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
       workflows: this.cloneMap(this.workflows), workflowRuns: this.cloneMap(this.workflowRuns), actions: this.cloneMap(this.actions),
       provenance: this.cloneMap(this.provenance), verifications: this.cloneMap(this.verifications), certifications: this.cloneMap(this.certifications),
       auditLogs: this.auditLogsRepo instanceof InMemoryAuditLogRepository ? this.auditLogsRepo.getSnapshot() : [],
+      bankingCases: this.cloneMap(this.bankingCases),
     };
   }
 
@@ -489,6 +500,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     this.restoreMap(this.valueCaptured, snapshot.valueCaptured); this.restoreMap(this.workflows, snapshot.workflows); this.restoreMap(this.workflowRuns, snapshot.workflowRuns);
     this.restoreMap(this.actions, snapshot.actions); this.restoreMap(this.provenance, snapshot.provenance); this.restoreMap(this.verifications, snapshot.verifications);
     this.restoreMap(this.certifications, snapshot.certifications);
+    this.restoreMap(this.bankingCases, snapshot.bankingCases);
     if (this.auditLogsRepo instanceof InMemoryAuditLogRepository) this.auditLogsRepo.restoreSnapshot(snapshot.auditLogs);
   }
 
