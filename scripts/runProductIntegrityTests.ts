@@ -104,24 +104,22 @@ for (const navigationFile of ["components/layout/Sidebar.tsx", "components/layou
   assert(source.includes("hasPermission"), `${navigationFile} must derive visibility from authenticated capabilities.`);
 }
 
-// Financial-institution release surface: keep the seven core journeys
-// visible and retire unsupported/duplicate standalone screens.
+// Keep the first-use navigation small. Advanced contextual workspaces remain
+// reachable only through permission-filtered links in their parent journeys.
 const navigation = readFileSync(join(root, "components/layout/navigation.ts"), "utf8");
 const primaryDestinations = [
-  ...navigation.matchAll(/\{ href: "([^"]+)", label: "([^"]+)", icon:/g),
+  ...navigation.matchAll(/\\{ href: "([^"]+)", label: "([^"]+)", icon:/g),
 ].map((match) => [match[1], match[2]]);
 const expectedDestinations = [
-  ["/", "Command Center"],
-  ["/ai-workspace", "CORTEX Intelligence"],
-  ["/knowledge-hub", "Institutional Memory"],
-  ["/documents", "Documents & Evidence"],
+  ["/", "Home"],
+  ["/documents", "Documents"],
   ["/value-intelligence", "Value & Risk"],
-  ["/workflows", "Action Center"],
-  ["/value-intelligence/captured", "Recorded Outcomes"],
+  ["/ai-workspace", "Ask CORTEX"],
+  ["/workflows", "Actions"],
 ];
 assert(
   JSON.stringify(primaryDestinations) === JSON.stringify(expectedDestinations),
-  "Financial-institution primary navigation must contain only the seven reviewed intelligence journeys."
+  "Financial-institution primary navigation must contain only the five accessible first-use journeys."
 );
 assert(
   !navigation.includes("valueNavigation"),
