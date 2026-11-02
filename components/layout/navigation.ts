@@ -1,12 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  LayoutGrid,
-  BrainCircuit,
-  BookOpenText,
-  FileStack,
-  Target,
-  Workflow,
-  ShieldCheck,
+  LayoutGrid, ArrowLeftRight, ClipboardList, ShieldCheck,
+  FileStack, ChartNoAxesCombined, Settings2,
 } from "lucide-react";
 import type { OrganizationConfig } from "@/lib/organizationConfig";
 
@@ -19,34 +14,22 @@ export interface AppNavigationItem {
 }
 
 /**
- * CORTEX financial-institution release.
- *
- * Navigation represents source-backed intelligence journeys, not every
- * backend domain or experimental screen. Detailed records remain reachable
- * within their authorized workspaces; they are not a second sidebar.
- * All visibility is gated by session-derived permissions.
+ * CORTEX financial-operations MVP.
+ * Seven tasks, not seven dashboards. Hide journeys that are not authorized
+ * by the active session. Legacy modules remain reachable only through their
+ * permission-checked context, not additional primary nav destinations.
  */
 export const primaryNavigation: AppNavigationItem[] = [
-  { href: "/", label: "Command Center", icon: LayoutGrid, permission: "org:read" },
-  { href: "/ai-workspace", label: "CORTEX Intelligence", icon: BrainCircuit, permission: "ai:execute", feature: "aiWorkspace" },
-  { href: "/knowledge-hub", label: "Institutional Memory", icon: BookOpenText, permission: "knowledge:read" },
-  { href: "/documents", label: "Documents & Evidence", icon: FileStack, permission: "document:read" },
-  { href: "/value-intelligence", label: "Value & Risk", icon: Target, permission: "value:read", feature: "valueIntelligence" },
-  { href: "/workflows", label: "Action Center", icon: Workflow, permission: "workflow:read", feature: "workflowIntelligence" },
-  { href: "/value-intelligence/captured", label: "Recorded Outcomes", icon: ShieldCheck, permission: "value:read", feature: "valueIntelligence" },
+  { href: "/", label: "Overview", icon: LayoutGrid, permission: "org:read" },
+  { href: "/reconciliation", label: "Reconciliation", icon: ArrowLeftRight, permission: "financial:read" },
+  { href: "/work/cases", label: "Cases", icon: ClipboardList, permission: "case:read" },
+  { href: "/reviews", label: "Reviews", icon: ShieldCheck, permission: "case:approve" },
+  { href: "/documents", label: "Evidence", icon: FileStack, permission: "document:read" },
+  { href: "/reports", label: "Reports", icon: ChartNoAxesCombined, permission: "case:read" },
+  { href: "/settings", label: "Administration", icon: Settings2, permission: "org:admin" },
 ];
 
 export function isNavigationItemActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
-  // Captured outcomes is a separate journey from value/risk opportunities.
-  if (href === "/value-intelligence") {
-    return (
-      (pathname === href || pathname.startsWith(`${href}/`)) &&
-      !(
-        pathname === "/value-intelligence/captured" ||
-        pathname.startsWith("/value-intelligence/captured/")
-      )
-    );
-  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
