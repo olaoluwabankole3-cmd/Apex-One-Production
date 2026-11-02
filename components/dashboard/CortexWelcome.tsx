@@ -111,6 +111,11 @@ export default function CortexWelcome() {
                   Ask your workspace administrator for access to a starting workflow.
                 </span>
               )}
+              {hasPermission("org:admin") && (
+                <Link href="/settings" className="inline-flex min-h-11 items-center gap-2 text-[12px] font-semibold text-[#D9A06F] underline decoration-[#C58D5F] underline-offset-[7px] hover:text-[#F5F1E8]">
+                  Institution setup guide <ArrowUpRight size={15} aria-hidden="true" />
+                </Link>
+              )}
               <a href="#how-cortex-works" className="inline-flex min-h-11 items-center gap-2 text-[12px] font-semibold text-[#F5F1E8] underline decoration-[#C58D5F] underline-offset-[7px] hover:text-[#D9A06F]">
                 Understand the workspace <ArrowRight size={15} aria-hidden="true" />
               </a>
