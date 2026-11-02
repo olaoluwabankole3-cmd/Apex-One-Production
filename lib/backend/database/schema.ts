@@ -561,6 +561,49 @@ export interface UpdateWorkflowRunInput {
  * never a validated reconciliation, regulatory finding or recovery.
  * Future cross-department access/approval must not be inferred from this type.
  */
+/** Bank-controlled, append-only-at-service-boundary case chronology. */
+export interface BankingCaseTimelineEvent {
+  id: string;
+  type: "created" | "handed_off" | "evidence_linked" | "decision_proposed" | "decision_reviewed";
+  actorUserId: string;
+  occurredAt: string;
+  note: string;
+  revision: number;
+  reference?: { kind: "Document" | "ValueOpportunity"; id: string };
+}
+
+export interface BankingCaseEvidenceLink {
+  id: string;
+  sourceType: "Document" | "ValueOpportunity";
+  sourceId: string;
+  note: string;
+  addedByUserId: string;
+  addedAt: string;
+}
+
+/** Approval of an internal investigation plan only; never authorization of funds. */
+export interface BankingCaseDecision {
+  id: string;
+  state: "pending" | "approved" | "rejected";
+  disposition: "continue_investigation" | "request_source_review" | "escalate_for_control_review";
+  rationale: string;
+  proposedByUserId: string;
+  proposedAt: string;
+  evidenceLinkIds: string[];
+  reviewedByUserId?: string;
+  reviewedAt?: string;
+  reviewNote?: string;
+}
+
+export interface BankingPreviewOrigin {
+  batchId: string;
+  candidateId: string;
+  comparisonStatus: "amount_discrepancy" | "currency_mismatch" | "missing_expected" | "missing_observed" | "insufficient_source_coverage" | "ambiguous";
+  sourceStored: false;
+  coverageVerified: false;
+  financialLossAssessed: false;
+}
+
 export interface BankingCaseRecord {
   id: string;
   organizationId: string;
@@ -577,6 +620,10 @@ export interface BankingCaseRecord {
   /** Optimistic revision of case ownership state; historical cases default to 1. */
   revision?: number;
   lastHandoffAt?: string;
+  timeline?: BankingCaseTimelineEvent[];
+  evidenceLinks?: BankingCaseEvidenceLink[];
+  decision?: BankingCaseDecision;
+  previewOrigin?: BankingPreviewOrigin;
   createdAt: string;
   updatedAt: string;
 }
