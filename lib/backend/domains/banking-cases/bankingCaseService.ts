@@ -57,7 +57,7 @@ function departmentForRole(role: string): BankingCaseRecord["department"] | null
 async function verifyCurrentAccess(
   ctx: TenantContext,
   database: DatabaseStore,
-  capability: "workflow:read" | "workflow:write"
+  capability: "case:read" | "case:create" | "case:assign"
 ): Promise<{ isAdministrator: boolean }> {
   requirePermission(ctx, capability);
   const [membership, user] = await Promise.all([
@@ -79,7 +79,7 @@ export class BankingCaseService {
   constructor(private readonly database: DatabaseStore = createApplicationInfrastructure().database) {}
 
   public async create(ctx: TenantContext, input: CreateBankingCaseInput): Promise<BankingCaseRecord> {
-    await verifyCurrentAccess(ctx, this.database, "workflow:write");
+    await verifyCurrentAccess(ctx, this.database, "case:create");
     const title = Validator.requireString(input.title, "title", { minLength: 8, maxLength: 160 });
     const description = Validator.requireString(input.description, "description", { minLength: 10, maxLength: 1200 });
     const department = Validator.requireEnum(input.department, ["Operations", "Finance"] as const, "department");
@@ -103,7 +103,7 @@ export class BankingCaseService {
     return this.database.runInTransaction(ctx, async () => {
       // Verify within the transaction as well, to resist membership revocation
       // between initial request validation and the database write.
-      await verifyCurrentAccess(ctx, this.database, "workflow:write");
+      await verifyCurrentAccess(ctx, this.database, "case:create");
       try {
         if (sourceType === "Document") {
           await this.database.documentsRepo.findById(sourceId!, ctx, "Document");
@@ -150,7 +150,7 @@ export class BankingCaseService {
    * The bound prevents an unbounded organization-wide directory read.
    */
   public async listAssignees(ctx: TenantContext): Promise<BankingCaseAssigneeList> {
-    await verifyCurrentAccess(ctx, this.database, "workflow:write");
+    await verifyCurrentAccess(ctx, this.database, "case:assign");
     const membershipRecords = await this.database.findMembershipsForOrganization(ctx.organizationId);
     const members: BankingCaseAssignee[] = [];
     for (const membership of membershipRecords.slice(0, 101)) {
@@ -158,7 +158,7 @@ export class BankingCaseService {
       const department = departmentForRole(membership.role);
       if (!department) continue;
       if (membership.department && membership.department !== department) continue;
-      if (!getPermissionsForRole(membership.role).includes("workflow:read")) continue;
+      if (!getPermissionsForRole(membership.role).includes("case:read")) continue;
       const user = await this.database.findUserById(membership.userId);
       if (user?.status !== "active") continue;
       if (members.length < 100) members.push({ userId: user.id, name: user.name || "Institution staff", department });
@@ -177,7 +177,7 @@ export class BankingCaseService {
     caseId: string,
     input: HandoffBankingCaseInput
   ): Promise<BankingCaseRecord> {
-    requirePermission(ctx, "workflow:write");
+    requirePermission(ctx, "case:assign");
     const validatedCaseId = Validator.requireId(caseId, "caseId");
     const recipientUserId = Validator.requireId(input.recipientUserId, "recipientUserId");
     const reason = Validator.requireString(input.reason, "reason", { minLength: 10, maxLength: 500 });
@@ -186,7 +186,7 @@ export class BankingCaseService {
       throw new ValidationError("expectedRevision must be a positive integer");
     }
     return this.database.runInTransaction(ctx, async () => {
-      const { isAdministrator } = await verifyCurrentAccess(ctx, this.database, "workflow:write");
+      const { isAdministrator } = await verifyCurrentAccess(ctx, this.database, "case:assign");
       let existing: BankingCaseRecord;
       try {
         existing = await this.database.bankingCasesRepo.findById(validatedCaseId, ctx, "BankingCase");
@@ -213,7 +213,7 @@ export class BankingCaseService {
       if (!recipientMembership || recipientMembership.organizationId !== ctx.organizationId ||
           !recipient || recipient.status !== "active" || !department ||
           (recipientMembership.department && recipientMembership.department !== department) ||
-          !getPermissionsForRole(recipientMembership.role).includes("workflow:read")) {
+          !getPermissionsForRole(recipientMembership.role).includes("case:read")) {
         // Do not reveal whether an unknown ID belongs to a different bank.
         throw new NotFoundError("Eligible case recipient");
       }
@@ -244,7 +244,7 @@ export class BankingCaseService {
   }
 
   public async list(ctx: TenantContext, options: BankingCaseListOptions = {}): Promise<PaginatedResult<BankingCaseRecord>> {
-    const { isAdministrator } = await verifyCurrentAccess(ctx, this.database, "workflow:read");
+    const { isAdministrator } = await verifyCurrentAccess(ctx, this.database, "case:read");
     const query = isAdministrator
       ? { limit: options.limit, cursor: options.cursor }
       : { limit: options.limit, cursor: options.cursor, where: { ownerUserId: { eq: ctx.userId } } };
@@ -252,7 +252,7 @@ export class BankingCaseService {
   }
 
   public async findById(ctx: TenantContext, id: string): Promise<BankingCaseRecord> {
-    const { isAdministrator } = await verifyCurrentAccess(ctx, this.database, "workflow:read");
+    const { isAdministrator } = await verifyCurrentAccess(ctx, this.database, "case:read");
     try {
       const record = await this.database.bankingCasesRepo.findById(Validator.requireId(id, "caseId"), ctx, "BankingCase");
       if (!isAdministrator && record.ownerUserId !== ctx.userId) throw new NotFoundError("BankingCase");
