@@ -42,7 +42,7 @@ export default function KpiGrid() {
             <div className="flex items-center gap-2 mt-[-5px]">
               <Sparkles size={14} className="text-gold animate-pulse" />
               <h4 className="text-[11.5px] font-bold uppercase tracking-[0.14em] text-gold font-mono animate-fade-in">
-                Apex Value Engine • Executive Briefing
+                Value & Risk • Recorded Opportunities
               </h4>
             </div>
             <span className="text-[10px] font-mono text-ivory/30">
@@ -51,12 +51,12 @@ export default function KpiGrid() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 pt-0 mt-[4px]">
-            {/* KPI 1: Identified Leakage & Yields */}
+            {/* KPI 1: Recorded opportunities (not verified losses) */}
             <GlassCard className="p-5 border-gold/25 shadow-gold-glow/5 relative overflow-hidden group">
               <div className="absolute top-0 right-0 h-16 w-16 bg-gold/5 blur-xl rounded-full animate-pulse-slow" />
               <div className="flex items-start justify-between">
                 <p className="text-[12px] font-medium uppercase tracking-[0.08em] text-ivory/45">
-                  Identified Loss Backlog
+                  Recorded Opportunity Backlog
                 </p>
                 <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-gold/10 text-gold border border-gold/20">
                   <Gem size={12} />
