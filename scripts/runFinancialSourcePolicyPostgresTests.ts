@@ -54,6 +54,29 @@ async function main() {
     });
   }
   checkpoint = "create approval service";
+  // Test-only instrumentation to identify any PostgreSQL transaction stall.
+  const originalTransaction = db.runInTransaction.bind(db);
+  (db as any).runInTransaction = async (context: TenantContext, work: (uow: any) => Promise<any>) => {
+    checkpoint = "opening financial source transaction";
+    return originalTransaction(context, async (uow) => {
+      checkpoint = "transaction entered";
+      return work(uow);
+    });
+  };
+  const originalCreate = db.financialSourceRegistryRepo.create.bind(db.financialSourceRegistryRepo);
+  (db.financialSourceRegistryRepo as any).create = async (...args: Parameters<typeof originalCreate>) => {
+    checkpoint = "inserting policy record";
+    const result = await originalCreate(...args);
+    checkpoint = "policy record inserted";
+    return result;
+  };
+  const auditInsert = db.recordAuditLog.bind(db);
+  db.recordAuditLog = async (record) => {
+    checkpoint = "inserting audit receipt";
+    const result = await auditInsert(record);
+    checkpoint = "audit receipt inserted";
+    return result;
+  };
   const service = new FinancialSourceIntakeService(db, new InMemoryObjectStorageAdapter());
   const policy = await service.proposeSource(ctx(userIds[0]), {
     sourceLabel: "synthetic-core-settlement-source",
