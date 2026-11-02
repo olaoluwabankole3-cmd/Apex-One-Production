@@ -7,10 +7,17 @@ import InternalOnlyShield from "@/components/layout/InternalOnlyShield";
 import { useAuth } from "@/components/auth/AuthContext";
 import { apiClient } from "@/lib/apiClient";
 import type { BankingCaseRecord } from "@/lib/backend/database/schema";
+import type { BankingCaseAssigneeList } from "@/lib/backend/domains/banking-cases/bankingCaseService";
 
 function CaseInbox() {
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
   const [cases, setCases] = useState<BankingCaseRecord[]>([]);
+  const [assignees, setAssignees] = useState<BankingCaseAssigneeList | null>(null);
+  const [assigneeError, setAssigneeError] = useState(false);
+  const [handoffCaseId, setHandoffCaseId] = useState<string | null>(null);
+  const [handoffRecipientId, setHandoffRecipientId] = useState("");
+  const [handoffReason, setHandoffReason] = useState("");
+  const [sendingHandoff, setSendingHandoff] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -41,6 +48,38 @@ function CaseInbox() {
     }
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    if (!mayCreate) return;
+    let mounted = true;
+    void apiClient.getData<BankingCaseAssigneeList>("/api/v1/banking-cases/assignees")
+      .then((directory) => { if (mounted) setAssignees(directory); })
+      .catch(() => { if (mounted) setAssigneeError(true); });
+    return () => { mounted = false; };
+  }, [mayCreate]);
+
+  async function sendHandoff(event: FormEvent<HTMLFormElement>, record: BankingCaseRecord) {
+    event.preventDefault();
+    if (sendingHandoff || !mayCreate || !handoffRecipientId) return;
+    setSendingHandoff(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await apiClient.postData<BankingCaseRecord>(
+        `/api/v1/banking-cases/${encodeURIComponent(record.id)}/handoff`,
+        { recipientUserId: handoffRecipientId, expectedRevision: record.revision ?? 1,
+          reason: handoffReason }
+      );
+      setHandoffCaseId(null);
+      setHandoffRecipientId("");
+      setHandoffReason("");
+      setNotice("Ownership handoff recorded. The case remains open and unverified; no approval or financial result was recorded.");
+      await refresh();
+    } catch {
+      setError("Handoff was not confirmed. Case ownership may have changed; refresh the queue before retrying.");
+    } finally {
+      setSendingHandoff(false);
+    }
+  }
 
   async function createCase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -72,7 +111,7 @@ function CaseInbox() {
         <p className="mt-3 max-w-3xl text-sm leading-6 text-[#D3C9BD]">
           This is the first shared banking-case foundation. Staff can record and inspect their own open
           financial-operations cases. Administrators can review the institution-wide queue.
-          Assignment, investigation decisions, approvals and financial recoveries are not enabled yet.
+          Handoffs are now available to active Operations and Finance colleagues. Investigation decisions, approvals and financial recoveries are not enabled yet.
         </p>
       </header>
       {mayCreate && (
@@ -114,6 +153,8 @@ function CaseInbox() {
             <RefreshCw size={13} /> Refresh
           </button>
         </div>
+        {assigneeError && mayCreate && <p className="rounded-lg border border-white/10 p-3 text-sm text-ivory/60">The institution assignment list is unavailable. Your existing cases remain readable.</p>}
+        {assignees?.hasMore && <p className="rounded-lg border border-white/10 p-3 text-xs text-ivory/60">The assignment list is limited to the first 100 eligible employees; contact your administrator if the recipient is not shown.</p>}
         {notice && <p role="status" className="rounded-lg border border-white/10 p-3 text-sm text-[#D9A06F]">{notice}</p>}
         {error && <p role="alert" className="rounded-lg border border-red-400/30 p-3 text-sm text-red-300">{error}</p>}
         {loading && cases.length === 0 ? <p className="text-sm text-ivory/55">Loading permitted cases…</p> :
@@ -132,8 +173,51 @@ function CaseInbox() {
                   <span>{item.department}</span><span>Priority: {item.priority}</span>
                   <span>Created: {new Date(item.createdAt).toLocaleDateString()}</span>
                   <span>Case ID: {item.id}</span>
+                  <span>Revision: {item.revision ?? 1}</span>
                 </div>
+                <p className="mt-3 text-xs text-ivory/45">
+                  Assigned to: {assignees?.members.find((candidate) => candidate.userId === item.ownerUserId)?.name || (item.ownerUserId === user?.id ? "You" : "Institution staff")}
+                </p>
                 {!item.sourceId && <p className="mt-3 flex items-center gap-2 text-xs text-ivory/40"><FileWarning size={13} /> No source evidence linked yet</p>}
+                {mayCreate && (administrator || item.ownerUserId === user?.id) && assignees && (
+                  <div className="mt-4 border-t border-white/10 pt-4">
+                    {handoffCaseId !== item.id ? (
+                      <button type="button" disabled={sendingHandoff} onClick={() => {
+                        setHandoffCaseId(item.id); setHandoffRecipientId(""); setHandoffReason("");
+                      }} className="rounded-lg border border-[#C58D5F]/40 px-3 py-2 text-xs font-semibold text-[#D9A06F]">
+                        Hand off to a colleague
+                      </button>
+                    ) : (
+                      <form onSubmit={(event) => void sendHandoff(event, item)} className="space-y-3">
+                        <p className="text-sm font-semibold">Record an accountable handoff</p>
+                        <label className="block text-xs text-ivory/65">Recipient
+                          <select required value={handoffRecipientId} onChange={(event) => setHandoffRecipientId(event.target.value)}
+                            className="mt-2 w-full rounded-lg border border-white/15 bg-[#24231F] p-3 text-sm text-ivory">
+                            <option value="">Select an active employee…</option>
+                            {assignees.members.filter((candidate) => candidate.userId !== item.ownerUserId).map((candidate) => (
+                              <option key={candidate.userId} value={candidate.userId}>{candidate.name} · {candidate.department}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="block text-xs text-ivory/65">Reason for handoff
+                          <textarea required minLength={10} maxLength={500} rows={2} value={handoffReason}
+                            onChange={(event) => setHandoffReason(event.target.value)}
+                            placeholder="Explain what the receiving department needs to investigate…"
+                            className="mt-2 w-full rounded-lg border border-white/15 bg-[#24231F] p-3 text-sm text-ivory" />
+                        </label>
+                        <p className="text-xs text-ivory/45">Ownership transfers only after server validation. This does not approve or close the case.</p>
+                        <div className="flex gap-2">
+                          <button type="submit" disabled={sendingHandoff || !handoffRecipientId}
+                            className="rounded-lg bg-[#C58D5F] px-4 py-2 text-xs font-bold text-[#171715] disabled:opacity-40">
+                            {sendingHandoff ? "Submitting…" : "Confirm handoff"}
+                          </button>
+                          <button type="button" disabled={sendingHandoff} onClick={() => setHandoffCaseId(null)}
+                            className="rounded-lg border border-white/15 px-4 py-2 text-xs text-ivory/70">Cancel</button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                )}
               </article>
             ))}
           </div>
