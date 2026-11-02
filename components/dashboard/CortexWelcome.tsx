@@ -55,12 +55,15 @@ export default function CortexWelcome() {
     },
     {
       number: "04",
-      title: "Move toward a decision",
-      description: "Review permitted workflows and accountable follow-up; sensitive actions still require authorization.",
-      href: "/workflows",
-      action: "Review actions",
+      title: hasPermission("case:read") ? "Manage my banking cases" : "Move toward a decision",
+      description: hasPermission("case:read")
+        ? "Review your assigned cases, create operational issues when authorized and hand off work with an audit trail."
+        : "Review permitted workflows and accountable follow-up; sensitive actions still require authorization.",
+      href: hasPermission("case:read") ? "/work/cases" : "/workflows",
+      action: hasPermission("case:read") ? "Open My Cases" : "Review actions",
       Icon: GitBranch,
-      allowed: hasPermission("workflow:read") && isFeatureEnabled("workflowIntelligence"),
+      allowed: hasPermission("case:read") ||
+        (hasPermission("workflow:read") && isFeatureEnabled("workflowIntelligence")),
     },
   ];
   const firstAvailable = journeys.find((item) => item.allowed);
