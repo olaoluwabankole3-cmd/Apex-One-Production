@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { apiClient } from "@/lib/apiClient";
 import type { BankingCaseRecord } from "@/lib/backend/database/schema";
 import type { BankingCaseAssigneeList } from "@/lib/backend/domains/banking-cases/bankingCaseService";
+import BankingCaseReviewPanel from "@/components/banking-cases/BankingCaseReviewPanel";
 
 function CaseInbox() {
   const { hasPermission, user } = useAuth();
@@ -15,6 +16,7 @@ function CaseInbox() {
   const [assignees, setAssignees] = useState<BankingCaseAssigneeList | null>(null);
   const [assigneeError, setAssigneeError] = useState(false);
   const [handoffCaseId, setHandoffCaseId] = useState<string | null>(null);
+  const [expandedCaseId, setExpandedCaseId] = useState<string | null>(null);
   const [handoffRecipientId, setHandoffRecipientId] = useState("");
   const [handoffReason, setHandoffReason] = useState("");
   const [sendingHandoff, setSendingHandoff] = useState(false);
@@ -31,6 +33,7 @@ function CaseInbox() {
   const mayCreate = hasPermission("case:create");
   const mayAssign = hasPermission("case:assign");
   const administrator = hasPermission("org:admin");
+  const mayApprove = hasPermission("case:approve");
 
   const refresh = useCallback(async (nextCursor?: string) => {
     setLoading(true);
@@ -112,7 +115,7 @@ function CaseInbox() {
         <p className="mt-3 max-w-3xl text-sm leading-6 text-[#D3C9BD]">
           This is the first shared banking-case foundation. Staff can record and inspect their own open
           financial-operations cases. Administrators can review the institution-wide queue.
-          Handoffs are now available to active Operations and Finance colleagues. Investigation decisions, approvals and financial recoveries are not enabled yet.
+          Handoffs, source references and independent investigation-plan reviews are supported. No plan sign-off verifies a financial discrepancy or authorizes a transfer.
         </p>
       </header>
       {mayCreate && (
@@ -179,7 +182,11 @@ function CaseInbox() {
                 <p className="mt-3 text-xs text-ivory/45">
                   Assigned to: {assignees?.members.find((candidate) => candidate.userId === item.ownerUserId)?.name || (item.ownerUserId === user?.id ? "You" : "Institution staff")}
                 </p>
-                {!item.sourceId && <p className="mt-3 flex items-center gap-2 text-xs text-ivory/40"><FileWarning size={13} /> No source evidence linked yet</p>}
+                {!item.sourceId && !item.previewOrigin && !(item.evidenceLinks?.length) &&
+                  <p className="mt-3 flex items-center gap-2 text-xs text-ivory/40"><FileWarning size={13} /> No source evidence linked yet</p>}
+                {item.decision && <p className="mt-3 text-xs text-[#D9A06F]">
+                  Investigation plan: {item.decision.state} — not a financial verification
+                </p>}
                 {mayAssign && (administrator || item.ownerUserId === user?.id) && assignees && (
                   <div className="mt-4 border-t border-white/10 pt-4">
                     {handoffCaseId !== item.id ? (
@@ -219,6 +226,18 @@ function CaseInbox() {
                     )}
                   </div>
                 )}
+                <div className="mt-4 border-t border-white/10 pt-4">
+                  <button type="button" onClick={() => setExpandedCaseId(expandedCaseId === item.id ? null : item.id)}
+                    aria-expanded={expandedCaseId === item.id}
+                    className="rounded-lg border border-[#C58D5F]/40 px-4 py-2 text-xs font-semibold text-[#D9A06F]">
+                    {expandedCaseId === item.id ? "Hide investigation & timeline" : "Investigation, evidence & approvals"}
+                  </button>
+                  {expandedCaseId === item.id && (
+                    <BankingCaseReviewPanel record={item} currentUserId={user?.id}
+                      canCreate={mayCreate} canApprove={mayApprove}
+                      onUpdated={() => refresh()} />
+                  )}
+                </div>
               </article>
             ))}
           </div>
