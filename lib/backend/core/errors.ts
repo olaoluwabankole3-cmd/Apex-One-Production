@@ -38,6 +38,7 @@ export type PermissionCapability =
   | "case:read"
   | "case:create"
   | "case:assign"
+  | "case:approve"
   | "ai:execute"
   | "value:read"
   | "value:write"
