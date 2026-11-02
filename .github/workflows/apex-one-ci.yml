@@ -41,6 +41,8 @@ jobs:
         run: bun run test:product-integrity
       - name: Test financial reconciliation safety and evidence boundaries
         run: bun run test:financial-reconciliation
+      - name: Test bounded financial CSV preview and audit requirements
+        run: bun run test:financial-preview
       - name: Reject fabricated document extraction evidence
         run: bun run test:document-truthfulness
       - name: Quarantine unassessed historical document extraction
