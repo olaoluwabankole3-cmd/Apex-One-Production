@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { FINANCIAL_PREVIEW_LEDGER_MIGRATION_005 } from "../../migrations/005_financial_preview_ledger";
 import { randomUUID } from "node:crypto";
 import {
   ConflictError,
@@ -182,6 +183,10 @@ export class PostgresConnectionManager {
       await connection.query(PHASE2_AUTH_IDENTITY_MIGRATION_004);
       await connection.query(
         `INSERT INTO apex_schema_migrations(version) VALUES ('004_phase2_auth_identity') ON CONFLICT (version) DO NOTHING`
+      );
+      await connection.query(FINANCIAL_PREVIEW_LEDGER_MIGRATION_005);
+      await connection.query(
+        `INSERT INTO apex_schema_migrations(version) VALUES ('005_financial_preview_ledger') ON CONFLICT (version) DO NOTHING`
       );
       await connection.query("COMMIT");
     } catch (error) {
