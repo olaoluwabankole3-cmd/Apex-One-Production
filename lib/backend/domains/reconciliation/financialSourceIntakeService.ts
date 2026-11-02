@@ -190,6 +190,34 @@ export class FinancialSourceIntakeService {
   }
 
   /**
+   * An emergency source signing-key revoke is effective IMMEDIATELY.
+   * Cannot be undone by changing a status; new keys require a new registry
+   * and independent review. All already committed snapshots remain auditable.
+   */
+  public async revokeSource(ctx:TenantContext,input:{
+    registryId:string;expectedRevision:number;reason:string;
+  }):Promise<FinancialSourceRegistryRecord>{
+    gateIntake();await authorized(ctx,this.db,"org:admin");
+    if(!Number.isSafeInteger(input.expectedRevision) || input.expectedRevision<2 ||
+       typeof input.reason!=="string" || input.reason.length<12 || input.reason.length>400) {
+      throw new ValidationError("Invalid emergency source revocation");
+    }
+    return this.db.runInTransaction(ctx,async()=>{
+      await authorized(ctx,this.db,"org:admin");
+      const current=await scopedFind(this.db.financialSourceRegistryRepo,ctx,input.registryId,"FinancialSourceRegistry");
+      if(current.status!=="approved" || current.revision!==input.expectedRevision)
+        throw new ConflictError("Source already revoked or revision changed");
+      const revoked=await this.db.revokeFinancialSourceRegistry(ctx,current.id,input.expectedRevision,ctx.userId,input.reason);
+      await this.db.recordAuditLog(audit(ctx,"financial_source:signer_revoked",current.id,{
+        revision:revoked.revision,revokedByUserId:ctx.userId,reason:input.reason,
+        fingerprintSha256:current.signingKey?.keyFingerprintSha256??null,
+        previouslySignedRecordsRemainUnverified:true,
+      }));
+      return revoked;
+    });
+  }
+
+  /**
    * Trusted SERVER-SIDE synthetic handoff. No HTTP upload endpoint.
    * Exact raw bytes and SHA are derived here, never accepted as browser claims.
    */

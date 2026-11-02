@@ -13,6 +13,7 @@ import {
   OrganizationMembershipRecord,
   BankingCaseRecord,
   FinancialSourceRegistryRecord,
+  FinancialSignerOnboardingRecord,
   FinancialSourceSnapshotRecord,
   FinancialSourceImportRecord,
   CustomerRecord,
@@ -118,6 +119,7 @@ export interface DatabaseStateSnapshot {
   auditLogs: AuditLogRecord[];
   bankingCases: Map<string, BankingCaseRecord>;
   financialSourceRegistry: Map<string, FinancialSourceRegistryRecord>;
+  financialSignerOnboarding: Map<string, FinancialSignerOnboardingRecord>;
   financialSourceSnapshots: Map<string, FinancialSourceSnapshotRecord>;
   financialSourceImports: Map<string, FinancialSourceImportRecord>;
 }
@@ -156,6 +158,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
   public certifications: Map<string, CertificationRecord> = new Map();
   public bankingCases: Map<string, BankingCaseRecord> = new Map();
   public financialSourceRegistry: Map<string, FinancialSourceRegistryRecord> = new Map();
+  public financialSignerOnboarding: Map<string, FinancialSignerOnboardingRecord> = new Map();
   public financialSourceSnapshots: Map<string, FinancialSourceSnapshotRecord> = new Map();
   public financialSourceImports: Map<string, FinancialSourceImportRecord> = new Map();
 
@@ -177,6 +180,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
   public auditLogsRepo: IAuditLogRepository;
   public bankingCasesRepo: ITenantScopedRepository<BankingCaseRecord>;
   public financialSourceRegistryRepo: ITenantScopedRepository<FinancialSourceRegistryRecord>;
+  public financialSignerOnboardingRepo: ITenantScopedRepository<FinancialSignerOnboardingRecord>;
   public financialSourceSnapshotsRepo: ITenantScopedRepository<FinancialSourceSnapshotRecord>;
   public financialSourceImportsRepo: ITenantScopedRepository<FinancialSourceImportRecord>;
 
@@ -223,6 +227,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
       this.auditLogsRepo = pg.auditLogsRepo;
       this.bankingCasesRepo = new PostgresTenantRepository<BankingCaseRecord>("BankingCase", pg.manager);
       this.financialSourceRegistryRepo = new PostgresTenantRepository<FinancialSourceRegistryRecord>("FinancialSourceRegistry", pg.manager);
+      this.financialSignerOnboardingRepo = new PostgresTenantRepository<FinancialSignerOnboardingRecord>("FinancialSignerOnboarding", pg.manager);
       this.financialSourceSnapshotsRepo = new PostgresTenantRepository<FinancialSourceSnapshotRecord>("FinancialSourceSnapshot", pg.manager);
       this.financialSourceImportsRepo = new PostgresTenantRepository<FinancialSourceImportRecord>("FinancialSourceImport", pg.manager);
       return;
@@ -261,6 +266,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     this.auditLogsRepo = new InMemoryAuditLogRepository();
     this.bankingCasesRepo = new InMemoryTenantRepository<BankingCaseRecord>("BankingCase", this.bankingCases, handleViolation);
     this.financialSourceRegistryRepo = new InMemoryTenantRepository<FinancialSourceRegistryRecord>("FinancialSourceRegistry", this.financialSourceRegistry, handleViolation);
+    this.financialSignerOnboardingRepo = new InMemoryTenantRepository<FinancialSignerOnboardingRecord>("FinancialSignerOnboarding", this.financialSignerOnboarding, handleViolation);
     this.financialSourceSnapshotsRepo = new InMemoryTenantRepository<FinancialSourceSnapshotRecord>("FinancialSourceSnapshot", this.financialSourceSnapshots, handleViolation);
     this.financialSourceImportsRepo = new InMemoryTenantRepository<FinancialSourceImportRecord>("FinancialSourceImport", this.financialSourceImports, handleViolation);
 
@@ -313,6 +319,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     this.certifications.clear();
     this.bankingCases.clear();
     this.financialSourceRegistry.clear();
+    this.financialSignerOnboarding.clear();
     this.financialSourceSnapshots.clear();
     this.financialSourceImports.clear();
     if (this.auditLogsRepo instanceof InMemoryAuditLogRepository) this.auditLogsRepo.clear();
@@ -436,6 +443,91 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     }
     const { updatedAt: _generatedByRepository, ...safeUpdates } = updates;
     return this.financialSourceRegistryRepo.update(id, safeUpdates, ctx, "FinancialSourceRegistry");
+  }
+
+  /**
+   * Emergency signer revocation must be atomic and tenant scoped. A revoked
+   * source cannot be re-approved or signed back into service: rotate through
+   * a distinct independently reviewed source registry.
+   */
+  public async revokeFinancialSourceRegistry(
+    ctx: TenantContext, id: string, expectedRevision: number, actorId: string, reason: string
+  ): Promise<FinancialSourceRegistryRecord> {
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 2 ||
+        typeof reason !== "string" || reason.length < 12 || reason.length > 400 ||
+        actorId !== ctx.userId) {
+      throw new ValidationError("Invalid financial signing source revocation");
+    }
+    const changes = {
+      status: "revoked" as const, revision: expectedRevision + 1,
+      updatedAt: new Date().toISOString(), revokedAt: new Date().toISOString(),
+      revokedByUserId: actorId, revocationReason: reason,
+    };
+    if (this.postgresPersistence) {
+      const json = JSON.stringify(changes);
+      return this.postgresPersistence.manager.withConnection(async connection => {
+        const output = await connection.query(
+          `UPDATE apex_domain_records
+              SET record = record || ${quotePostgresLiteral(json)}::jsonb, updated_at = NOW()
+            WHERE entity_type = 'FinancialSourceRegistry'
+              AND organization_id = ${quotePostgresLiteral(ctx.organizationId)}
+              AND id = ${quotePostgresLiteral(id)}
+              AND record->>'status' = 'approved'
+              AND (record->>'revision')::integer = ${expectedRevision}
+           RETURNING record::text AS record`
+        );
+        if (output.rows.length !== 1) throw new ConflictError("Source already revoked or revision changed");
+        return JSON.parse(output.rows[0].record!) as FinancialSourceRegistryRecord;
+      });
+    }
+    const before = await this.financialSourceRegistryRepo.findById(id, ctx);
+    if (before.status !== "approved" || before.revision !== expectedRevision) {
+      throw new ConflictError("Source already revoked or revision changed");
+    }
+    const { updatedAt: _ignored, ...safeChanges } = changes;
+    return this.financialSourceRegistryRepo.update(id, safeChanges, ctx);
+  }
+
+  /** Status/revision CAS for the external signer *claim* record, not bank attestation. */
+  public async transitionFinancialSignerOnboarding(
+    ctx: TenantContext, id: string,
+    from: FinancialSignerOnboardingRecord["status"], revision: number,
+    to: FinancialSignerOnboardingRecord["status"],
+    extra: Partial<Pick<FinancialSignerOnboardingRecord,
+      "proofVerifiedAt" | "proofSubmittedByUserId" | "proofSignatureSha256" |
+      "reviewedByUserId" | "reviewedAt" | "reviewReason" |
+      "externalEvidenceRef" | "externalEvidenceSha256">> = {}
+  ): Promise<FinancialSignerOnboardingRecord> {
+    if (!Number.isSafeInteger(revision) || revision < 1 ||
+        !((from === "challenge_pending" && to === "proof_verified") ||
+          (from === "proof_verified" && (to === "reviewed" || to === "rejected"))) ||
+        (to === "proof_verified" && (!extra.proofVerifiedAt || !extra.proofSignatureSha256)) ||
+        (to !== "proof_verified" && (!extra.reviewedByUserId || !extra.reviewedAt || !extra.reviewReason))) {
+      throw new ValidationError("Invalid signer onboarding transition");
+    }
+    const changes = { ...extra, status: to, revision: revision + 1, updatedAt: new Date().toISOString() };
+    if (this.postgresPersistence) {
+      const json = JSON.stringify(changes);
+      return this.postgresPersistence.manager.withConnection(async connection => {
+        const output = await connection.query(
+          `UPDATE apex_domain_records
+              SET record = record || ${quotePostgresLiteral(json)}::jsonb, updated_at = NOW()
+            WHERE entity_type = 'FinancialSignerOnboarding'
+              AND organization_id = ${quotePostgresLiteral(ctx.organizationId)}
+              AND id = ${quotePostgresLiteral(id)}
+              AND record->>'status' = ${quotePostgresLiteral(from)}
+              AND (record->>'revision')::integer = ${revision}
+           RETURNING record::text AS record`
+        );
+        if (output.rows.length !== 1) throw new ConflictError("Signer onboarding state changed or already decided");
+        return JSON.parse(output.rows[0].record!) as FinancialSignerOnboardingRecord;
+      });
+    }
+    const before = await this.financialSignerOnboardingRepo.findById(id, ctx);
+    if (before.status !== from || before.revision !== revision)
+      throw new ConflictError("Signer onboarding state changed or already decided");
+    const { updatedAt: _ignored, ...safeChanges } = changes;
+    return this.financialSignerOnboardingRepo.update(id, safeChanges, ctx);
   }
 
   /**
@@ -624,6 +716,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
       auditLogs: this.auditLogsRepo instanceof InMemoryAuditLogRepository ? this.auditLogsRepo.getSnapshot() : [],
       bankingCases: this.cloneMap(this.bankingCases),
       financialSourceRegistry: this.cloneMap(this.financialSourceRegistry),
+      financialSignerOnboarding: this.cloneMap(this.financialSignerOnboarding),
       financialSourceSnapshots: this.cloneMap(this.financialSourceSnapshots),
       financialSourceImports: this.cloneMap(this.financialSourceImports),
     };
@@ -640,6 +733,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     this.restoreMap(this.certifications, snapshot.certifications);
     this.restoreMap(this.bankingCases, snapshot.bankingCases);
     this.restoreMap(this.financialSourceRegistry, snapshot.financialSourceRegistry);
+    this.restoreMap(this.financialSignerOnboarding, snapshot.financialSignerOnboarding);
     this.restoreMap(this.financialSourceSnapshots, snapshot.financialSourceSnapshots);
     this.restoreMap(this.financialSourceImports, snapshot.financialSourceImports);
     if (this.auditLogsRepo instanceof InMemoryAuditLogRepository) this.auditLogsRepo.restoreSnapshot(snapshot.auditLogs);

@@ -9,6 +9,7 @@ import { randomUUID, generateKeyPairSync, createHash, sign } from "node:crypto";
 import { DatabaseStore } from "../lib/backend/database/store";
 import { getPermissionsForRole, type TenantContext } from "../lib/backend/core/security";
 import { FinancialSourceIntakeService } from "../lib/backend/domains/reconciliation/financialSourceIntakeService";
+import { FinancialSignerOnboardingService } from "../lib/backend/domains/reconciliation/financialSignerOnboardingService";
 import { InMemoryObjectStorageAdapter } from "../lib/backend/domains/documents/documentStorage";
 import { FinancialSourceImportJournalService, type FinancialVersionedImportStorage } from "../lib/backend/domains/reconciliation/financialSourceImportJournalService";
 import { manifestSigningBytes, type SignedFinancialSourceManifest } from "../lib/backend/domains/reconciliation/financialSourceProvenanceGate";
@@ -234,6 +235,62 @@ async function main() {
   assert.equal(recovered.state, "committed");
   const auditSet = await restarted.auditLogsRepo.findMany(ctx(userIds[0]), { limit: 100 });
   assert.equal(auditSet.items.filter(x => x.action === "financial_source:import_committed" && x.resourceId === separate.id).length, 1);
+
+  checkpoint = "financial signer proof challenge PostgreSQL";
+  const signerOnboarding = new FinancialSignerOnboardingService(db);
+  const challenge = await signerOnboarding.requestChallenge(ctx(userIds[0]), signedPolicy.id);
+  assert.equal(challenge.dossier.status, "challenge_pending");
+  const signerProof = sign(null, challenge.signingBytes, keys.privateKey).toString("base64");
+  const proof = await signerOnboarding.provePossession(ctx(userIds[0]), {
+    dossierId: challenge.dossier.id, nonceBase64: challenge.nonceBase64,
+    signatureBase64: signerProof,
+  });
+  assert.equal(proof.status, "proof_verified");
+  assert.equal(proof.bankKeyOwnershipIndependentlyVerified, false);
+  const restartedProof = await restarted.financialSignerOnboardingRepo.findById(proof.id, ctx(userIds[1]));
+  assert.equal(restartedProof.revision, 2);
+
+  checkpoint = "financial signer independent review PostgreSQL CAS";
+  const proofReview = {
+    dossierId: proof.id, expectedRevision: 2, verdict: "reviewed" as const,
+    reason: "Reviewed synthetic signature proof and mock external evidence only",
+    externalEvidenceRef: "synthetic-bank-authority-evidence-"+suffix,
+    externalEvidenceSha256: createHash("sha256").update("synthetic-external-authority-fixture").digest("hex"),
+  };
+  await assert.rejects(() => signerOnboarding.reviewDossier(ctx(userIds[0]), proofReview), /independent/i);
+  const decisions = await Promise.allSettled([
+    signerOnboarding.reviewDossier(ctx(userIds[1]), proofReview),
+    signerOnboarding.reviewDossier(ctx(userIds[2]), proofReview),
+  ]);
+  assert.equal(decisions.filter(x => x.status === "fulfilled").length, 1);
+  const signedDossier = await restarted.financialSignerOnboardingRepo.findById(proof.id, ctx(userIds[1]));
+  assert.equal(signedDossier.status, "reviewed");
+  assert.equal(signedDossier.bankKeyOwnershipIndependentlyVerified, false);
+  assert.equal(signedDossier.revision, 3);
+
+  checkpoint = "financial source emergency signer revocation PostgreSQL";
+  const revokeRace = await Promise.allSettled([
+    service.revokeSource(ctx(userIds[1]), {
+      registryId: signedPolicy.id, expectedRevision: 2,
+      reason: "Emergency synthetic source signing key revoke by checker one",
+    }),
+    service.revokeSource(ctx(userIds[2]), {
+      registryId: signedPolicy.id, expectedRevision: 2,
+      reason: "Competing synthetic source signing key revoke by checker two",
+    }),
+  ]);
+  assert.equal(revokeRace.filter(x => x.status === "fulfilled").length, 1);
+  assert.equal(revokeRace.filter(x => x.status === "rejected").length, 1);
+  const revokedSource = await restarted.financialSourceRegistryRepo.findById(signedPolicy.id, ctx(userIds[0]));
+  assert.equal(revokedSource.status, "revoked");
+  assert.equal(revokedSource.revision, 3);
+  await assert.rejects(() => svc.prepare(ctx(userIds[0]), payload("pg-journal-after-revoke")), /approved|requires/i);
+  await assert.rejects(() => signerOnboarding.requestChallenge(ctx(userIds[0]), signedPolicy.id), /not approved/i);
+  const signerAudits = await restarted.auditLogsRepo.findMany(ctx(userIds[0]), { limit: 100 });
+  assert.equal(signerAudits.items.filter(x => x.action === "financial_source:signer_revoked" &&
+      x.resourceId === signedPolicy.id).length, 1);
+  assert.equal(signerAudits.items.filter(x => x.action === "financial_signer:dossier_reviewed" &&
+      x.resourceId === proof.id).length, 1);
 
   clearTimeout(hardStop);
   console.log("PASS: PostgreSQL atomic independent source checker, serialized races, restart durability and audit rollback");

@@ -639,7 +639,7 @@ export interface FinancialSourceRegistryRecord {
   sourceLabel: string;
   kind: "settlement" | "fee";
   role: "expected" | "observed";
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "approved" | "rejected" | "revoked";
   createdByUserId: string;
   createdAt: string;
   reviewedByUserId?: string;
@@ -648,6 +648,9 @@ export interface FinancialSourceRegistryRecord {
   revision: number;
   updatedAt: string;
   externalSourceAuthorityVerified: false;
+  revokedAt?: string;
+  revokedByUserId?: string;
+  revocationReason?: string;
   /** The second admin approves the exact verifier key fingerprint, not external bank identity. */
   signingKey?: {
     keyId: string;
@@ -655,6 +658,39 @@ export interface FinancialSourceRegistryRecord {
     keyFingerprintSha256: string;
     bankKeyOwnershipIndependentlyVerified: false;
   };
+}
+
+/**
+ * Internal attestation DOSSIER: proves only private-key possession, not
+ * independent ownership by a bank or processor. No live-data authorization.
+ * The proof challenge nonce is stored as SHA-256, never as plaintext.
+ */
+export interface FinancialSignerOnboardingRecord {
+  id: string;
+  organizationId: string;
+  sourceRegistryId: string;
+  keyId: string;
+  keyFingerprintSha256: string;
+  requestedByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  revision: number;
+  status: "challenge_pending" | "proof_verified" | "reviewed" | "rejected";
+  challengeNonceSha256: string;
+  challengeExpiresAt: string;
+  challengeIssuedAt: string;
+  proofVerifiedAt?: string;
+  proofSubmittedByUserId?: string;
+  proofSignatureSha256?: string;
+  reviewedByUserId?: string;
+  reviewedAt?: string;
+  reviewReason?: string;
+  /** Opaque reference and digest, not a pasted document or claim of authenticity. */
+  externalEvidenceRef?: string;
+  externalEvidenceSha256?: string;
+  bankKeyOwnershipIndependentlyVerified: false;
+  externalAuthorityApprovalVerified: false;
+  sourceAuthenticityVerified: false;
 }
 
 export interface FinancialSourceSnapshotRecord {
