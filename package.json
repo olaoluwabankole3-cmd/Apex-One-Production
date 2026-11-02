@@ -34,6 +34,7 @@
     "test:document-truthfulness": "tsx scripts/runDocumentExtractionTruthfulnessTests.ts",
     "test:document-quarantine": "tsx scripts/runDocumentLegacyQuarantineTests.ts",
     "test:auth-experience": "tsx scripts/runAuthenticationExperienceTests.ts",
+    "test:banking-cases": "tsx scripts/runBankingCaseTests.ts",
     "infra:dev:up": "docker compose --env-file deploy/development/development.env -f deploy/development/docker-compose.infrastructure.yml up -d",
     "infra:dev:down": "docker compose --env-file deploy/development/development.env -f deploy/development/docker-compose.infrastructure.yml down",
     "infra:dev:destroy": "docker compose --env-file deploy/development/development.env -f deploy/development/docker-compose.infrastructure.yml down -v",
