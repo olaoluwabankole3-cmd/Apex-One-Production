@@ -23,11 +23,11 @@ In an **explicitly enabled staging** environment, an authorized finance operator
 1. Open **Reconciliation** and choose **Load synthetic example**. This only populates client-side synthetic CSV text.
 2. Select **Run preview comparison**. The server accepts the request only when `APEX_DEPLOYMENT_ENVIRONMENT=staging` and `CORTEX_FINANCIAL_PREVIEW_ENABLED=true`. Both `financial:read` and `financial:write` are enforced on the server.
 3. Review balanced and amount-discrepancy comparisons, all marked **unverified**. No source completeness, origin or monetary loss is established. The preview does **not** persist a case.
-4. Open **Cases** and create a separate investigation record if authorized. Assign ownership, link existing permitted evidence, and propose an internal plan.
+4. On an unbalanced row, choose **Prepare case** if authorized. CORTEX opens the **Cases** form with only a whitelisted comparison classification; **no amounts, references, source CSVs, digests or evidence are passed or attached**. Review and explicitly create a new, unverified operational case. Link existing permitted evidence, assign ownership and propose an internal plan only after appropriate source checks.
 5. A different authorized checker opens **Reviews** to approve or reject the plan. All decisions are on the investigation plan, **not transfers or final loss assessments**.
 6. Open **Reports** to inspect the visible case register, and recent audit events if authorized.
 
-For safety and accuracy, **the preview-to-case step is not automated through the new UI**. The existing stored synthetic pilot candidate bridge is separate, staging-gated and requires prior durable candidate registration. No direct bridge from an ephemeral preview to a certified case is claimed.
+**The guided preview-to-case step creates no record automatically.** It transfers only the allowed kind and comparison classification through a short URL parameter. It cannot transfer financial data or authenticate evidence. The existing stored synthetic pilot candidate bridge is separate, staging-gated and requires prior durable candidate registration. This browser draft is **not** that bridge and does not link an ephemeral preview to a persisted source or certify a case. A manual case may initially have no evidence, so the investigator must attach an independently authorized source before any plan is proposed.
 
 ## Empty, failure and permission boundaries
 
