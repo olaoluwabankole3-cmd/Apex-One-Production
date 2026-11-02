@@ -4,6 +4,13 @@
 
 :root {
   color-scheme: dark;
+  /* Shared brand tokens mirror QORVEX/src/qorvex3/base.css. */
+  --qorvex-ink: #171715;
+  --qorvex-charcoal: #24231F;
+  --qorvex-copper: #A65A2E;
+  --qorvex-copper-light: #C58D5F;
+  --qorvex-cream: #F5F1E8;
+  --qorvex-stone: #E5E1D8;
   /* Platform-native stacks keep builds independent of Google Fonts availability. */
   --font-syne: "Trebuchet MS", "Segoe UI", Arial, sans-serif;
   --font-dm-sans: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
@@ -16,8 +23,8 @@
 
 html,
 body {
-  background-color: #0a0a0b;
-  color: #f7f5f0;
+  background-color: #171715;
+  color: #F5F1E8;
   scroll-behavior: smooth;
 }
 
@@ -27,7 +34,7 @@ body {
 }
 
 ::selection {
-  background: rgba(201, 169, 97, 0.35);
+  background: rgba(197, 141, 95, 0.35);
   color: #f7f5f0;
 }
 
@@ -40,11 +47,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(201, 169, 97, 0.25);
+  background: rgba(197, 141, 95, 0.25);
   border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(201, 169, 97, 0.45);
+  background: rgba(197, 141, 95, 0.45);
 }
 
 /* Glass panel base */
@@ -60,12 +67,12 @@ body {
 }
 
 .glass-panel-hover:hover {
-  border-color: rgba(201, 169, 97, 0.35);
-  box-shadow: 0 0 40px -12px rgba(201, 169, 97, 0.25);
+  border-color: rgba(197, 141, 95, 0.35);
+  box-shadow: 0 0 40px -12px rgba(197, 141, 95, 0.25);
 }
 
 .text-gradient-gold {
-  background-image: linear-gradient(135deg, #e8cd8a 0%, #c9a961 55%, #8a7440 100%);
+  background-image: linear-gradient(135deg, #e8cd8a 0%, #C58D5F 55%, #8a7440 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -79,7 +86,7 @@ body {
 a:focus-visible,
 button:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid #c9a961;
+  outline: 2px solid #C58D5F;
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -103,7 +110,7 @@ button:focus-visible,
   margin-bottom: 0.25rem;
 }
 .markdown-body strong {
-  color: #c9a961;
+  color: #C58D5F;
   font-weight: 600;
 }
 
