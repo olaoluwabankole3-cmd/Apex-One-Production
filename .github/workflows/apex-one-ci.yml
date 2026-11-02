@@ -57,6 +57,8 @@ jobs:
         run: bun run test:document-quarantine
       - name: Run authentication experience regression gate
         run: bun run test:auth-experience
+      - name: Verify task-first CORTEX navigation and guarded financial workspaces
+        run: bun run test:financial-workspace
       - name: Verify tenant-scoped financial case intake security
         run: bun run test:banking-cases
       - name: Verify banking case maker-checker, evidence and preview pilot boundary

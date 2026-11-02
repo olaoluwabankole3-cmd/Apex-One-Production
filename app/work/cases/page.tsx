@@ -111,11 +111,11 @@ function CaseInbox() {
       <header className="rounded-xl border border-[#775A43]/35 bg-[#24231F] p-7 text-[#F5F1E8]">
         <Link href={hasPermission("workflow:read") ? "/workflows" : "/"} className="inline-flex items-center gap-2 text-xs text-[#D9A06F]"><ArrowLeft size={13} /> {hasPermission("workflow:read") ? "Action Center" : "Command Center"}</Link>
         <p className="mt-7 text-[10px] font-bold uppercase tracking-[0.17em] text-[#D9A06F]">QORVEX / CORTEX / BANKING OPERATIONS</p>
-        <h1 className="mt-2 font-display text-3xl font-bold">My Cases</h1>
+        <h1 className="mt-2 font-display text-3xl font-bold">Cases & Investigations</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-[#D3C9BD]">
-          This is the first shared banking-case foundation. Staff can record and inspect their own open
-          financial-operations cases. Administrators can review the institution-wide queue.
-          Handoffs, source references and independent investigation-plan reviews are supported. No plan sign-off verifies a financial discrepancy or authorizes a transfer.
+          Investigate operational exceptions, link available evidence and hand off responsibility between
+          Operations and Finance. Independent review decisions are recorded against each case.
+          Every case remains open and unverified; review does not authorize movement of funds.
         </p>
       </header>
       {mayCreate && (
@@ -150,7 +150,7 @@ function CaseInbox() {
       <section className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-ivory">{administrator ? "Institution cases" : "Cases assigned to me"}</h2>
+            <h2 className="text-lg font-semibold text-ivory">{administrator ? "Institution case queue" : "Cases assigned to me"}</h2>
             <p className="text-xs text-ivory/50">Backend records · open and unverified · your authenticated institution</p>
           </div>
           <button type="button" disabled={loading} onClick={() => void refresh()} className="flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-xs text-ivory/70">

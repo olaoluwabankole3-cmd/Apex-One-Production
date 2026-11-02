@@ -1,45 +1,54 @@
-# CORTEX workspace — where to begin
+# CORTEX — Financial Operations MVP Workspace
 
-CORTEX, a product in development by QORVEX, is intended to help financial-institution teams work from **authorized records to evidence-aware understanding, decisions and follow-up**. It is not a connected core-banking system, a money-transfer tool, an automated collection engine or a certified loss-recovery platform.
+**QORVEX / CORTEX** is an evidence-aware banking operations workspace for reconciliation exceptions, case investigation, responsible handoffs, and independent investigation-plan reviews.
 
-## First visit: the Command Center
+The intended flagship workflow is: **Compare → Investigate → Hand off → Review → Report**. The internal synthetic preview is not a bank connector, loss certification, settlement action or autonomous recovery.
 
-The first authenticated screen deliberately does **not** show invented financial totals, arbitrary synthetic chart data or promises of a connected bank source. It presents four real, role-gated starting points, in order:
+## Seven task-first navigation destinations
 
-1. **Documents & Evidence** (`/documents`): view authorized source documents. Upload and deletion depend on separate permissions. Documents and extracted fields are not independently certified simply because they are stored.
-2. **Institutional Memory** (`/knowledge-hub`): explore information published to your authorized organization. Items may be missing, unpublished or quarantined.
-3. **CORTEX Intelligence** (`/ai-workspace`): ask questions about authorized records. Coverage, confidence and source-backed verification are constrained by data availability and the model trust boundary.
-4. **Action Center** (`/workflows`): view and manage permitted workflows or follow-ups, subject to capability checks and human approvals where applicable.
+1. **Overview** (`/`) — explain CORTEX, show role-appropriate next actions, and display up to five real authorized case records. No invented financial totals.
+2. **Reconciliation** (`/reconciliation`) — strict settlement/mapped-fee comparison against the existing staging-only audited API. Requires `financial:read` to view and `financial:write` to submit; no raw source retention.
+3. **Cases** (`/work/cases`) — create operational issues; inspect authorized cases, evidence links and history; hand off ownership between Operations and Finance.
+4. **Reviews** (`/reviews`) — checker role (`case:approve`) examines pending investigation-plan decisions. An authorized reviewer cannot check their own plan; the server enforces maker–checker rules.
+5. **Evidence** (`/documents`) — inspect authorized institutional document records and their current status.
+6. **Reports** (`/reports`) — show real authorized case record statuses and, only for `audit:read` roles, recent audit events. The printable view is an operational snapshot, not a certified financial report.
+7. **Administration** (`/settings`) — institutional configuration, restricted to `org:admin` roles.
 
-Users with the appropriate permission may also open **Value & Risk** (`/value-intelligence`) to review recorded opportunity and risk context. **Recorded Outcomes** (`/value-intelligence/captured`) are lifecycle records, **not** proof of independently verified financial recovery.
+The sidebar and mobile menu use the **same** permission-filtered navigation. Different roles may see fewer than seven areas, by design. Existing AI, value, knowledge and workflow capabilities stay in the repo and can be surfaced contextually; they are not additional primary banking dashboards.
 
-Access to a journey is derived from the authenticated session and the organization's enabled features. An unavailable step is shown as unavailable, not linked to an unauthorized page.
+## Guided synthetic example
 
-## Capabilities: available versus experimental
+In an **explicitly enabled staging** environment, an authorized finance operator can:
 
-**Available engineering foundations:** authentication/RBAC, organization scoping, documents and extraction boundaries, knowledge workflows, AI provenance restrictions, audit trails, workflow/action records, and value/opportunity lifecycle records.
+1. Open **Reconciliation** and choose **Load synthetic example**. This only populates client-side synthetic CSV text.
+2. Select **Run preview comparison**. The server accepts the request only when `APEX_DEPLOYMENT_ENVIRONMENT=staging` and `CORTEX_FINANCIAL_PREVIEW_ENABLED=true`. Both `financial:read` and `financial:write` are enforced on the server.
+3. Review balanced and amount-discrepancy comparisons, all marked **unverified**. No source completeness, origin or monetary loss is established. The preview does **not** persist a case.
+4. Open **Cases** and create a separate investigation record if authorized. Assign ownership, link existing permitted evidence, and propose an internal plan.
+5. A different authorized checker opens **Reviews** to approve or reject the plan. All decisions are on the investigation plan, **not transfers or final loss assessments**.
+6. Open **Reports** to inspect the visible case register, and recent audit events if authorized.
 
-**Experimental/internal, not a bank integration:** deterministic settlement/fee comparison for bounded synthetic CSVs, staging-only preview endpoint disabled by default, metadata-only internal provisional case ledger, read-only encrypted-source byte integrity checks.
+For safety and accuracy, **the preview-to-case step is not automated through the new UI**. The existing stored synthetic pilot candidate bridge is separate, staging-gated and requires prior durable candidate registration. No direct bridge from an ephemeral preview to a certified case is claimed.
 
-**Still missing:** institution-approved trusted feed acquisition, cryptographically authenticated origin, provider-enforced immutable/locked retention, robust reconciliation of real switch/acquirer/core-ledger data, resolution/approval chain, confirmed recoveries and signed-off institutional UAT. Never label a recorded amount as verified loss, saved funds or financial results unless supported by an independent authority.
+## Empty, failure and permission boundaries
 
-## QORVEX design basis
+- All counts on the Overview, Reviews and Reports pages are explicitly limited to the API's first 5, 50 or 25 visible entries; they are **not** global totals.
+- API failures show an unavailable state, not simulated or cached metrics.
+- A user without `case:approve` will not see Reviews in the sidebar.
+- A user without `org:admin` will not see Administration.
+- An operator with read-only financial authority may view Reconciliation but cannot run a preview.
+- Production does **not** enable financial preview, even if a client opens the page directly.
+- There is no public raw-bank-data upload interface, real-bank connector, production retention certification, movement of money or authorized loss confirmation.
+- Bank data remains NO-GO without independent institutional approvals and immutable-storage readiness.
 
-The corporate source of truth is `olaoluwabankole3-cmd/QORVEX`, especially `QORVEX/src/qorvex3/base.css` and the SVG mark in `QORVEX/public/qorvex-emblem.svg`. The application uses:
+## UX design and delivery focus
 
-- Charcoal / dark ink `#171715`
-- Copper `#C58D5F`, darker copper `#A65A2E`
-- Cream `#F5F1E8`, stone `#E5E1D8`
-- Light copper highlight `#D9A06F`
+The application uses QORVEX charcoal `#171715`, copper `#C58D5F`, warm copper `#D9A06F` and ivory `#F5F1E8`. Historic CSS utility tokens named `gold` can remain for backward compatibility, but must resolve to QORVEX copper rather than introduce unrelated gold branding.
 
-Existing semantic Tailwind class names `gold`, `ivory`, `matte` and `charcoal` remain for **backward-compatible styling only**. Their mapped values now match QORVEX. The rest of the product's screens still need individual usability reviews: the first change addresses global brand tokens, app chrome and the entry flow, not complete redesign of every functional screen.
+### 10-day sprint priority
 
-## Next product work
+- **Now:** Deliver seven task-first routes, a genuine case-backed command center and safe synthetic reconciliation/review/report screens. Keep existing backend authorization controls.
+- **Next:** Usability polish for cases and evidence, support a guided role-specific scenario, test and refine mobile navigation and empty/error states.
+- **Release:** Confirm all four GitHub CI workflows; verify combined-main CI; approve a restricted staging deployment and smoke test. Merge does **not** automatically deploy to AWS.
+- **Outside the synthetic MVP:** Independently approved financial feeds, real S3 Object Lock custody proof, live institution signing authority and financial compliance sign-off. None are guaranteed by the sprint deadline.
 
-1. Interview/screen-record a first-time authorized operator and test whether they can explain CORTEX and find a document without instruction.
-2. Redesign **Documents & Evidence** as a guided upload / inspect / verify journey, including truthful empty/loading/error states and non-durable extraction disclaimers.
-3. Redesign **CORTEX Intelligence** for source citations, visible authorized scope and explicit unsupported-question outcomes.
-4. Make **Value & Risk** task-driven, separate provisional estimates from verified outcomes, and align workflow/action review with role permissions.
-5. Build institution-authorized source ingestion and actual audited case-management capability before claiming full financial reconciliation.
-
-**Release:** first stage UI redesign only; do not auto-deploy to AWS on merge. CI and controlled staging promotion are separate gates.
+This document describes engineering scope and current safety boundaries, **not** a claim that the latest GitHub source is already running in an AWS staging application.

@@ -85,8 +85,8 @@ assert(
 const rootPage = readFileSync(join(root, "app/page.tsx"), "utf8");
 assert(!rootPage.includes("ApexConnectDashboard"), "Root page must never route to a client/wealth portal fallback.");
 assert(
-  rootPage.includes("cortex-executive-command-center"),
-  "Root page must identify the CORTEX Executive Command Center."
+  rootPage.includes("cortex-financial-operations-overview"),
+  "Root page must identify the task-first CORTEX Financial Operations Overview."
 );
 
 const shell = readFileSync(join(root, "components/layout/AppShell.tsx"), "utf8");
@@ -104,24 +104,24 @@ for (const navigationFile of ["components/layout/Sidebar.tsx", "components/layou
   assert(source.includes("hasPermission"), `${navigationFile} must derive visibility from authenticated capabilities.`);
 }
 
-// Financial-institution release surface: keep the seven core journeys
-// visible and retire unsupported/duplicate standalone screens.
+// Financial-institution MVP: exactly seven functional, capability-gated
+// task journeys, not the retired generic intelligence/dashboard taxonomy.
 const navigation = readFileSync(join(root, "components/layout/navigation.ts"), "utf8");
 const primaryDestinations = [
   ...navigation.matchAll(/\{ href: "([^"]+)", label: "([^"]+)", icon:/g),
 ].map((match) => [match[1], match[2]]);
 const expectedDestinations = [
-  ["/", "Command Center"],
-  ["/ai-workspace", "CORTEX Intelligence"],
-  ["/knowledge-hub", "Institutional Memory"],
-  ["/documents", "Documents & Evidence"],
-  ["/value-intelligence", "Value & Risk"],
-  ["/workflows", "Action Center"],
-  ["/value-intelligence/captured", "Recorded Outcomes"],
+  ["/", "Overview"],
+  ["/reconciliation", "Reconciliation"],
+  ["/work/cases", "Cases"],
+  ["/reviews", "Reviews"],
+  ["/documents", "Evidence"],
+  ["/reports", "Reports"],
+  ["/settings", "Administration"],
 ];
 assert(
   JSON.stringify(primaryDestinations) === JSON.stringify(expectedDestinations),
-  "Financial-institution primary navigation must contain only the seven reviewed intelligence journeys."
+  "Financial-institution primary navigation must contain only the seven reviewed operational journeys."
 );
 assert(
   !navigation.includes("valueNavigation"),
@@ -129,8 +129,11 @@ assert(
 );
 assert(
   navigation.includes('permission: "org:read"') &&
-    navigation.includes('permission: "value:read"') &&
-    navigation.includes('permission: "workflow:read"'),
+    navigation.includes('permission: "financial:read"') &&
+    navigation.includes('permission: "case:read"') &&
+    navigation.includes('permission: "case:approve"') &&
+    navigation.includes('permission: "document:read"') &&
+    navigation.includes('permission: "org:admin"'),
   "Financial navigation must preserve session-derived capability requirements."
 );
 for (const path of ["components/layout/Sidebar.tsx", "components/layout/Topbar.tsx"]) {
