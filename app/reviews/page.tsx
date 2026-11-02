@@ -16,19 +16,36 @@ function ReviewQueue() {
   const [error, setError] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
-  const refresh = useCallback(async () => {
-    setBusy(true);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [pageError, setPageError] = useState(false);
+  const refresh = useCallback(async (nextCursor?: string) => {
+    if (nextCursor) setLoadingMore(true);
+    else setBusy(true);
+    setPageError(false);
     try {
-      const result = await apiClient.requestCollection<BankingCaseRecord>("/api/v1/banking-cases?limit=50");
-      setCases(result.data);
+      const path = "/api/v1/banking-cases?limit=50" +
+        (nextCursor ? "&cursor=" + encodeURIComponent(nextCursor) : "");
+      const result = await apiClient.requestCollection<BankingCaseRecord>(path);
+      setCases(previous => nextCursor
+        ? [...previous, ...result.data.filter(item => !previous.some(existing => existing.id === item.id))]
+        : result.data);
+      setCursor(result.pagination.nextCursor);
       setHasMore(result.pagination.hasMore);
       setError(false);
     } catch {
-      setError(true);
-      setCases([]);
-      setHasMore(false);
+      if (nextCursor) {
+        // Preserve loaded reviews if a later page fails; operators can retry safely.
+        setPageError(true);
+      } else {
+        setError(true);
+        setCases([]);
+        setCursor(null);
+        setHasMore(false);
+      }
     } finally {
-      setBusy(false);
+      if (nextCursor) setLoadingMore(false);
+      else setBusy(false);
     }
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
@@ -55,7 +72,7 @@ function ReviewQueue() {
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#D9A06F]">IN YOUR INSTITUTION</p>
             <h2 className="mt-2 font-display text-xl font-semibold text-[#F5F1E8]">Pending investigation reviews</h2>
             <p className="mt-1 text-xs text-[#D3C9BD]/60">
-              Showing pending plans among the first 50 authorized case records. Not an institution-wide total.
+              Pending plans from the authorized case records loaded below. Load more to inspect additional pages; not an institution-wide total.
             </p>
           </div>
           <button type="button" onClick={() => void refresh()} disabled={busy}
@@ -105,9 +122,23 @@ function ReviewQueue() {
             })}
           </div>
         }
-        {!busy && !error && hasMore && <p className="mt-5 text-xs text-amber-200">
-          Additional cases exist beyond this page. Open Cases for the paginated queue; this review list is not complete.
-        </p>}
+        {!busy && !error && hasMore && (
+          <div className="mt-5 space-y-2">
+            <p className="text-xs text-amber-200">
+              Additional authorized cases exist. Pending reviews may be on later pages; the list above is incomplete.
+            </p>
+            <button type="button" disabled={loadingMore || !cursor}
+              onClick={() => { if (cursor) void refresh(cursor); }}
+              className="rounded-lg border border-[#C58D5F]/40 px-4 py-2 text-xs font-semibold text-[#D9A06F] disabled:opacity-40">
+              {loadingMore ? "Loading additional cases…" : "Load next 50 cases"}
+            </button>
+          </div>
+        )}
+        {!busy && pageError && (
+          <p role="alert" className="mt-4 text-sm text-amber-200">
+            Additional reviews could not be loaded. Existing cases remain visible; retry the next page.
+          </p>
+        )}
       </section>
     </div>
   );
