@@ -159,6 +159,7 @@ export async function reconcilePinnedFinancialSourceSnapshots(
   injectedStorage?: IObjectStorageService
 ): Promise<FinancialStoredSourceReadResult> {
   requirePermission(ctx, "financial:read");
+  requirePermission(ctx, "financial:write");
   if (!request || typeof request !== "object" ||
       (request.kind !== "settlement" && request.kind !== "fee")) {
     throw new ValidationError("Unsupported financial source read request");
