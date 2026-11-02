@@ -11,7 +11,7 @@ import { DatabaseStore } from "../../database/store";
 import type { BankingCaseRecord } from "../../database/schema";
 import type { PaginatedResult } from "../../database/querySpecification";
 import { TenantContext, getPermissionsForRole, requirePermission } from "../../core/security";
-import { ForbiddenError, NotFoundError, ValidationError } from "../../core/errors";
+import { CrossTenantViolationError, ForbiddenError, NotFoundError, ValidationError } from "../../core/errors";
 import { Validator } from "../../core/validation";
 
 export interface CreateBankingCaseInput {
@@ -82,10 +82,15 @@ export class BankingCaseService {
       // Verify within the transaction as well, to resist membership revocation
       // between initial request validation and the database write.
       await verifyCurrentAccess(ctx, this.database, "workflow:write");
-      if (sourceType === "Document") {
-        await this.database.documentsRepo.findById(sourceId!, ctx, "Document");
-      } else if (sourceType === "ValueOpportunity") {
-        await this.database.opportunitiesRepo.findById(sourceId!, ctx, "ValueOpportunity");
+      try {
+        if (sourceType === "Document") {
+          await this.database.documentsRepo.findById(sourceId!, ctx, "Document");
+        } else if (sourceType === "ValueOpportunity") {
+          await this.database.opportunitiesRepo.findById(sourceId!, ctx, "ValueOpportunity");
+        }
+      } catch (error) {
+        if (error instanceof CrossTenantViolationError) throw new NotFoundError("Source record");
+        throw error;
       }
       const now = new Date().toISOString();
       const id = randomUUID();
@@ -126,9 +131,14 @@ export class BankingCaseService {
 
   public async findById(ctx: TenantContext, id: string): Promise<BankingCaseRecord> {
     const { isAdministrator } = await verifyCurrentAccess(ctx, this.database, "workflow:read");
-    const record = await this.database.bankingCasesRepo.findById(Validator.requireId(id, "caseId"), ctx, "BankingCase");
-    if (!isAdministrator && record.ownerUserId !== ctx.userId) throw new NotFoundError("BankingCase");
-    return record;
+    try {
+      const record = await this.database.bankingCasesRepo.findById(Validator.requireId(id, "caseId"), ctx, "BankingCase");
+      if (!isAdministrator && record.ownerUserId !== ctx.userId) throw new NotFoundError("BankingCase");
+      return record;
+    } catch (error) {
+      if (error instanceof CrossTenantViolationError) throw new NotFoundError("BankingCase");
+      throw error;
+    }
   }
 }
 
