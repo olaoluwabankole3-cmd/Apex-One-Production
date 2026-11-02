@@ -156,6 +156,7 @@ export const ROLE_PERMISSIONS = {
     "customer:write",
     "customer:delete",
     "financial:read",
+    "financial:preview",
     "financial:write",
     "document:read",
     "document:write",
