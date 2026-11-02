@@ -13,7 +13,7 @@ async function main(): Promise<void> {
   await new PostgresDocumentSearchIndex(databaseUrl).bootstrap();
   await ensureDurableAuditConstraints(databaseUrl);
   console.log(
-    "APEX ONE PostgreSQL migrations 001_stage4_core, 002_stage4_document_search, 003_stage11_audit_append_only, and 004_phase2_auth_identity are ready."
+    "APEX ONE PostgreSQL migrations 001_stage4_core, 002_stage4_document_search, 003_stage11_audit_append_only, 004_phase2_auth_identity, and 005_financial_preview_ledger are ready."
   );
 }
 
