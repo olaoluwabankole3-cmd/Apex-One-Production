@@ -187,12 +187,17 @@ export function validateFinancialCsvForInternalIntake(
   return { sha256: result.summary.sha256, rows: result.summary.rows };
 }
 
-/** Strict, non-persistent preview. Only authenticated financial-data writers can submit data. */
+/** Strict, non-persistent preview. An authenticated preview operator or existing financial writer may compare synthetic inputs. */
 export function prepareFinancialCsvPreview(
   ctx: TenantContext, input: unknown
 ): CsvPreviewResult {
   requirePermission(ctx, "financial:read");
-  requirePermission(ctx, "financial:write");
+  // A preview has no durable financial write effects. Existing financial writers
+  // remain authorized for compatibility with previously issued sessions; new
+  // Finance sessions use the narrow preview-only capability instead.
+  if (!ctx.permissions.includes("financial:preview")) {
+    requirePermission(ctx, "financial:write");
+  }
   if (!isRecord(input)) throw new ValidationError("Financial preview body must be an object");
   assertKeys(input, ["kind", "expected", "observed", "toleranceMinorByCurrency"], "preview");
   if (input.kind !== "settlement" && input.kind !== "fee") {

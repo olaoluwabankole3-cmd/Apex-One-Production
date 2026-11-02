@@ -26,6 +26,7 @@ export type PermissionCapability =
   | "customer:write"
   | "customer:delete"
   | "financial:read"
+  | "financial:preview"
   | "financial:write"
   | "document:read"
   | "document:write"

@@ -57,6 +57,7 @@ export const ROLE_PERMISSIONS = {
     "customer:write",
     "customer:delete",
     "financial:read",
+    "financial:preview",
     "financial:write",
     "document:read",
     "document:write",
@@ -104,6 +105,7 @@ export const ROLE_PERMISSIONS = {
   Finance: [
     "org:read",
     "financial:read",
+    "financial:preview",
     "document:read",
     "knowledge:read",
     "case:read",
@@ -154,6 +156,7 @@ export const ROLE_PERMISSIONS = {
     "customer:write",
     "customer:delete",
     "financial:read",
+    "financial:preview",
     "financial:write",
     "document:read",
     "document:write",
