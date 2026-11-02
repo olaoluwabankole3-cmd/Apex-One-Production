@@ -92,6 +92,7 @@ import {
 } from "../core/errors";
 import { IUnitOfWork, IUnitOfWorkProvider, InMemoryUnitOfWork } from "./unitOfWork";
 import { isProductionInfrastructureEnvironment } from "../infrastructure/runtime";
+import { quotePostgresLiteral } from "./adapters/postgres/PostgresWireClient";
 
 export interface DatabaseStateSnapshot {
   organizations: Map<string, OrganizationRecord>;
@@ -381,6 +382,52 @@ export class DatabaseStore implements IUnitOfWorkProvider {
       .filter((membership) => membership.organizationId === orgId)
       .sort((a, b) => a.id.localeCompare(b.id))
       .slice(0, 101);
+  }
+
+  /**
+   * Atomic compare-and-swap for source policy review. The generic domain update
+   * is a read-then-write and MUST NOT be used for independent maker-checker
+   * decisions: competing PostgreSQL reviewers could both succeed.
+   *
+   * Must be called inside runInTransaction so its mutation and audit receipt
+   * share one transaction. In-memory tests rely on the same transaction lock.
+   */
+  public async decideFinancialSourceRegistry(
+    ctx: TenantContext,
+    id: string,
+    expectedRevision: number,
+    updates: Pick<FinancialSourceRegistryRecord,
+      "status" | "reviewedByUserId" | "reviewedAt" | "reviewReason" | "revision" | "updatedAt">
+  ): Promise<FinancialSourceRegistryRecord> {
+    if (updates.revision !== expectedRevision + 1 ||
+        (updates.status !== "approved" && updates.status !== "rejected")) {
+      throw new ValidationError("Invalid atomic source-policy transition");
+    }
+    if (this.postgresPersistence) {
+      const sql = JSON.stringify(updates);
+      return this.postgresPersistence.manager.withConnection(async connection => {
+        const output = await connection.query(
+          `UPDATE apex_domain_records
+             SET record = record || ${quotePostgresLiteral(sql)}::jsonb,
+                 updated_at = NOW()
+           WHERE entity_type = 'FinancialSourceRegistry'
+             AND organization_id = ${quotePostgresLiteral(ctx.organizationId)}
+             AND id = ${quotePostgresLiteral(id)}
+             AND record->>'status' = 'pending'
+             AND (record->>'revision')::integer = ${expectedRevision}
+          RETURNING record::text AS record`
+        );
+        if (output.rows.length !== 1) {
+          throw new ConflictError("Source proposal changed or was already reviewed");
+        }
+        return JSON.parse(output.rows[0].record!) as FinancialSourceRegistryRecord;
+      });
+    }
+    const existing = await this.financialSourceRegistryRepo.findById(id, ctx, "FinancialSourceRegistry");
+    if (existing.status !== "pending" || existing.revision !== expectedRevision) {
+      throw new ConflictError("Source proposal changed or was already reviewed");
+    }
+    return this.financialSourceRegistryRepo.update(id, updates, ctx, "FinancialSourceRegistry");
   }
 
   public async findMembershipsForUser(userId: string): Promise<OrganizationMembershipRecord[]> {
