@@ -45,7 +45,7 @@ export default function SettingsWorkspace() {
             Institution setup
           </h1>
           <p className="mt-5 max-w-2xl text-[14px] leading-7 text-[#D6CCC2]">
-            Start here to understand your institution's workspace, who can access it,
+            Start here to understand your institution&apos;s workspace, who can access it,
             and what is required before CORTEX can investigate real financial records.
           </p>
         </div>
