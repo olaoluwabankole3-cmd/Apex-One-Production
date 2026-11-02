@@ -42,6 +42,16 @@ const reviews = load("app/reviews/page.tsx");
 assert.match(reviews, /requiredPermission="case:approve"/);
 assert.match(reviews, /BankingCaseReviewPanel/);
 assert.match(reviews, /item\.decision\?\.state === "pending"/);
+assert.match(reviews, /encodeURIComponent\(nextCursor\)/,
+  "Review pagination must URL-encode server-issued cursors");
+assert.match(reviews, /setCases\(previous => nextCursor/,
+  "Later review pages must append rather than replace authorized cases");
+assert.match(reviews, /existing\.id === item\.id/,
+  "Review pagination must suppress duplicate cases across pages");
+assert.match(reviews, /Load next 50 cases/,
+  "The checker must be able to reach pending plans beyond the first page");
+assert.match(reviews, /if \(nextCursor\) \{[\s\S]*?setPageError\(true\)/,
+  "Failure loading another page must preserve cases already inspected");
 const reports = load("app/reports/page.tsx");
 assert.match(reports, /requiredPermission="case:read"/);
 assert.match(reports, /api\/v1\/audit\?limit=25/);
