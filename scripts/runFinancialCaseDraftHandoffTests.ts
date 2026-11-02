@@ -11,7 +11,7 @@ const statuses = [
 ];
 for (const kind of allowedKinds) for (const status of statuses) {
   const path = caseDraftHref(kind,status);
-  assert(path?.startsWith("/work/cases?draft="),path||"null");
+  assert(typeof path === "string" && path.startsWith("/work/cases?draft="),path||"null");
   const query = path.slice(path.indexOf("?"));
   const draft = readCaseDraft(query);
   assert(draft,JSON.stringify([kind,status]));
