@@ -648,6 +648,13 @@ export interface FinancialSourceRegistryRecord {
   revision: number;
   updatedAt: string;
   externalSourceAuthorityVerified: false;
+  /** The second admin approves the exact verifier key fingerprint, not external bank identity. */
+  signingKey?: {
+    keyId: string;
+    ed25519PublicKeySpkiDerBase64: string;
+    keyFingerprintSha256: string;
+    bankKeyOwnershipIndependentlyVerified: false;
+  };
 }
 
 export interface FinancialSourceSnapshotRecord {
@@ -664,6 +671,8 @@ export interface FinancialSourceSnapshotRecord {
   createdAt: string;
   encryption: "AES-256-GCM" | "none";
   byteIntegrityCheckedAtIntake: true;
+  /** S3-assigned version; absent on unversioned buckets and non-S3 tests. */
+  storageVersionId?: string;
   storageImmutabilityVerified: false;
   sourceAuthenticityVerified: false;
   coverageVerified: false;
