@@ -206,6 +206,7 @@ export class BankingCaseService {
         throw new NotFoundError("BankingCase");
       }
       if (existing.status !== "open") throw new ConflictError("Only open cases can be reassigned");
+      if (existing.decision?.state === "pending") throw new ConflictError("Cannot reassign a case awaiting checker review");
       const revision = existing.revision ?? 1;
       if (revision !== input.expectedRevision) {
         throw new ConflictError("Case has changed; reload before reassigning", { retryable: false });
