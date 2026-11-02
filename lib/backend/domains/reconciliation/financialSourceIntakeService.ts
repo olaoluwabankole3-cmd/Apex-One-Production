@@ -47,16 +47,18 @@ function gateIntake(): void {
 
 function authorized(ctx: TenantContext, db: DatabaseStore, permission: "org:admin" | "financial:read" | "financial:write") {
   requirePermission(ctx, permission);
-  return Promise.all([
-    db.findUserMembership(ctx.userId, ctx.organizationId),
-    db.findUserById(ctx.userId),
-  ]).then(([membership, user]) => {
+  // The wire-level PostgreSQL adapter uses one connection per transaction.
+  // Do not issue two queries to that connection concurrently: the wire
+  // protocol reader is sequential and simultaneous queries can deadlock it.
+  return (async () => {
+    const membership = await db.findUserMembership(ctx.userId, ctx.organizationId);
+    const user = await db.findUserById(ctx.userId);
     if (!membership || !user || user.status !== "active" ||
         membership.role !== ctx.userRole ||
         !getPermissionsForRole(membership.role).includes(permission)) {
       throw new ForbiddenError("Current institution membership does not allow financial source custody actions");
     }
-  });
+  })();
 }
 
 function safeByteBuffer(input: Buffer): Buffer {
