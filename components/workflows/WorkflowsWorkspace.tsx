@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { CheckCircle2, Circle, Loader2, Play, RefreshCw, ShieldCheck, Workflow as WorkflowIcon, XCircle } from "lucide-react";
 import GlassCard from "@/components/ui/GlassCard";
 import { workflowRepository } from "@/lib/data/repositories";
@@ -126,8 +127,11 @@ export default function WorkflowsWorkspace() {
             CORTEX · Execution
           </p>
           <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-ivory">
-            Workflows
+            Action Center
           </h1>
+          <Link href="/work/cases" className="mt-4 inline-flex rounded-lg border border-gold/30 px-4 py-2 text-xs font-semibold text-gold">
+            Open My Cases →
+          </Link>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-ivory/50">
             Workflow status and execution receipts come from the backend workflow service.
             The frontend no longer simulates AI reasoning, approvals, integration steps or
