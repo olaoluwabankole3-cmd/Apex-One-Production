@@ -110,7 +110,6 @@ export const ROLE_PERMISSIONS = {
     "case:assign",
     "ai:execute",
     "value:read",
-    "audit:read",
   ],
   "Relationship Manager": [
     "org:read",
