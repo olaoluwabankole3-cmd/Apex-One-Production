@@ -12,6 +12,7 @@ import type { UserRecord, OrganizationMembershipRecord } from "../lib/backend/da
 import { prepareFinancialCsvPreview, validateFinancialCsvForInternalIntake } from "../lib/backend/domains/reconciliation/csvPreviewService";
 import { caseDraftHref, readCaseDraft } from "../lib/financialCaseDraft";
 import { BankingCaseService } from "../lib/backend/domains/banking-cases/bankingCaseService";
+import { BankingCaseTransferService } from "../lib/backend/domains/banking-cases/bankingCaseTransferService";
 import { BankingCaseReviewService } from "../lib/backend/domains/banking-cases/bankingCaseReviewService";
 
 const db = DatabaseStore.createFreshStore();
@@ -44,6 +45,7 @@ const expected = { feedId: "synthetic-ledger",
 const observed = { feedId: "synthetic-provider",
   csv: HEADER + "SYN-SETTLE-001,NGN,12400,synthetic-provider-001,2026-11-02T09:01:00Z\n" };
 const cases = new BankingCaseService(db);
+const transfers = new BankingCaseTransferService(db);
 const reviews = new BankingCaseReviewService(db);
 
 async function main() {
@@ -90,17 +92,27 @@ async function main() {
     expectedRevision:1,
   }),/Link source evidence/i);
 
-  // The current owner hands responsibility to Finance and loses case access.
-  const handed = await cases.handoff(ctx("ops-investigator"),created.id,{
+  // The owner requests a transfer, but retains responsibility until Finance accepts.
+  const offer = await transfers.offer(ctx("ops-investigator"),created.id,{
     recipientUserId:"finance-operator",expectedRevision:1,
     reason:"Finance must independently inspect the synthetic source exception",
   });
+  assert.equal(offer.ownerUserId,"ops-investigator");
+  assert(offer.pendingTransfer?.id);
+  await assert.rejects(() => cases.findById(ctx("finance-operator"),created.id),/not found/i);
+  const invitations = await transfers.listMine(ctx("finance-operator"));
+  assert.equal(invitations.items.length,1);
+  assert(!JSON.stringify(invitations.items).includes(created.description));
+  const handed = await transfers.accept(ctx("finance-operator"),created.id,{
+    transferId:offer.pendingTransfer!.id,expectedRevision:2,
+  });
   assert.equal(handed.ownerUserId,"finance-operator");
   assert.equal(handed.department,"Finance");
+  assert.equal(handed.pendingTransfer,null);
   await assert.rejects(() => cases.findById(ctx("ops-investigator"),created.id),/not found/i);
-  await assert.rejects(() => cases.handoff(ctx("ops-investigator"),created.id,{
-    recipientUserId:"finance-operator",expectedRevision:1,
-    reason:"Prior owner must not reassign after a completed handoff",
+  await assert.rejects(() => transfers.offer(ctx("ops-investigator"),created.id,{
+    recipientUserId:"finance-operator",expectedRevision:handed.revision!,
+    reason:"Prior owner must not reassign after a completed transfer",
   }),/not found/i);
   await assert.rejects(() => cases.findById(ctx("foreign-admin"),created.id),/not found/i);
 
@@ -121,10 +133,10 @@ async function main() {
     expectedRevision:linked.revision!,
   });
   assert.equal(proposed.decision?.state,"pending");
-  await assert.rejects(()=>cases.handoff(finance,created.id,{
+  await assert.rejects(()=>transfers.offer(finance,created.id,{
     recipientUserId:"ops-investigator",expectedRevision:proposed.revision!,
     reason:"A pending plan must remain locked until checker disposition",
-  }),/awaiting checker review/i);
+  }),/awaiting independent review/i);
 
   const approved=await reviews.review(ctx("independent-checker"),created.id,{
     decisionId:proposed.decision!.id,verdict:"approved",
@@ -136,7 +148,7 @@ async function main() {
   assert.equal(approved.status,"open");
   assert.equal(approved.evidenceState,"unverified");
   assert.deepEqual(approved.timeline?.map(event=>event.type),[
-    "created","handed_off","evidence_linked","decision_proposed","decision_reviewed"
+    "created","transfer_requested","handed_off","evidence_linked","decision_proposed","decision_reviewed"
   ]);
   await assert.rejects(()=>reviews.review(ctx("independent-checker"),created.id,{
     decisionId:proposed.decision!.id,verdict:"approved",
@@ -147,7 +159,7 @@ async function main() {
   const report = await cases.list(ctx("independent-checker"),{limit:50});
   assert(report.items.some(item=>item.id===created.id && item.decision?.state==="approved"));
   const audit = await db.auditLogsRepo.findMany(ctx("independent-checker"));
-  for(const action of ["banking_case:create","banking_case:handoff",
+  for(const action of ["banking_case:create","banking_case:transfer_requested","banking_case:transfer_accepted",
     "banking_case:evidence_linked","banking_case:decision_proposed","banking_case:decision_reviewed"]) {
     assert(audit.items.some(event=>event.resourceId===created.id && event.action===action),
       "Missing durable synthetic accountability event: "+action);
