@@ -748,6 +748,67 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     if (this.auditLogsRepo instanceof InMemoryAuditLogRepository) this.auditLogsRepo.restoreSnapshot(snapshot.auditLogs);
   }
 
+  /**
+   * Atomic, tenant-bound claim for an explicitly department-shared task.
+   *
+   * A normal PostgreSQL READ COMMITTED read/then/update can let two team
+   * members both believe they accepted the same work. The single conditional
+   * UPDATE below allows exactly one winner, including across app replicas.
+   * Caller checks persisted membership and role BEFORE reaching this method;
+   * it must run inside the same transaction as the audit receipt.
+   */
+  public async claimUnassignedBankingTask(
+    ctx: TenantContext,
+    taskId: string,
+    department: BankingWorkTaskRecord["targetDepartment"],
+    expectedRevision: number,
+    acceptedAt: string
+  ): Promise<BankingWorkTaskRecord> {
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1 ||
+        expectedRevision > 1_000_000_000) {
+      throw new ValidationError("Invalid task claim revision");
+    }
+    const changes = {
+      recipientUserId: ctx.userId,
+      status: "accepted" as const,
+      revision: expectedRevision + 1,
+      acceptedAt,
+      updatedAt: acceptedAt,
+    };
+    if (this.postgresPersistence) {
+      const sql = JSON.stringify(changes);
+      return this.postgresPersistence.manager.withConnection(async connection => {
+        const response = await connection.query(
+          `UPDATE apex_domain_records
+              SET record = record || ${quotePostgresLiteral(sql)}::jsonb,
+                  updated_at = NOW()
+            WHERE entity_type = 'BankingWorkTask'
+              AND organization_id = ${quotePostgresLiteral(ctx.organizationId)}
+              AND id = ${quotePostgresLiteral(taskId)}
+              AND record->>'deliveryMode' = 'department'
+              AND record->>'targetDepartment' = ${quotePostgresLiteral(department)}
+              AND record->>'recipientUserId' = ''
+              AND record->>'status' = 'requested'
+              AND (record->>'revision')::integer = ${expectedRevision}
+          RETURNING record::text AS record`
+        );
+        if (response.rows.length !== 1) {
+          throw new ConflictError("Department request already claimed or changed; refresh the team queue");
+        }
+        return JSON.parse(response.rows[0].record!) as BankingWorkTaskRecord;
+      });
+    }
+    const existing = await this.bankingWorkTasksRepo.findById(taskId, ctx, "BankingWorkTask");
+    if (existing.deliveryMode !== "department" ||
+        existing.targetDepartment !== department ||
+        existing.recipientUserId !== "" ||
+        existing.status !== "requested" ||
+        existing.revision !== expectedRevision) {
+      throw new ConflictError("Department request already claimed or changed; refresh the team queue");
+    }
+    return this.bankingWorkTasksRepo.update(taskId, changes, ctx, "BankingWorkTask");
+  }
+
   public async runInTransaction<T>(ctx: TenantContext, work: (uow: IUnitOfWork) => Promise<T>): Promise<T> {
     if (!ctx?.organizationId || typeof ctx.organizationId !== "string" || ctx.organizationId.trim().length === 0) {
       throw new ValidationError("TenantContext with a valid organizationId is required for transaction execution");
