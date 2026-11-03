@@ -7,6 +7,21 @@ import { useAuth } from "@/components/auth/AuthContext";
 import type { BankingWorkTaskRecord, BankingCaseRecord } from "@/lib/backend/database/schema";
 import type { BankingCaseAssigneeList } from "@/lib/backend/domains/banking-cases/bankingCaseService";
 
+/** Target dates are staff-defined; no deadline or automatic escalation is inferred. */
+function TaskDeadline({ task }: { task: BankingWorkTaskRecord }) {
+  if (!task.dueAt) return null;
+  const pending = task.status === "requested" || task.status === "accepted";
+  const overdue = pending && Date.parse(task.dueAt) <= Date.now();
+  const utcTime = task.dueAt.slice(0, 16).replace("T", " ") + " UTC";
+  return (
+    <p className={overdue ? "mt-2 text-xs font-semibold text-amber-200" :
+      "mt-2 text-xs text-[#D3C9BD]/70"}>
+      {overdue ? "Overdue response target" : "Response target"}: {utcTime}
+      {overdue ? " — needs follow-up" : ""}
+    </p>
+  );
+}
+
 /**
  * One case, two kinds of responsibility: the case owner retains accountability,
  * while the named recipient owns only a bounded request. No case/financial
@@ -158,6 +173,7 @@ export function BankingTaskWorkspace() {
                 </div>
                 <p className="mt-3 text-xs leading-5 text-[#D3C9BD]/80">{task.question}</p>
                 <p className="mt-2 text-xs leading-5 text-[#D3C9BD]/55"><strong>Requested output:</strong> {task.expectedResponse}</p>
+                <TaskDeadline task={task} />
                 {task.responseNote && <p className="mt-2 text-xs leading-5 text-[#D3C9BD]/75">Recorded response: {task.responseNote}</p>}
                 {task.status === "requested" && (
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -226,6 +242,7 @@ export function BankingTaskWorkspace() {
                   <p className="mt-2 text-xs leading-5 text-[#D3C9BD]/55">
                     <strong>Requested output:</strong> {task.expectedResponse}
                   </p>
+                  <TaskDeadline task={task} />
                   <p className="mt-3 text-[11px] leading-5 text-[#D3C9BD]/55">
                     This task is shared only with eligible members of {task.targetDepartment}.
                     The parent case and documents are not shared.
@@ -259,6 +276,7 @@ export function BankingTaskWorkspace() {
                   ? (task.recipientUserId ? "Claimed by colleague" : "Team Queue — awaiting acceptance")
                   : "Named colleague"}</p>
                 <p className="mt-2 text-xs text-[#D3C9BD]/65">{task.expectedResponse}</p>
+                <TaskDeadline task={task} />
                 {task.responseNote && <p className="mt-3 text-xs leading-5 text-[#D3C9BD]/90">Response: {task.responseNote}</p>}
                 <p className="mt-3 text-[11px] text-[#D3C9BD]/50">Case remains open and unverified until independent outcome confirmation.</p>
               </article>
@@ -289,6 +307,7 @@ export function BankingCaseTaskRequest({
   const [title, setTitle] = useState("");
   const [question, setQuestion] = useState("");
   const [expectedResponse, setExpectedResponse] = useState("");
+  const [dueAt, setDueAt] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(false);
   const [notice, setNotice] = useState(false);
@@ -309,10 +328,11 @@ export function BankingCaseTaskRequest({
         caseId: record.id,
         ...(deliveryMode === "department" ? { deliveryMode: "department", targetDepartment } : { recipientUserId }),
         title, question, expectedResponse,
+        ...(dueAt ? { dueAt: new Date(dueAt).toISOString() } : {}),
         expectedCaseRevision: record.revision ?? 1,
       });
       setExpanded(false); setRecipientUserId(""); setDeliveryMode("named"); setTitle("");
-      setQuestion(""); setExpectedResponse(""); setNotice(true);
+      setQuestion(""); setExpectedResponse(""); setDueAt(""); setNotice(true);
       onCreated();
     } catch { setError(true); }
     finally { setSaving(false); }
@@ -384,6 +404,14 @@ export function BankingCaseTaskRequest({
           <textarea required minLength={15} maxLength={300} rows={2} value={expectedResponse} onChange={event => setExpectedResponse(event.target.value)}
             className="mt-1 w-full rounded-lg border border-white/15 bg-[#24231F] p-3 text-sm text-[#F5F1E8]"
             placeholder="Describe the response needed; do not paste bank feeds." />
+        </label>
+        <label className="text-xs text-[#D3C9BD]">Response target (optional)
+          <input type="datetime-local" value={dueAt}
+            onChange={event => setDueAt(event.target.value)}
+            className="mt-1 w-full rounded-lg border border-white/15 bg-[#24231F] p-3 text-sm text-[#F5F1E8]" />
+          <span className="mt-1 block text-[11px] text-[#D3C9BD]/55">
+            Choose between 5 minutes and 30 days ahead. Overdue tasks are highlighted, not automatically escalated.
+          </span>
         </label>
         <button type="submit" disabled={saving}
           className="justify-self-start rounded-lg border border-[#C58D5F]/50 bg-[#C58D5F]/10 px-4 py-2.5 text-xs font-semibold text-[#D9A06F] disabled:opacity-40">
