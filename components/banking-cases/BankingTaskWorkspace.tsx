@@ -133,7 +133,7 @@ export function BankingTaskWorkspace() {
           <h2 className="mt-2 font-display text-xl font-semibold text-[#F5F1E8]">My Tasks · Team Queue · Waiting on Others</h2>
           <p className="mt-2 max-w-3xl text-xs leading-5 text-[#D3C9BD]/75">
             Work is routed either privately to a named employee or explicitly to your permitted department queue.
-            Claiming a shared task does not transfer its parent case or reveal the case's confidential records.
+            Claiming a shared task does not transfer its parent case or reveal confidential case records.
             Task replies and internal approvals do not verify external banking outcomes.
           </p>
         </div>
