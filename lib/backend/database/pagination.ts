@@ -143,6 +143,7 @@ export const ENTITY_SORT_WHITELIST: Record<string, readonly string[]> = {
   Provenance: ["id", "subjectType", "subjectId", "relation", "producerType", "createdAt"],
   Verification: ["id", "subjectType", "subjectId", "state", "verifierId", "createdAt"],
   Certification: ["id", "subjectType", "subjectId", "state", "certifierId", "validFrom", "validUntil", "createdAt"],
+  BankingWorkTask: ["id", "caseId", "targetDepartment", "recipientUserId", "requestedByUserId", "status", "requestedAt", "createdAt", "updatedAt"],
   AuditLog: ["id", "timestamp", "actorEmail", "action", "resource", "resourceId", "status"],
 };
 
