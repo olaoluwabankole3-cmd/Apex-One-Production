@@ -38,6 +38,16 @@ assert(overview.includes("const allowedJourneys = journeys.filter(item => hasPer
   "Home task actions must be filtered by the authenticated role");
 assert.match(overview, /not an institution-wide total/);
 assert(overview.includes('id="cortex-my-work"'), "Home must show work needing attention");
+assert(overview.includes('<BankingTaskWorkspace />'),
+  "Home must show the same bounded, authenticated My Tasks and Waiting on Others work queues");
+assert(overview.indexOf('<BankingTaskWorkspace />') < overview.indexOf('id="cortex-my-work"'),
+  "Actual assigned work must appear ahead of the case and specialist lists");
+const taskWorkspace = load("components/banking-cases/BankingTaskWorkspace.tsx");
+assert(taskWorkspace.includes('view=received&limit=25') &&
+  taskWorkspace.includes('view=requested&limit=25'),
+  "Home task workspace must use only the server-scoped received/requested queues");
+assert(taskWorkspace.includes('A named employee can help on a specific request'),
+  "Task inbox must distinguish subtask responsibility from case ownership");
 assert(overview.indexOf('id="cortex-my-work"') < overview.indexOf('aria-labelledby="cortex-start-heading"'),
   "My Work must appear ahead of the workspace/tool menu");
 assert(overview.includes("describeCaseAttention(item"), "Case list must derive truthful next actions");
