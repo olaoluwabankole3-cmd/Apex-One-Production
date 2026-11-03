@@ -44,6 +44,18 @@ async function main(): Promise<void> {
   const databaseUrl = required("DATABASE_URL");
   const redisUrl = required("REDIS_URL");
 
+  // This fixture deliberately resets its test database and Redis. Never
+  // allow a developer or operator to run it against institutional authorities.
+  const databaseTarget = new URL(databaseUrl);
+  const redisTarget = new URL(redisUrl);
+  if (process.env.CI !== "true" || process.env.TEST_ENV !== "true" ||
+      process.env.ASSURANCE_BASE_URL !== "http://localhost:3000" ||
+      databaseTarget.hostname !== "127.0.0.1" || databaseTarget.port !== "11543" ||
+      databaseTarget.pathname !== "/apex_stage10_test" ||
+      redisTarget.hostname !== "127.0.0.1" || redisTarget.port !== "11679") {
+    throw new Error("Stage 10 destructive fixture is restricted to isolated local CI services");
+  }
+
   const store = DatabaseStore.createPostgresStore(databaseUrl);
   await store.bootstrapPersistence();
   await ensureDurableAuditConstraints(databaseUrl);
@@ -76,6 +88,21 @@ async function main(): Promise<void> {
     "Stage10Enterprise!2026"
   );
 
+  // Isolated Stage 10 identities for a real HTTP/browser banking golden path.
+  // These are only created inside the disposable CI PostgreSQL + Redis fixture.
+  const operations = user(
+    "user-stage10-operations", "stage10.operations@example.test",
+    "Stage 10 Operations Maker", "Stage10Enterprise!2026"
+  );
+  const finance = user(
+    "user-stage10-finance", "stage10.finance@example.test",
+    "Stage 10 Finance Operator", "Stage10Enterprise!2026"
+  );
+  const checker = user(
+    "user-stage10-checker", "stage10.checker@example.test",
+    "Stage 10 Independent Checker", "Stage10Enterprise!2026"
+  );
+
   const memberships: OrganizationMembershipRecord[] = [
     {
       id: "membership-stage10-ceo",
@@ -93,11 +120,37 @@ async function main(): Promise<void> {
       department: "Strategic Accounts",
       joinedAt: timestamp(),
     },
+    {
+      id: "membership-stage10-operations",
+      organizationId: org.id,
+      userId: operations.id,
+      role: "Operations",
+      department: "Operations",
+      joinedAt: timestamp(),
+    },
+    {
+      id: "membership-stage10-finance",
+      organizationId: org.id,
+      userId: finance.id,
+      role: "Finance",
+      department: "Finance",
+      joinedAt: timestamp(),
+    },
+    {
+      id: "membership-stage10-checker",
+      organizationId: org.id,
+      userId: checker.id,
+      role: "Administrator",
+      joinedAt: timestamp(),
+    },
   ];
 
   await store.createOrganizationRecord(org);
   await store.createUserRecord(ceo);
   await store.createUserRecord(relationshipManager);
+  await store.createUserRecord(operations);
+  await store.createUserRecord(finance);
+  await store.createUserRecord(checker);
   for (const membership of memberships) await store.createMembershipRecord(membership);
 
   const ctx: TenantContext = {
@@ -132,6 +185,28 @@ async function main(): Promise<void> {
     ctx
   );
 
+  // Metadata-only document fixture; no bank records, CSV bytes or live S3
+  // source are created or claimed. The case evidence remains unverified.
+  await store.documentsRepo.create({
+    id: "doc-stage10-banking-evidence",
+    name: "Stage 10 synthetic source-review reference",
+    fileType: "pdf",
+    category: "Other",
+    size: "0 B",
+    uploadedBy: ctx.userEmail,
+    storageKey: "stage10/synthetic-placeholder-not-a-bank-file",
+    status: "processing",
+    metadata: {
+      fileSizeBytes: 0,
+      mimeType: "application/pdf",
+      storageUri: "s3://stage10-synthetic-placeholder-not-uploaded"
+    },
+    extractedFields: [],
+    tags: ["stage10", "synthetic", "unverified"],
+    createdAt: timestamp(),
+    updatedAt: timestamp(),
+  }, ctx);
+
   const redis = new RedisWireClient(redisUrl);
   const flushReply = await redis.execute(["FLUSHDB"]);
   if (flushReply !== "OK") throw new Error("Unable to reset Stage 10 Redis fixture");
@@ -152,6 +227,8 @@ async function main(): Promise<void> {
   console.log("✅ Stage 10 synthetic production-assurance fixture prepared");
   console.log("CEO: stage10.ceo@example.test");
   console.log("RM: stage10.rm@example.test");
+  console.log("Banking UAT synthetic roles prepared: Operations, Finance, independent Administrator");
+
 }
 
 void main().catch((error) => {
