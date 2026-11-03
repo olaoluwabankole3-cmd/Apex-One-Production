@@ -139,7 +139,7 @@ try {
     200, "Task does not transfer parent case");
   assert.equal(parentBeforeHandoff.ownerUserId, "user-stage10-operations");
 
-  await finance.goto(`${baseUrl}/work/cases`, { waitUntil: "domcontentloaded" });
+  await finance.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
   await finance.locator("#cortex-banking-task-workspace").waitFor({ state: "visible" });
   await finance.getByText(taskTitle, { exact: true }).waitFor({ state: "visible", timeout: 20000 });
   denied(await request(finance, "GET", `/api/v1/banking-cases/${created.id}`),
@@ -154,7 +154,8 @@ try {
   await finance.getByText("Task response recorded", { exact: false })
     .waitFor({ state: "visible", timeout: 20000 });
 
-  await ops.goto(`${baseUrl}/work/cases`, { waitUntil: "domcontentloaded" });
+  await ops.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
+  await ops.locator("#cortex-banking-task-workspace").waitFor({ state: "visible" });
   await ops.getByText(taskResponse, { exact: false }).waitFor({ state: "visible", timeout: 20000 });
   const taskList = ok(await request(ops, "GET", "/api/v1/banking-tasks?view=requested&limit=25"),
     200, "Task requester scoped queue");
