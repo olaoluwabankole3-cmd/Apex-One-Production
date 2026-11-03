@@ -9,6 +9,7 @@ import {
 import { useAuth } from "@/components/auth/AuthContext";
 import { apiClient } from "@/lib/apiClient";
 import type { BankingCaseRecord } from "@/lib/backend/database/schema";
+import { describeCaseAttention } from "@/lib/cortexCaseAttention";
 
 const journeys = [
   {
@@ -98,12 +99,95 @@ export default function FinancialOperationsOverview() {
         </div>
       </header>
 
+      {canReadCases && (
+        <section className="rounded-xl border border-[#C58D5F]/25 bg-[#24231F] p-5 sm:p-7"
+          aria-labelledby="cortex-current-work" id="cortex-my-work">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#D9A06F]">
+                01 / What needs attention
+              </p>
+              <h2 id="cortex-current-work" className="mt-2 font-display text-2xl font-semibold text-[#F5F1E8]">
+                {hasPermission("org:admin") ? "Work requiring attention" : "My Work"}
+              </h2>
+              <p className="mt-2 max-w-2xl text-xs leading-6 text-[#D3C9BD]/70">
+                The first five cases visible to this account, not an institution-wide total.
+                Each item shows the next accountable step and what has not been confirmed.
+                There are no invented due dates, completion totals or banking outcomes.
+              </p>
+            </div>
+            <button type="button" disabled={loading} onClick={() => { setLoading(true); setRefreshCount(n => n + 1); }}
+              className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-xs text-ivory/70 hover:border-[#C58D5F]/40 disabled:opacity-40">
+              <RefreshCw size={14} /> Refresh
+            </button>
+          </div>
+          {loading ? (
+            <p className="mt-6 text-sm text-ivory/50" role="status">Loading your permitted cases…</p>
+          ) : error ? (
+            <p className="mt-6 flex items-center gap-2 text-sm text-amber-200" role="alert">
+              <CircleAlert size={16} /> Cases are unavailable. No counts have been inferred.
+            </p>
+          ) : cases.length === 0 ? (
+            <div className="mt-5 rounded-lg border border-dashed border-white/10 p-6 text-sm text-ivory/50">
+              No cases are visible to this account yet. Open Cases to record an issue if your role permits it.
+            </div>
+          ) : (
+            <div className="mt-5 space-y-3">
+              {cases.map(item => {
+                const attention = describeCaseAttention(item, {
+                  userId: user?.id,
+                  mayApprove: hasPermission("case:approve"),
+                });
+                return (
+                  <Link href={attention.link} key={item.id}
+                    className="group block rounded-lg border border-white/[0.09] bg-white/[0.025] px-4 py-4 transition-colors hover:border-[#C58D5F]/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D9A06F]">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-[#F5F1E8]">{item.title}</p>
+                        <p className="mt-1 text-xs text-ivory/45">{item.department} · {item.priority} priority · {item.evidenceState} evidence</p>
+                      </div>
+                      <span className="rounded-full border border-[#C58D5F]/30 bg-[#C58D5F]/[0.07] px-3 py-1.5 text-[11px] font-medium text-[#D9A06F]">
+                        {attention.heading}
+                      </span>
+                    </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_190px]">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-[#D9A06F]/80">Next action</p>
+                        <p className="mt-1 text-sm leading-6 text-[#F5F1E8]/90">{attention.nextAction}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-[#D9A06F]/80">Accountable next actor</p>
+                        <p className="mt-1 text-sm leading-6 text-[#F5F1E8]/90">{attention.actionOwner}</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.08] pt-3">
+                      <p className="max-w-[720px] text-xs leading-5 text-[#D3C9BD]/65">
+                        Outcome not confirmed · {attention.customerSafeUpdate}
+                      </p>
+                      <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#D9A06F]">
+                        {attention.link === "/reviews" ? "Review plan" : "Inspect case"}
+                        <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" />
+                      </span>
+                    </div>
+                  </Link>
+                );
+              })}
+              {pending.length > 0 && hasPermission("case:approve") && (
+                <Link href="/reviews" className="inline-flex items-center gap-2 text-xs font-medium text-[#D9A06F]">
+                  View visible cases awaiting review <ArrowRight size={14} />
+                </Link>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
       <section aria-labelledby="cortex-start-heading">
         <div className="mb-4 flex items-end justify-between gap-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#D9A06F]">YOUR WORKSPACE</p>
             <h2 id="cortex-start-heading" className="mt-1.5 font-display text-2xl font-semibold text-[#F5F1E8]">
-              Start with a task
+              02 / Find a specialist workspace
             </h2>
           </div>
           <span className="hidden text-xs text-ivory/40 sm:block">Follow the investigation from comparison to audit · Authorized tasks only</span>
@@ -132,55 +216,6 @@ export default function FinancialOperationsOverview() {
           )}
         </div>
       </section>
-
-      {canReadCases && (
-        <section className="rounded-xl border border-white/[0.09] bg-[#24231F] p-5 sm:p-6" aria-labelledby="cortex-current-work">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#D9A06F]">CURRENT WORK</p>
-              <h2 id="cortex-current-work" className="mt-2 font-display text-xl font-semibold text-[#F5F1E8]">Cases in your view</h2>
-              <p className="mt-1 text-xs leading-5 text-ivory/45">
-                Up to five authorized case records, not an institution-wide total. All remain open and unverified.
-              </p>
-            </div>
-            <button type="button" disabled={loading} onClick={() => { setLoading(true); setRefreshCount(n => n + 1); }}
-              className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-3 py-2 text-xs text-ivory/70 hover:border-[#C58D5F]/40 disabled:opacity-40">
-              <RefreshCw size={14} /> Refresh
-            </button>
-          </div>
-          {loading ? (
-            <p className="mt-6 text-sm text-ivory/50" role="status">Loading your permitted cases…</p>
-          ) : error ? (
-            <p className="mt-6 flex items-center gap-2 text-sm text-amber-200" role="alert">
-              <CircleAlert size={16} /> Cases are unavailable. No counts have been inferred.
-            </p>
-          ) : cases.length === 0 ? (
-            <div className="mt-5 rounded-lg border border-dashed border-white/10 p-6 text-sm text-ivory/50">
-              No cases are visible to this account yet. Open Cases to record an issue if your role permits it.
-            </div>
-          ) : (
-            <div className="mt-5 space-y-2">
-              {cases.map(item => (
-                <Link href="/work/cases" key={item.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3 hover:border-[#C58D5F]/30">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-[#F5F1E8]">{item.title}</p>
-                    <p className="mt-1 text-xs text-ivory/45">{item.department} · {item.priority} priority · {item.evidenceState}</p>
-                  </div>
-                  <span className="inline-flex items-center gap-2 text-xs text-[#D9A06F]">
-                    {item.decision?.state === "pending" ? "Review pending" : "Open case"} <ArrowRight size={14} />
-                  </span>
-                </Link>
-              ))}
-              {pending.length > 0 && hasPermission("case:approve") && (
-                <Link href="/reviews" className="mt-4 inline-flex items-center gap-2 text-xs font-medium text-[#D9A06F]">
-                  View cases awaiting review <ArrowRight size={14} />
-                </Link>
-              )}
-            </div>
-          )}
-        </section>
-      )}
 
       <p className="border-t border-white/[0.07] pt-5 text-xs leading-5 text-ivory/40">
         CORTEX supports accountable investigation. A case, preview, linked document or reviewer decision

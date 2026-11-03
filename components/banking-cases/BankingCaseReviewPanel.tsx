@@ -4,6 +4,7 @@
 import { FormEvent, useState } from "react";
 import type { BankingCaseRecord, BankingCaseDecision } from "@/lib/backend/database/schema";
 import { apiClient } from "@/lib/apiClient";
+import { describeCaseAttention } from "@/lib/cortexCaseAttention";
 
 type Props = {
   record: BankingCaseRecord;
@@ -36,6 +37,7 @@ export default function BankingCaseReviewPanel({ record, currentUserId, canCreat
   const mayCheck = canApprove && !!record.decision && record.decision.state === "pending" &&
     record.createdByUserId !== currentUserId && record.decision.proposedByUserId !== currentUserId;
   const hasBasis = !!(record.previewOrigin || record.sourceId || record.evidenceLinks?.length);
+  const attention = describeCaseAttention(record, { userId: currentUserId, mayApprove: canApprove });
 
   async function submit(path: string, body: Record<string, unknown>, message: string) {
     if (working) return;
@@ -171,6 +173,26 @@ export default function BankingCaseReviewPanel({ record, currentUserId, canCreat
         {record.decision?.state === "pending" && !mayCheck &&
           <p className="mt-3 text-xs text-[#D9A06F]">Awaiting an eligible, independent institution checker.</p>}
       </div>
+
+      <section aria-label="Outcome confirmation checkpoint"
+        className="rounded-lg border border-[#C58D5F]/30 bg-[#C58D5F]/[0.05] p-4">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#D9A06F]">
+          Outcome checkpoint · Confirmation still missing
+        </p>
+        <h4 className="mt-2 text-sm font-semibold text-[#F5F1E8]">{attention.heading}</h4>
+        <p className="mt-2 text-xs leading-6 text-[#D3C9BD]">
+          <strong>Next accountable step:</strong> {attention.nextAction} · {attention.actionOwner}.
+        </p>
+        <p className="mt-2 text-xs leading-6 text-[#D3C9BD]">
+          <strong>Permitted status update:</strong> {attention.customerSafeUpdate}
+        </p>
+        <p className="mt-3 border-t border-[#C58D5F]/20 pt-3 text-xs leading-6 text-[#D3C9BD]/80">
+          Internal approval and linked references do not certify that a reversal posted,
+          a disbursement arrived, or any requested real-world outcome occurred.
+          No authoritative outcome-confirmation feed is connected in this release.
+          This case remains open and unverified.
+        </p>
+      </section>
 
       <section aria-label="Case activity history">
         <h4 className="text-sm font-semibold">Accountability timeline</h4>

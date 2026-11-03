@@ -6,7 +6,7 @@ The intended flagship workflow is: **Compare → Investigate → Hand off → Re
 
 ## Seven task-first navigation destinations
 
-1. **Overview** (`/`) — explain CORTEX, show role-appropriate next actions, and display up to five real authorized case records. No invented financial totals.
+1. **Overview** (`/`) — put accountable My Work first using up to five real authorized case records; show the next step, actor, and the difference between internal plan approval and independently confirmed completion. No invented financial totals or due dates.
 2. **Reconciliation** (`/reconciliation`) — strict settlement/mapped-fee comparison against the existing staging-only audited API. Requires `financial:read` to view and scoped `financial:preview` (or existing `financial:write`) to submit; Finance staff can compare synthetic records without receiving broader write permissions. No raw source retention.
 3. **Cases** (`/work/cases`) — create operational issues; inspect authorized cases, evidence links and history; hand off ownership between Operations and Finance.
 4. **Reviews** (`/reviews`) — checker role (`case:approve`) examines pending investigation-plan decisions. An authorized reviewer cannot check their own plan; the server enforces maker–checker rules.
@@ -34,6 +34,14 @@ In an **explicitly enabled staging** environment, an authorized finance operator
 Stage 10 CI now includes `scripts/runBrowserBankingJourneyAssurance.mjs`, a real Chromium and production-built HTTP journey across separate disposable **Finance**, **Operations** and **Administrator checker** accounts. It exercises synthetic preview, role restrictions, explicit case intake, accountable handoff, an existing unverified synthetic evidence reference, maker-checker separation, independent review and durable audit records. The browser test fails closed unless `CI=true`, `TEST_ENV=true`, local base URL `http://localhost:3000` and the staging-only preview flags are explicitly provided. Do not run the fixture seed (which clears its dedicated test database) against AWS staging or production.
 
 This test demonstrates the application logic and user interactions **in isolated CI services**, not successful login or organizational membership on the live AWS staging tenant. Live staging acceptance requires three distinct approved synthetic test identities and explicit institutional authorization to create test records; it must not use any real bank accounts or provider data.
+
+## Outcome-confirmation architecture — first increment
+
+**What is real in the UI:** the Overview and case details derive next-action checkpoints directly from the authorized case record. A case with an approved internal investigation plan explicitly says **plan approved; outcome unconfirmed**. This projection is read-only; it does not invent a bank delivery confirmation, task deadline or case closure. Existing Finance/Operations ownership is still the only persisted assignment model; no shared cross-department subtask inbox has been built yet.
+
+**What is simulated in CI:** `lib/cortexCompletionRules.ts` defines reusable completion policies for failed transfers, loan disbursements, employee access removal and internal-control remediation. The evaluator accepts `synthetic_ci_fixture` receipts only, and can show two contrasting endings: a simulated required event was observed, versus no valid event and responsibility remains open. The tests assert that **both** results have `bankOutcomeVerified=false`. No real source-authority adapter or independent evidence verification exists yet.
+
+**Next architectural dependencies:** institute permission-scoped case participants and separate task requests from case ownership, accepted transfers, department queues, promised deadlines, escalation, authoritative confirmation adapters, and independent outcome verification. Do not advertise these as completed. Bank-wide feature coverage remains the goal; narrow banking-case routes are the current pilot.
 
 ## Empty, failure and permission boundaries
 
