@@ -232,13 +232,13 @@ export class BankingCaseService {
       if ((existing.timeline?.length ?? 0) >= 100) {
         throw new ConflictError("Case timeline capacity reached; export and archive before more changes");
       }
-      const updated = await this.database.bankingCasesRepo.update(
-        existing.id, { ownerUserId: recipientUserId, department,
+      const updated = await this.database.commitBankingCaseTransfer(
+        ctx, existing, "emergency", { ownerUserId: recipientUserId, department,
           revision: revision + 1, lastHandoffAt: now,
           timeline: [...(existing.timeline ?? []), {
             id: randomUUID(), type: "handed_off", actorUserId: ctx.userId,
             occurredAt: now, revision: revision + 1, note: reason,
-          }] }, ctx, "BankingCase"
+          }] }
       );
       await this.database.recordAuditLog({
         organizationId: ctx.organizationId,
