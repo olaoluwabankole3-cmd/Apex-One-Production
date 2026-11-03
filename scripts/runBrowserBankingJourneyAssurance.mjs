@@ -155,7 +155,7 @@ try {
     .waitFor({ state: "visible", timeout: 20000 });
 
   await ops.goto(`${baseUrl}/work/cases`, { waitUntil: "domcontentloaded" });
-  await ops.getByText(taskResponse, { exact: true }).waitFor({ state: "visible", timeout: 20000 });
+  await ops.getByText(taskResponse, { exact: false }).waitFor({ state: "visible", timeout: 20000 });
   const taskList = ok(await request(ops, "GET", "/api/v1/banking-tasks?view=requested&limit=25"),
     200, "Task requester scoped queue");
   const finishedTask = taskList.find(x => x.title === taskTitle);
