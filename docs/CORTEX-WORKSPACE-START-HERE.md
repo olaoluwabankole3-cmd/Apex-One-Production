@@ -43,6 +43,14 @@ This test demonstrates the application logic and user interactions **in isolated
 
 **Next architectural dependencies:** institute permission-scoped case participants and separate task requests from case ownership, accepted transfers, department queues, promised deadlines, escalation, authoritative confirmation adapters, and independent outcome verification. Do not advertise these as completed. Bank-wide feature coverage remains the goal; narrow banking-case routes are the current pilot.
 
+## Cross-department departmental task foundation (Nov 3 milestone)
+
+CORTEX now includes a **separate tenant-scoped BankingWorkTask record** and basic *named recipient* task request/accept/respond/decline lifecycle. It is reachable through the existing **Cases** workspace as **My assigned requests** and **Waiting on Others**, with a case-specific **Request department task** control. A task records a bounded title, question, requested response, requester, named recipient, target department, state and independent revision. The case owner stays unchanged; accepting/responding is not a financial operation or real-world outcome proof.
+
+**Privacy:** A task recipient is not granted case/document access simply because they have a task. The API only lists tasks where a currently active member is the named recipient or requester, and the full task register for a case remains restricted to the authorized case owner or admin. A member can accept/respond/decline only to a task assigned to them; all mutations are tenant-scoped, revision-checked and audited. The first rollout allows **Operations and Finance** recipients only, since those are the validated case-assignment roles. Task text must not contain confidential account data; no source attachment is automatically transferred.
+
+**Limitations:** This is not yet a department-wide unassigned queue, a configurable task router, a full accepted case ownership transfer, an SLA engine, an independently source-verified outcome, or support for all restricted bank departments. Those remain future work per [the delivery roadmap](CORTEX-BANK-WIDE-DELIVERY-ROADMAP-NOV-2026.md). Pagination and case task counts are bounded; no financial metrics are inferred.
+
 ## Empty, failure and permission boundaries
 
 - All counts on the Overview, Reviews and Reports pages are explicitly limited to the API's first 5, 50 or 25 visible entries; they are **not** global totals.
