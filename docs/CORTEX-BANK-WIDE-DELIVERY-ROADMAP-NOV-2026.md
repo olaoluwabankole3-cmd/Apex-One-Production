@@ -66,7 +66,7 @@ Run an anonymized comparison with at least one authorized bank operations lead o
 
 - **Merged and staged:** initial named-person cross-department task lifecycle; explicit task accountability separate from confidential case ownership; role-filtered Home task lists.
 - **Current change:** department-wide **unassigned** queues ONLY for explicitly shared Operations↔Finance task questions, with atomic first-claim-wins. This is not a general case-sharing or HR/AML task-broadcast capability.
-- **Next critical dependency:** receiver-accepted **case ownership transfers**. The current existing case handoff is an immediate reassignment; it is NOT an acceptance handshake. It must be replaced or safely deprecated with a two-step audited transfer.
+- **Current implementation milestone:** a receiver-accepted **case ownership transfer** replaces normal immediate handoff. The sender remains owner through pending and declined requests. One eligible named recipient may accept through an atomic CAS, while emergency administrator reassignment is separately restricted, audited and blocked during a pending offer. Public staging release and approved live signed-in UAT remain separate gates.
 - **Still not delivered:** full department registry, team supervisor hierarchy, deadlines/escalation, authoritative outcome adapters, second bank-wide process and institutional live UAT.
 - Every PR still needs four green PR suites, exact-main CI, provenance-bound ECR staging promotion, and actual signed-in UAT where approved accounts exist.
 
