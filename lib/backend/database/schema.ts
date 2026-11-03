@@ -604,6 +604,39 @@ export interface BankingPreviewOrigin {
   financialLossAssessed: false;
 }
 
+/**
+ * A department-specific request inside a BankingCase.
+ *
+ * Task visibility does not grant read access to the parent case, its
+ * source records or its documents. The recipient receives only this bounded
+ * task question and its own response; parent-case access remains independent.
+ *
+ * Stage-one rollout accepts named Operations/Finance recipients only. Other
+ * departments are enabled after the institution directory/visibility work.
+ */
+export interface BankingWorkTaskRecord {
+  id: string;
+  organizationId: string;
+  caseId: string;
+  requestedByUserId: string;
+  recipientUserId: string;
+  targetDepartment: "Operations" | "Finance";
+  title: string;
+  question: string;
+  expectedResponse: string;
+  status: "requested" | "accepted" | "responded" | "declined";
+  revision: number;
+  requestedAt: string;
+  acceptedAt?: string;
+  respondedAt?: string;
+  declinedAt?: string;
+  responseNote?: string;
+  /** A task response is not confirmation of an external financial outcome. */
+  financialOutcomeVerified: false;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface BankingCaseRecord {
   id: string;
   organizationId: string;

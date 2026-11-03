@@ -61,6 +61,8 @@ jobs:
         run: bun run test:financial-workspace
       - name: Verify tenant-scoped financial case intake security
         run: bun run test:banking-cases
+      - name: Verify tenant-scoped cross-department banking task lifecycle
+        run: bun run test:banking-tasks
       - name: Verify banking case maker-checker, evidence and preview pilot boundary
         run: bun run test:banking-reviews
       - name: Run Phase 3 infrastructure connection contract gate

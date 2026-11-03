@@ -12,6 +12,7 @@ import {
   UserRecord,
   OrganizationMembershipRecord,
   BankingCaseRecord,
+  BankingWorkTaskRecord,
   FinancialSourceRegistryRecord,
   FinancialSignerOnboardingRecord,
   FinancialSourceSnapshotRecord,
@@ -118,6 +119,7 @@ export interface DatabaseStateSnapshot {
   certifications: Map<string, CertificationRecord>;
   auditLogs: AuditLogRecord[];
   bankingCases: Map<string, BankingCaseRecord>;
+  bankingWorkTasks: Map<string, BankingWorkTaskRecord>;
   financialSourceRegistry: Map<string, FinancialSourceRegistryRecord>;
   financialSignerOnboarding: Map<string, FinancialSignerOnboardingRecord>;
   financialSourceSnapshots: Map<string, FinancialSourceSnapshotRecord>;
@@ -157,6 +159,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
   public verifications: Map<string, VerificationRecord> = new Map();
   public certifications: Map<string, CertificationRecord> = new Map();
   public bankingCases: Map<string, BankingCaseRecord> = new Map();
+  public bankingWorkTasks: Map<string, BankingWorkTaskRecord> = new Map();
   public financialSourceRegistry: Map<string, FinancialSourceRegistryRecord> = new Map();
   public financialSignerOnboarding: Map<string, FinancialSignerOnboardingRecord> = new Map();
   public financialSourceSnapshots: Map<string, FinancialSourceSnapshotRecord> = new Map();
@@ -179,6 +182,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
   public certificationsRepo: ICertificationRepository;
   public auditLogsRepo: IAuditLogRepository;
   public bankingCasesRepo: ITenantScopedRepository<BankingCaseRecord>;
+  public bankingWorkTasksRepo: ITenantScopedRepository<BankingWorkTaskRecord>;
   public financialSourceRegistryRepo: ITenantScopedRepository<FinancialSourceRegistryRecord>;
   public financialSignerOnboardingRepo: ITenantScopedRepository<FinancialSignerOnboardingRecord>;
   public financialSourceSnapshotsRepo: ITenantScopedRepository<FinancialSourceSnapshotRecord>;
@@ -226,6 +230,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
       this.certificationsRepo = new PostgresCertificationRepository(pg.manager);
       this.auditLogsRepo = pg.auditLogsRepo;
       this.bankingCasesRepo = new PostgresTenantRepository<BankingCaseRecord>("BankingCase", pg.manager);
+      this.bankingWorkTasksRepo = new PostgresTenantRepository<BankingWorkTaskRecord>("BankingWorkTask", pg.manager);
       this.financialSourceRegistryRepo = new PostgresTenantRepository<FinancialSourceRegistryRecord>("FinancialSourceRegistry", pg.manager);
       this.financialSignerOnboardingRepo = new PostgresTenantRepository<FinancialSignerOnboardingRecord>("FinancialSignerOnboarding", pg.manager);
       this.financialSourceSnapshotsRepo = new PostgresTenantRepository<FinancialSourceSnapshotRecord>("FinancialSourceSnapshot", pg.manager);
@@ -265,6 +270,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     this.certificationsRepo = new InMemoryCertificationRepository("Certification", this.certifications, handleViolation);
     this.auditLogsRepo = new InMemoryAuditLogRepository();
     this.bankingCasesRepo = new InMemoryTenantRepository<BankingCaseRecord>("BankingCase", this.bankingCases, handleViolation);
+    this.bankingWorkTasksRepo = new InMemoryTenantRepository<BankingWorkTaskRecord>("BankingWorkTask", this.bankingWorkTasks, handleViolation);
     this.financialSourceRegistryRepo = new InMemoryTenantRepository<FinancialSourceRegistryRecord>("FinancialSourceRegistry", this.financialSourceRegistry, handleViolation);
     this.financialSignerOnboardingRepo = new InMemoryTenantRepository<FinancialSignerOnboardingRecord>("FinancialSignerOnboarding", this.financialSignerOnboarding, handleViolation);
     this.financialSourceSnapshotsRepo = new InMemoryTenantRepository<FinancialSourceSnapshotRecord>("FinancialSourceSnapshot", this.financialSourceSnapshots, handleViolation);
@@ -318,6 +324,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     this.verifications.clear();
     this.certifications.clear();
     this.bankingCases.clear();
+    this.bankingWorkTasks.clear();
     this.financialSourceRegistry.clear();
     this.financialSignerOnboarding.clear();
     this.financialSourceSnapshots.clear();
@@ -715,6 +722,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
       provenance: this.cloneMap(this.provenance), verifications: this.cloneMap(this.verifications), certifications: this.cloneMap(this.certifications),
       auditLogs: this.auditLogsRepo instanceof InMemoryAuditLogRepository ? this.auditLogsRepo.getSnapshot() : [],
       bankingCases: this.cloneMap(this.bankingCases),
+      bankingWorkTasks: this.cloneMap(this.bankingWorkTasks),
       financialSourceRegistry: this.cloneMap(this.financialSourceRegistry),
       financialSignerOnboarding: this.cloneMap(this.financialSignerOnboarding),
       financialSourceSnapshots: this.cloneMap(this.financialSourceSnapshots),
@@ -732,6 +740,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     this.restoreMap(this.actions, snapshot.actions); this.restoreMap(this.provenance, snapshot.provenance); this.restoreMap(this.verifications, snapshot.verifications);
     this.restoreMap(this.certifications, snapshot.certifications);
     this.restoreMap(this.bankingCases, snapshot.bankingCases);
+    this.restoreMap(this.bankingWorkTasks, snapshot.bankingWorkTasks);
     this.restoreMap(this.financialSourceRegistry, snapshot.financialSourceRegistry);
     this.restoreMap(this.financialSignerOnboarding, snapshot.financialSignerOnboarding);
     this.restoreMap(this.financialSourceSnapshots, snapshot.financialSourceSnapshots);
