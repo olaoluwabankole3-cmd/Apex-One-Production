@@ -122,6 +122,80 @@ async function main(): Promise<void> {
   assert.equal(declined.status, "declined");
   await assert.rejects(() => work.accept(ctx("finance-a"), declineTask.id, 2), /changed/i);
 
+  // Explicit department queue: a Finance teammate can claim a bounded
+  // request WITHOUT acquiring its confidential parent BankingCase.
+  // Team-wide visibility never applies to existing private named requests.
+  const shared = await work.request(ctx("ops-a"), {
+    caseId: parent.id, expectedCaseRevision: 1,
+    deliveryMode: "department", targetDepartment: "Finance",
+    title: "Review synthetic payment classification",
+    question: "Determine which verification steps are required before reporting a source-backed outcome",
+    expectedResponse: "Provide the procedural next check only, without customer details",
+  });
+  assert.equal(shared.status, "requested");
+  assert.equal(shared.deliveryMode, "department");
+  assert.equal(shared.recipientUserId, "", "No individual owns an unclaimed team request");
+  assert.equal(shared.targetDepartment, "Finance");
+  assert.equal((await work.listMine(ctx("finance-a"), "team")).items.some(x => x.id === shared.id), true);
+  assert.equal((await work.listMine(ctx("finance-colleague"), "team")).items.some(x => x.id === shared.id), true);
+  assert.equal((await work.listMine(ctx("ops-a"), "team")).items.some(x => x.id === shared.id), false);
+  assert.equal((await work.listMine(ctx("finance-b"), "team")).items.some(x => x.id === shared.id), false,
+    "Another bank's Finance queue remains isolated");
+  await assert.rejects(() => work.listMine(ctx("admin-a"), "team"), /Finance team|Operations or Finance/i,
+    "General administrator authority must not inherit departmental task contents");
+  await assert.rejects(() => work.listMine(ctx("finance-disabled"), "team"),
+    /Current institutional membership/i);
+  assert.equal((await work.listMine(ctx("finance-a"), "received")).items.some(x => x.id === shared.id), false);
+  assert.equal((await work.listMine(ctx("finance-a"), "team")).items.some(x => x.id === request.id), false,
+    "Named employee requests must not appear in the team queue");
+  await assert.rejects(() => caseService.findById(ctx("finance-colleague"), parent.id), /not found/i);
+  await assert.rejects(() => work.request(ctx("ops-a"), {
+    caseId: parent.id, expectedCaseRevision: 1,
+    deliveryMode: "department", recipientUserId: "finance-a",
+    targetDepartment: "Finance", title: "Invalid dual delivery mode",
+    question: "This request must never reach both private and department queues",
+    expectedResponse: "Reject the ambiguous distribution before publishing any request",
+  }), /must not name a recipient/i);
+  await assert.rejects(() => work.request(ctx("ops-a"), {
+    caseId: parent.id, expectedCaseRevision: 1,
+    deliveryMode: "department", targetDepartment: "Operations",
+    title: "Invalid originating department",
+    question: "The origin owner cannot broadcast this cross-team request to itself",
+    expectedResponse: "Reject a request that does not cross a department boundary",
+  }), /different eligible task department/i);
+
+  const claims = await Promise.allSettled([
+    work.accept(ctx("finance-a"), shared.id, 1),
+    work.accept(ctx("finance-colleague"), shared.id, 1),
+  ]);
+  assert.equal(claims.filter(x => x.status === "fulfilled").length, 1,
+    "Concurrent team claims must produce exactly one assignee");
+  assert.equal(claims.filter(x => x.status === "rejected").length, 1);
+  const winner = claims[0].status === "fulfilled" ? "finance-a" : "finance-colleague";
+  const loser = winner === "finance-a" ? "finance-colleague" : "finance-a";
+  const claimed = (claims.find((x): x is PromiseFulfilledResult<Awaited<ReturnType<typeof work.accept>>> =>
+    x.status === "fulfilled"))!.value;
+  assert.equal(claimed.recipientUserId, winner);
+  assert.equal(claimed.revision, 2);
+  assert.equal(claimed.status, "accepted");
+  assert.equal((await work.listMine(ctx("finance-a"), "team")).items.length, 0,
+    "Claimed work is removed from the unassigned queue");
+  assert.equal((await work.listMine(ctx(winner), "received")).items.some(x => x.id === shared.id), true);
+  assert.equal((await work.listMine(ctx(loser), "received")).items.some(x => x.id === shared.id), false);
+  await assert.rejects(() => work.respond(ctx(loser), shared.id, {
+    expectedRevision: 2, note: "A different Finance employee cannot answer a claimed task",
+  }), /not found/i);
+  const teamReply = await work.respond(ctx(winner), shared.id, {
+    expectedRevision: 2,
+    note: "Simulated request answered by exactly one eligible Finance team member",
+  });
+  assert.equal(teamReply.status, "responded");
+  assert.equal(teamReply.financialOutcomeVerified, false);
+  assert.equal((await caseService.findById(ctx("ops-a"), parent.id)).ownerUserId, "ops-a",
+    "Even a shared task claim and response never transfer the parent case");
+  assert.equal((await work.listMine(ctx("ops-a"), "requested")).items.some(x =>
+    x.id === shared.id && x.status === "responded"), true);
+
   await assert.rejects(() => work.request(ctx("ops-a"), {
     caseId: parent.id, expectedCaseRevision: 1, ...requestInput,
     recipientUserId: "finance-b",
@@ -171,7 +245,7 @@ async function main(): Promise<void> {
   for (const record of audits.items.filter(a => a.action.startsWith("banking_task:"))) {
     assert(!JSON.stringify(record).includes("synthetic classification remains"), "Audit may not log response body");
   }
-  console.log("PASS: per-task tenant scope, named departmental recipient, case privacy, optimistic transition safety, denial paths and audit receipts");
+  console.log("PASS: private named tasks and claimable department team queues, one-winner concurrency, cross-tenant confidentiality, case owner isolation and audit receipts");
 }
 
 void main().catch(error => { console.error(error); process.exitCode = 1; });
