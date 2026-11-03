@@ -2,6 +2,7 @@ process.env.TEST_ENV = "true";
 import assert from "node:assert/strict";
 import { DatabaseStore } from "../lib/backend/database/store";
 import { BankingCaseService } from "../lib/backend/domains/banking-cases/bankingCaseService";
+import { BankingCaseTransferService } from "../lib/backend/domains/banking-cases/bankingCaseTransferService";
 import { BankingCaseReviewService } from "../lib/backend/domains/banking-cases/bankingCaseReviewService";
 import { BankingCasePilotBridge } from "../lib/backend/domains/banking-cases/bankingCasePilotBridge";
 import { getPermissionsForRole, type TenantContext } from "../lib/backend/core/security";
@@ -37,6 +38,7 @@ const ctx = (id: string, org = "org-a"): TenantContext => {
     requestId: "maker-checker-test", timestamp: now };
 };
 const cases = new BankingCaseService(db), review = new BankingCaseReviewService(db);
+const transfers = new BankingCaseTransferService(db);
 const issue = {
   title: "Review unmatched settlement candidate",
   description: "Banking operations needs independently sourced investigation and review",
@@ -85,9 +87,9 @@ async function main() {
   await failures(() => review.linkEvidence(ctx("ops-maker"), noEvidence.id, {
     sourceType: "Document", sourceId: "doc-org-a", note: "No changes allowed pending review", expectedRevision: 3,
   }), /awaits approval/i);
-  await failures(() => cases.handoff(ctx("ops-maker"), noEvidence.id, {
+  await failures(() => transfers.offer(ctx("ops-maker"), noEvidence.id, {
     recipientUserId: "finance-maker", expectedRevision: 3, reason: "Finance reviewing source document",
-  }), /awaiting checker review/i);
+  }), /awaiting independent review/i);
   await failures(() => review.review(ctx("ops-maker"), noEvidence.id, {
     decisionId: proposed.decision!.id, verdict: "approved",
     note: "Maker must not approve own proposed plan", expectedRevision: 3,
