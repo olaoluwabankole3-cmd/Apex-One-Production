@@ -95,7 +95,7 @@ jobs:
           mkdir -p .next/standalone/.next
           cp -R .next/static .next/standalone/.next/static
           if [ -d public ]; then cp -R public .next/standalone/public; fi
-          HOSTNAME=0.0.0.0 PORT=3000 nohup node .next/standalone/server.js > /tmp/apex-stage10-server.log 2>&1 &
+          APEX_DEPLOYMENT_ENVIRONMENT=staging CORTEX_FINANCIAL_PREVIEW_ENABLED=true HOSTNAME=0.0.0.0 PORT=3000 nohup node .next/standalone/server.js > /tmp/apex-stage10-server.log 2>&1 &
           echo $! > /tmp/apex-stage10-server.pid
           for attempt in $(seq 1 60); do
             if curl -fsS http://localhost:3000/api/v1/health >/dev/null; then
@@ -153,6 +153,11 @@ jobs:
           ./node_modules/.bin/playwright install --with-deps chromium
       - name: Run real-browser authentication and RBAC assurance
         run: node scripts/runBrowserAuthRbacAssurance.mjs
+      - name: Real Chromium/HTTP banking workflow with independent Finance, Operations and checker logins
+        env:
+          APEX_DEPLOYMENT_ENVIRONMENT: staging
+          CORTEX_FINANCIAL_PREVIEW_ENABLED: "true"
+        run: node scripts/runBrowserBankingJourneyAssurance.mjs
       - name: Require clean standalone image runtime
         run: |
           if grep -E -q "sharp' is required|sharp-missing-in-production|Failed to generate cache key for URL" /tmp/apex-stage10-server.log; then
