@@ -10,6 +10,7 @@ import type { BankingCaseRecord } from "@/lib/backend/database/schema";
 import type { BankingCaseAssigneeList } from "@/lib/backend/domains/banking-cases/bankingCaseService";
 import BankingCaseReviewPanel from "@/components/banking-cases/BankingCaseReviewPanel";
 import { BankingTaskWorkspace, BankingCaseTaskRequest } from "@/components/banking-cases/BankingTaskWorkspace";
+import { BankingCaseTransferInbox } from "@/components/banking-cases/BankingCaseTransferInbox";
 import { readCaseDraft } from "@/lib/financialCaseDraft";
 
 function CaseInbox() {
@@ -163,6 +164,7 @@ function CaseInbox() {
           <span className="rounded-md border border-white/10 px-3 py-2">04 · Audit</span>
         </div>
       </header>
+      <BankingCaseTransferInbox />
       <BankingTaskWorkspace key={taskRefreshKey} />
       {mayCreate && (
         <section className="rounded-xl border border-[#785D46]/30 bg-[#302D29] p-5 text-[#F5F1E8] sm:p-6">
