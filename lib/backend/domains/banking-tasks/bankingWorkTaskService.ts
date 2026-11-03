@@ -187,7 +187,7 @@ export class BankingWorkTaskService {
       }
       const now = new Date().toISOString();
       const changes = {
-        status: to, revision: expectedRevision + 1, updatedAt: now,
+        status: to, revision: expectedRevision + 1,
         ...(to === "accepted" ? { acceptedAt: now } : {}),
         ...(to === "responded" ? { respondedAt: now, responseNote: note! } : {}),
         ...(to === "declined" ? { declinedAt: now, responseNote: note! } : {}),
