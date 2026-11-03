@@ -175,10 +175,10 @@ export class BankingCaseService {
   }
 
   /**
-   * A handoff changes only operational ownership, not evidence verification or
-   * an approval/financial outcome. The expected revision guards stale clients.
-   * The caller's membership, target membership and case state are checked inside
-   * the tenant transaction, with an audit receipt in the same transaction.
+   * LEGACY EMERGENCY REASSIGNMENT, available ONLY to a verified Administrator.
+   * Normal employees MUST use the recipient-accepted /transfer flow.
+   * The instant reassignment exists for documented institutional emergency
+   * intervention; it must not bypass an outstanding receiver invitation.
    */
   public async handoff(
     ctx: TenantContext,
@@ -195,6 +195,9 @@ export class BankingCaseService {
     }
     return this.database.runInTransaction(ctx, async () => {
       const { isAdministrator } = await verifyCurrentAccess(ctx, this.database, "case:assign");
+      if (!isAdministrator) {
+        throw new ForbiddenError("Direct handoff is restricted to institutional emergency administrators; request an accepted transfer");
+      }
       let existing: BankingCaseRecord;
       try {
         existing = await this.database.bankingCasesRepo.findById(validatedCaseId, ctx, "BankingCase");
@@ -206,6 +209,7 @@ export class BankingCaseService {
         throw new NotFoundError("BankingCase");
       }
       if (existing.status !== "open") throw new ConflictError("Only open cases can be reassigned");
+      if (existing.pendingTransfer) throw new ConflictError("A receiver acceptance is pending; cancel it first");
       if (existing.decision?.state === "pending") throw new ConflictError("Cannot reassign a case awaiting checker review");
       const revision = existing.revision ?? 1;
       if (revision !== input.expectedRevision) {
@@ -240,7 +244,7 @@ export class BankingCaseService {
         organizationId: ctx.organizationId,
         actorId: ctx.userId,
         actorEmail: ctx.userEmail,
-        action: "banking_case:handoff",
+        action: "banking_case:emergency_handoff",
         resource: "BankingCase",
         resourceId: existing.id,
         requestId: ctx.requestId,
@@ -250,7 +254,7 @@ export class BankingCaseService {
           fromUserId: existing.ownerUserId, toUserId: recipientUserId,
           fromDepartment: existing.department, toDepartment: department,
           previousRevision: revision, revision: revision + 1,
-          reason, evidenceState: existing.evidenceState,
+          reason, emergencyAdministratorOverride: true, evidenceState: existing.evidenceState,
         },
       });
       return updated;
