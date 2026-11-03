@@ -35,6 +35,7 @@
     "test:document-quarantine": "tsx scripts/runDocumentLegacyQuarantineTests.ts",
     "test:auth-experience": "tsx scripts/runAuthenticationExperienceTests.ts",
     "test:banking-cases": "tsx scripts/runBankingCaseTests.ts",
+    "test:banking-tasks": "tsx scripts/runBankingWorkTaskTests.ts",
     "test:banking-reviews": "tsx scripts/runBankingCaseReviewTests.ts",
     "test:financial-workspace": "tsx scripts/runFinancialWorkspaceNavigationTests.ts && tsx scripts/runFinancialCaseDraftHandoffTests.ts && tsx scripts/runCortexSyntheticJourneyTests.ts && tsx scripts/runCortexOutcomeAttentionTests.ts",
     "infra:dev:up": "docker compose --env-file deploy/development/development.env -f deploy/development/docker-compose.infrastructure.yml up -d",
