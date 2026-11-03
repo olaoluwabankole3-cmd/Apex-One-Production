@@ -246,8 +246,17 @@ export class BankingWorkTaskService {
         task.deliveryMode === "department" && task.recipientUserId === "";
       const membership = await this.database.findUserMembership(ctx.userId, ctx.organizationId);
       if (!department || task.targetDepartment !== department || !membership ||
-          (membership.department && membership.department !== department) ||
-          (!isTeamClaim && task.recipientUserId !== ctx.userId)) {
+          (membership.department && membership.department !== department)) {
+        throw new NotFoundError("BankingWorkTask");
+      }
+      // Team members previously eligible to claim this request receive a
+      // generic conflict after another member succeeds, with NO task details.
+      // Other departments and named-task strangers still receive 404.
+      if (to === "accepted" && task.deliveryMode === "department" &&
+          task.recipientUserId !== "") {
+        throw new ConflictError("Department request already claimed; refresh the team queue");
+      }
+      if (!isTeamClaim && task.recipientUserId !== ctx.userId) {
         throw new NotFoundError("BankingWorkTask");
       }
       if (task.revision !== expectedRevision || task.status !== from) {
