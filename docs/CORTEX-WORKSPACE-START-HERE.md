@@ -6,7 +6,7 @@ The intended flagship workflow is: **Compare → Investigate → Hand off → Re
 
 ## Seven task-first navigation destinations
 
-1. **Overview** (`/`) — put accountable My Work first using up to five real authorized case records; show the next step, actor, and the difference between internal plan approval and independently confirmed completion. No invented financial totals or due dates.
+1. **Overview** (`/`) — put authenticated **My assigned requests** and **Waiting on Others** first (up to 25 named, scoped tasks per API page), followed by up to five real authorized case records; show the next step, actor, and the distinction between internal plan approval and independently confirmed completion. No invented financial totals or due dates.
 2. **Reconciliation** (`/reconciliation`) — strict settlement/mapped-fee comparison against the existing staging-only audited API. Requires `financial:read` to view and scoped `financial:preview` (or existing `financial:write`) to submit; Finance staff can compare synthetic records without receiving broader write permissions. No raw source retention.
 3. **Cases** (`/work/cases`) — create operational issues; inspect authorized cases, evidence links and history; hand off ownership between Operations and Finance.
 4. **Reviews** (`/reviews`) — checker role (`case:approve`) examines pending investigation-plan decisions. An authorized reviewer cannot check their own plan; the server enforces maker–checker rules.
@@ -45,7 +45,7 @@ This test demonstrates the application logic and user interactions **in isolated
 
 ## Cross-department departmental task foundation (Nov 3 milestone)
 
-CORTEX now includes a **separate tenant-scoped BankingWorkTask record** and basic *named recipient* task request/accept/respond/decline lifecycle. It is reachable through the existing **Cases** workspace as **My assigned requests** and **Waiting on Others**, with a case-specific **Request department task** control. A task records a bounded title, question, requested response, requester, named recipient, target department, state and independent revision. The case owner stays unchanged; accepting/responding is not a financial operation or real-world outcome proof.
+CORTEX now includes a **separate tenant-scoped BankingWorkTask record** and basic *named recipient* task request/accept/respond/decline lifecycle. It is reachable through **Home** and the existing **Cases** workspace as **My assigned requests** and **Waiting on Others**, with a case-specific **Request department task** control. A task records a bounded title, question, requested response, requester, named recipient, target department, state and independent revision. The case owner stays unchanged; accepting/responding is not a financial operation or real-world outcome proof.
 
 **Privacy:** A task recipient is not granted case/document access simply because they have a task. The API only lists tasks where a currently active member is the named recipient or requester, and the full task register for a case remains restricted to the authorized case owner or admin. A member can accept/respond/decline only to a task assigned to them; all mutations are tenant-scoped, revision-checked and audited. The first rollout allows **Operations and Finance** recipients only, since those are the validated case-assignment roles. Task text must not contain confidential account data; no source attachment is automatically transferred.
 
