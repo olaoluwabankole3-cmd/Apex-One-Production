@@ -758,7 +758,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
   public async commitBankingCaseTransfer(
     ctx: TenantContext,
     existing: BankingCaseRecord,
-    phase: "offer" | "accept" | "decline" | "cancel",
+    phase: "offer" | "accept" | "decline" | "cancel" | "emergency",
     updates: Partial<BankingCaseRecord>,
     transferId?: string
   ): Promise<BankingCaseRecord> {
@@ -770,15 +770,15 @@ export class DatabaseStore implements IUnitOfWorkProvider {
         (existing.decision?.state === "pending")) {
       throw new ConflictError("Case cannot enter this transfer transition");
     }
-    const expectedPending = phase === "offer" ? undefined : transferId;
-    if (phase === "offer" ? !!existing.pendingTransfer :
+    const expectedPending = phase === "offer" || phase === "emergency" ? undefined : transferId;
+    if ((phase === "offer" || phase === "emergency") ? !!existing.pendingTransfer :
         !expectedPending || existing.pendingTransfer?.id !== expectedPending) {
       throw new ConflictError("Transfer request was changed; refresh the case");
     }
     const timestamp = new Date().toISOString();
     if (this.postgresPersistence) {
       const sql = JSON.stringify({ ...updates, updatedAt: timestamp });
-      const pendingPredicate = phase === "offer"
+      const pendingPredicate = phase === "offer" || phase === "emergency"
         ? "(record->'pendingTransfer' IS NULL OR record->'pendingTransfer' = 'null'::jsonb)"
         : "record#>>'{pendingTransfer,id}' = " + quotePostgresLiteral(expectedPending!);
       return this.postgresPersistence.manager.withConnection(async connection => {
@@ -806,7 +806,7 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     if ((fresh.revision ?? 1) !== revision ||
         fresh.ownerUserId !== existing.ownerUserId ||
         fresh.status !== "open" || fresh.decision?.state === "pending" ||
-        (phase === "offer" ? !!fresh.pendingTransfer : fresh.pendingTransfer?.id !== expectedPending)) {
+        ((phase === "offer" || phase === "emergency") ? !!fresh.pendingTransfer : fresh.pendingTransfer?.id !== expectedPending)) {
       throw new ConflictError("Transfer or case revision changed; refresh before retrying");
     }
     return this.bankingCasesRepo.update(existing.id, updates, ctx, "BankingCase");
