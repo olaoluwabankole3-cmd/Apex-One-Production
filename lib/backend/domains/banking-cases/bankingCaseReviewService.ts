@@ -96,6 +96,9 @@ export class BankingCaseReviewService {
       await verifyCurrentAccess(ctx, this.database, "case:create");
       const item = await this.visibleCase(ctx, caseId);
       if ((item.revision ?? 1) !== input.expectedRevision) throw new ConflictError("Case changed; reload before linking evidence");
+      if (item.pendingTransfer) {
+        throw new ConflictError("Ownership acceptance is pending; withdraw or decide the transfer before changing evidence");
+      }
       if (item.status !== "open" || item.decision?.state === "pending") {
         throw new ConflictError("Cannot change evidence while an investigation plan awaits approval");
       }
@@ -137,6 +140,9 @@ export class BankingCaseReviewService {
       await verifyCurrentAccess(ctx, this.database, "case:create");
       const item = await this.visibleCase(ctx, caseId);
       if ((item.revision ?? 1) !== input.expectedRevision) throw new ConflictError("Case changed; reload before proposing");
+      if (item.pendingTransfer) {
+        throw new ConflictError("Ownership acceptance is pending; withdraw or decide the transfer before proposing a plan");
+      }
       if (item.status !== "open" || item.decision?.state === "pending") {
         throw new ConflictError("A case cannot have more than one pending investigation plan");
       }
