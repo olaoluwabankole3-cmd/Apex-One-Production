@@ -282,6 +282,10 @@ export function BankingCaseTaskRequest({
   const { user, hasPermission } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [recipientUserId, setRecipientUserId] = useState("");
+  const [deliveryMode, setDeliveryMode] = useState<"named" | "department">("named");
+  const [targetDepartment, setTargetDepartment] = useState<"Finance" | "Operations">(
+    record.department === "Operations" ? "Finance" : "Operations"
+  );
   const [title, setTitle] = useState("");
   const [question, setQuestion] = useState("");
   const [expectedResponse, setExpectedResponse] = useState("");
@@ -294,7 +298,7 @@ export function BankingCaseTaskRequest({
   const recipients = assignees.members.filter(member =>
     member.userId !== user?.id && member.department !== record.department
   );
-  if (!mayRequest || recipients.length === 0) return null;
+  if (!mayRequest) return null;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -302,10 +306,12 @@ export function BankingCaseTaskRequest({
     setSaving(true); setError(false); setNotice(false);
     try {
       await apiClient.postData<BankingWorkTaskRecord>("/api/v1/banking-tasks", {
-        caseId: record.id, recipientUserId, title, question, expectedResponse,
+        caseId: record.id,
+        ...(deliveryMode === "department" ? { deliveryMode: "department", targetDepartment } : { recipientUserId }),
+        title, question, expectedResponse,
         expectedCaseRevision: record.revision ?? 1,
       });
-      setExpanded(false); setRecipientUserId(""); setTitle("");
+      setExpanded(false); setRecipientUserId(""); setDeliveryMode("named"); setTitle("");
       setQuestion(""); setExpectedResponse(""); setNotice(true);
       onCreated();
     } catch { setError(true); }
@@ -327,15 +333,43 @@ export function BankingCaseTaskRequest({
       {notice && <p role="status" className="mt-3 text-xs text-[#D9A06F]">Task requested. The case owner remains unchanged; check Waiting on Others for progress.</p>}
       {error && <p role="alert" className="mt-3 text-xs text-amber-200">Task request not confirmed. Review the case and retry; do not duplicate requests.</p>}
       {expanded && <form onSubmit={(event) => void submit(event)} className="mt-4 grid gap-3">
-        <label className="text-xs text-[#D3C9BD]">Named recipient
-          <select required value={recipientUserId} onChange={event => setRecipientUserId(event.target.value)}
+        <label className="text-xs text-[#D3C9BD]">How to send this task
+          <select value={deliveryMode}
+            onChange={event => setDeliveryMode(event.target.value as "named" | "department")}
             className="mt-1 w-full rounded-lg border border-white/15 bg-[#24231F] p-3 text-sm text-[#F5F1E8]">
-            <option value="">Select an authorized employee in the other department</option>
-            {recipients.map(member =>
-              <option key={member.userId} value={member.userId}>{member.name} · {member.department}</option>
-            )}
+            <option value="named">Private request to a named employee</option>
+            <option value="department">Share request with the receiving department queue</option>
           </select>
         </label>
+        {deliveryMode === "named" ? (
+          <label className="text-xs text-[#D3C9BD]">Named recipient
+            <select required value={recipientUserId} onChange={event => setRecipientUserId(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-white/15 bg-[#24231F] p-3 text-sm text-[#F5F1E8]">
+              <option value="">Select an authorized employee in the other department</option>
+              {recipients.map(member =>
+                <option key={member.userId} value={member.userId}>{member.name} · {member.department}</option>
+              )}
+            </select>
+          </label>
+        ) : (
+          <>
+            <label className="text-xs text-[#D3C9BD]">Receiving department
+              <select required value={targetDepartment}
+                onChange={event => setTargetDepartment(event.target.value as "Finance" | "Operations")}
+                className="mt-1 w-full rounded-lg border border-white/15 bg-[#24231F] p-3 text-sm text-[#F5F1E8]">
+                {(["Finance", "Operations"] as const)
+                  .filter(department => department !== record.department)
+                  .map(department => <option key={department} value={department}>{department} Team Queue</option>)}
+              </select>
+            </label>
+            <p className="rounded-lg border border-amber-300/25 bg-amber-300/[0.04] p-3 text-xs leading-5 text-amber-100/80">
+              Department sharing is explicit: every eligible employee in the receiving team
+              may read the task title, question and requested output before someone claims it.
+              Never include customer names, account numbers, transaction details, case documents
+              or restricted information. The parent case stays private.
+            </p>
+          </>
+        )}
         <label className="text-xs text-[#D3C9BD]">Task title
           <input required minLength={8} maxLength={120} value={title} onChange={event => setTitle(event.target.value)}
             className="mt-1 w-full rounded-lg border border-white/15 bg-[#24231F] p-3 text-sm text-[#F5F1E8]"
