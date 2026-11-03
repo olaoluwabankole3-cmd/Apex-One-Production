@@ -187,6 +187,15 @@ try {
     expectedRevision: final.revision,
   }), [409], "Duplicate review");
   report("independent checker approves through real Reviews UI; case stays open/unverified, duplicate review rejected");
+  await checker.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
+  await checker.locator("#cortex-my-work").waitFor({ state: "visible", timeout: 20000 });
+  const workRow = checker.locator("#cortex-my-work a").filter({ hasText: created.title });
+  await workRow.getByText("Plan approved · outcome unconfirmed", { exact: true })
+    .waitFor({ state: "visible", timeout: 20000 });
+  assert((await workRow.innerText()).includes("Obtain independent confirmation"));
+  assert((await workRow.innerText()).includes("Outcome not confirmed"));
+  report("real browser shows approved plan still requires outcome proof; no fabricated final resolution");
+
 
   const audits = ok(await request(checker, "GET", "/api/v1/audit?limit=100"), 200, "Authorized audit");
   const events = audits.filter((event) => event.resourceId === created.id);
