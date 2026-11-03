@@ -58,9 +58,12 @@ async function main(): Promise<void> {
     department: "Operations",
     priority: "normal",
   });
+  const responseDueAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   const request = await work.request(ctx("ops-a"), {
     caseId: parent.id, expectedCaseRevision: parent.revision!, ...requestInput,
+    dueAt: responseDueAt,
   });
+  assert.equal(request.dueAt, responseDueAt, "Task target is stored exactly as supplied");
   assert.equal(request.status, "requested");
   assert.equal(request.targetDepartment, "Finance");
   assert.equal(request.financialOutcomeVerified, false);
@@ -75,6 +78,20 @@ async function main(): Promise<void> {
   assert.equal((await work.listMine(ctx("ops-a"), "requested")).items.length, 1);
   assert.equal((await work.listMine(ctx("finance-colleague"), "received")).items.length, 0);
   assert.equal((await work.listMine(ctx("finance-b"), "received")).items.length, 0);
+  assert.equal((await work.listForCase(ctx("ops-a"), parent.id)).items.length, 1);
+
+  // Declared task targets are bounded by the server and not inferred. Invalid
+  // timestamps must not leak requests or grant any additional case access.
+  for (const invalidDeadline of [
+    "tomorrow",
+    "2026-11-03T09:00:00.000Z",
+    new Date(Date.now() + 31 * 24 * 60 * 60 * 1000).toISOString(),
+  ]) {
+    await assert.rejects(() => work.request(ctx("ops-a"), {
+      caseId: parent.id, expectedCaseRevision: 1, ...requestInput,
+      dueAt: invalidDeadline,
+    }), /dueAt/i, "Malformed, past or excessive deadlines must be rejected");
+  }
   assert.equal((await work.listForCase(ctx("ops-a"), parent.id)).items.length, 1);
 
   await assert.rejects(() => work.accept(ctx("finance-colleague"), request.id, 1), /not found/i);
@@ -134,6 +151,7 @@ async function main(): Promise<void> {
   });
   assert.equal(shared.status, "requested");
   assert.equal(shared.deliveryMode, "department");
+  assert.equal(shared.dueAt, undefined, "Unscheduled tasks must not receive invented deadlines");
   assert.equal(shared.recipientUserId, "", "No individual owns an unclaimed team request");
   assert.equal(shared.targetDepartment, "Finance");
   assert.equal((await work.listMine(ctx("finance-a"), "team")).items.some(x => x.id === shared.id), true);
@@ -245,7 +263,7 @@ async function main(): Promise<void> {
   for (const record of audits.items.filter(a => a.action.startsWith("banking_task:"))) {
     assert(!JSON.stringify(record).includes("synthetic classification remains"), "Audit may not log response body");
   }
-  console.log("PASS: private named tasks and claimable department team queues, one-winner concurrency, cross-tenant confidentiality, case owner isolation and audit receipts");
+  console.log("PASS: private named tasks, optional validated deadlines, department team queues, concurrency, confidentiality, case ownership and audit receipts");
 }
 
 void main().catch(error => { console.error(error); process.exitCode = 1; });

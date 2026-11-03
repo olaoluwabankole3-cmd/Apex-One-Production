@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     assertAllowedQueryKeys(req.nextUrl.searchParams, []);
     const body = await readJsonObject(req);
     assertAllowedKeys(body, ["caseId", "recipientUserId", "deliveryMode", "targetDepartment",
-      "title", "question", "expectedResponse", "expectedCaseRevision"]);
+      "title", "question", "expectedResponse", "dueAt", "expectedCaseRevision"]);
     const deliveryMode = body.deliveryMode === undefined ? "named" :
       Validator.requireEnum(body.deliveryMode, ["named", "department"] as const, "deliveryMode");
     const expectedCaseRevision = body.expectedCaseRevision;
@@ -54,6 +54,9 @@ export async function POST(req: NextRequest) {
       title: Validator.requireString(body.title, "title", { minLength: 8, maxLength: 120 }),
       question: Validator.requireString(body.question, "question", { minLength: 15, maxLength: 600 }),
       expectedResponse: Validator.requireString(body.expectedResponse, "expectedResponse", { minLength: 15, maxLength: 300 }),
+      ...(body.dueAt !== undefined ? {
+        dueAt: Validator.requireString(body.dueAt, "dueAt", { minLength: 24, maxLength: 24 }),
+      } : {}),
       expectedCaseRevision,
     });
     return NextResponse.json(toApiSuccessResponse(task, requestId), { status: 201, headers: HEADERS });

@@ -31,6 +31,8 @@ export interface RequestBankingTaskInput {
   title: string;
   question: string;
   expectedResponse: string;
+  /** Optional canonical UTC target, five minutes to thirty days ahead. */
+  dueAt?: string;
   expectedCaseRevision: number;
 }
 export interface TransitionBankingTaskInput {
@@ -45,6 +47,23 @@ export interface ListBankingTaskOptions {
 function requireRevision(value: number): number {
   if (!Number.isSafeInteger(value) || value < 1 || value > MAX_REVISION) {
     throw new ValidationError("expectedRevision must be a positive integer");
+  }
+  return value;
+}
+
+function validateDueAt(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
+    throw new ValidationError("dueAt must be a canonical UTC timestamp");
+  }
+  const millis = Date.parse(value);
+  if (!Number.isFinite(millis) || new Date(millis).toISOString() !== value) {
+    throw new ValidationError("dueAt must be a valid UTC timestamp");
+  }
+  const lead = millis - Date.now();
+  if (lead < 5 * 60 * 1000 || lead > 30 * 24 * 60 * 60 * 1000) {
+    throw new ValidationError("dueAt must be between 5 minutes and 30 days in the future");
   }
   return value;
 }
@@ -91,6 +110,7 @@ export class BankingWorkTaskService {
     const question = Validator.requireString(input.question, "question", { minLength: 15, maxLength: 600 });
     const expectedResponse = Validator.requireString(input.expectedResponse, "expectedResponse", { minLength: 15, maxLength: 300 });
     const expectedCaseRevision = requireRevision(input.expectedCaseRevision);
+    const dueAt = validateDueAt(input.dueAt);
 
     return this.database.runInTransaction(ctx, async () => {
       const { isAdministrator } = await verifyCurrentAccess(ctx, this.database, "case:assign");
@@ -154,6 +174,7 @@ export class BankingWorkTaskService {
         targetDepartment: department,
         ...(deliveryMode === "department" ? { deliveryMode: "department" as const } : {}),
         title, question, expectedResponse,
+        ...(dueAt ? { dueAt } : {}),
         status: "requested", revision: 1,
         requestedAt: now, createdAt: now, updatedAt: now,
         financialOutcomeVerified: false,
@@ -166,7 +187,8 @@ export class BankingWorkTaskService {
         status: "success", timestamp: now,
         metadata: { caseId, recipientUserId, targetDepartment: department,
           deliveryMode, departmentShared: deliveryMode === "department",
-          caseOwnerUnchanged: true, financialOutcomeVerified: false },
+          caseOwnerUnchanged: true, financialOutcomeVerified: false,
+          ...(dueAt ? { dueAt } : {}) },
       });
       return task;
     });
