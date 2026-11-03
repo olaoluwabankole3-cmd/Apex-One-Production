@@ -62,6 +62,14 @@ Run an anonymized comparison with at least one authorized bank operations lead o
 
 **Non-blocking future program (after Nov 12):** bank-owned ingestion connectors; multi-replica and resilience; SSO/MFA/SCIM, full permission hierarchy; workflow designer and configurable SLA rules; AML restricted tenancy; branch and mobile scale, digital-signature and retention; analytics backed only by verified facts; vendor integrations; migration/cost/enterprise onboarding; compliance and professional security review. A 10-day staging pilot cannot demonstrate completion of this program.
 
+## November 3 execution ledger
+
+- **Merged and staged:** initial named-person cross-department task lifecycle; explicit task accountability separate from confidential case ownership; role-filtered Home task lists.
+- **Current change:** department-wide **unassigned** queues ONLY for explicitly shared Operations↔Finance task questions, with atomic first-claim-wins. This is not a general case-sharing or HR/AML task-broadcast capability.
+- **Next critical dependency:** receiver-accepted **case ownership transfers**. The current existing case handoff is an immediate reassignment; it is NOT an acceptance handshake. It must be replaced or safely deprecated with a two-step audited transfer.
+- **Still not delivered:** full department registry, team supervisor hierarchy, deadlines/escalation, authoritative outcome adapters, second bank-wide process and institutional live UAT.
+- Every PR still needs four green PR suites, exact-main CI, provenance-bound ECR staging promotion, and actual signed-in UAT where approved accounts exist.
+
 ## Honest daily release ledger
 
 Each day, link PR, exact commit, CI run, staging image digest, screenshots/browser evidence and blocker in GitHub issue #55. Mark `NOT STARTED / IN PROGRESS / TESTED / MERGED / STAGED / BLOCKED` separately. **Only STAGED + UAT-verified** features are permitted in the interactive demo.
