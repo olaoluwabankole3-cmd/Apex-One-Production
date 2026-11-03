@@ -19,9 +19,9 @@ if (process.env.CI !== "true" ||
 
 const PASSWORD = "Stage10Enterprise!2026";
 const id = (role) => `stage10.${role}@example.test`;
-const HEAD = "reference,currency,amount_minor,record_id,recorded_at\\n";
-const expected = HEAD + "SYN-UAT-SETTLEMENT-001,NGN,12500,synthetic-ledger-001,2026-11-02T09:00:00Z\\n";
-const observed = HEAD + "SYN-UAT-SETTLEMENT-001,NGN,12400,synthetic-provider-001,2026-11-02T09:01:00Z\\n";
+const HEAD = "reference,currency,amount_minor,record_id,recorded_at\n";
+const expected = HEAD + "SYN-UAT-SETTLEMENT-001,NGN,12500,synthetic-ledger-001,2026-11-02T09:00:00Z\n";
+const observed = HEAD + "SYN-UAT-SETTLEMENT-001,NGN,12400,synthetic-provider-001,2026-11-02T09:01:00Z\n";
 
 const browser = await chromium.launch({ headless: true });
 const contexts = [];
