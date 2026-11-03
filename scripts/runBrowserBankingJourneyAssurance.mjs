@@ -228,16 +228,57 @@ try {
   assert(requestedTeam.some(x => x.id === shared.id && x.status === "responded"));
   report("real PostgreSQL: department shared task visible to two Finance users; exactly one atomic claimant; response audited without case disclosure or ownership transfer");
 
-  const handoff = ok(await request(ops, "POST", `/api/v1/banking-cases/${created.id}/handoff`, {
+  const offered = ok(await request(ops, "POST", `/api/v1/banking-cases/${created.id}/transfer`, {
+    action: "request",
     recipientUserId: "user-stage10-finance",
     expectedRevision: created.revision,
     reason: "Finance must independently inspect the synthetic source review question",
-  }), 200, "Operations handoff");
+  }), 200, "Operations offers accepted ownership transfer");
+  assert.equal(offered.ownerUserId, "user-stage10-operations",
+    "Sending the invitation must NOT relinquish case ownership");
+  assert.equal(offered.pendingTransfer?.recipientUserId, "user-stage10-finance");
+  ok(await request(ops, "GET", `/api/v1/banking-cases/${created.id}`),
+    200, "Sender still has the case before receiver acceptance");
+  denied(await request(finance, "GET", `/api/v1/banking-cases/${created.id}`),
+    [404], "Receiving Finance does not gain parent case access before acceptance");
+  denied(await request(ops, "POST", `/api/v1/banking-cases/${created.id}/handoff`, {
+    recipientUserId: "user-stage10-finance",
+    expectedRevision: offered.revision,
+    reason: "Old instant transfer is forbidden to normal Operations staff",
+  }), [403], "Non-administrator direct handoff bypass denied");
+  denied(await request(checker, "POST", `/api/v1/banking-cases/${created.id}/handoff`, {
+    recipientUserId: "user-stage10-finance-colleague",
+    expectedRevision: offered.revision,
+    reason: "Even emergency administrators cannot bypass a pending recipient",
+  }), [409], "Emergency override cannot jump an outstanding invitation");
+  const incoming = ok(await request(finance, "GET", "/api/v1/banking-case-transfers"),
+    200, "Finance limited transfer inbox");
+  assert(incoming.items.some(x => x.transferId === offered.pendingTransfer.id));
+  assert(!JSON.stringify(incoming).includes(created.description),
+    "Invitation list must never expose confidential case description");
+  assert(!JSON.stringify(incoming).includes(offered.pendingTransfer.reason),
+    "Invitation list must not expose the sender's freeform private reason");
+  const otherInbox = ok(await request(financeColleague, "GET", "/api/v1/banking-case-transfers"),
+    200, "Colleague separate transfer inbox");
+  assert(!otherInbox.items.some(x => x.caseId === created.id));
+  await finance.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
+  await finance.locator("#cortex-case-transfer-inbox").waitFor({ state: "visible" });
+  await finance.getByRole("button", { name: "Accept case ownership" })
+    .waitFor({ state: "visible", timeout: 20000 });
+  await finance.getByRole("button", { name: "Accept case ownership" }).click();
+  await finance.getByText("Case responsibility accepted", { exact: false })
+    .waitFor({ state: "visible", timeout: 20000 });
+  const handoff = ok(await request(finance, "GET", `/api/v1/banking-cases/${created.id}`),
+    200, "Finance case after accepted transfer");
   assert.equal(handoff.department, "Finance");
   assert.equal(handoff.ownerUserId, "user-stage10-finance");
+  assert.equal(handoff.pendingTransfer, null);
   denied(await request(ops, "GET", `/api/v1/banking-cases/${created.id}`),
-    [404], "Former case owner denied");
-  report("Operations to Finance handoff enforces single ownership and hides case from former maker");
+    [404], "Former case owner denied after actual acceptance");
+  denied(await request(financeColleague, "POST", `/api/v1/banking-cases/${created.id}/transfer`, {
+    action: "accept", transferId: offered.pendingTransfer.id, expectedRevision: offered.revision,
+  }), [404], "Other Finance member cannot steal or replay the accepted transfer");
+  report("real browser: Operations keeps responsibility until Finance sees private invitation and accepts; case access changes exactly once");
 
   const link = ok(await request(finance, "POST", `/api/v1/banking-cases/${created.id}/evidence`, {
     sourceType: "Document",
@@ -260,11 +301,12 @@ try {
     note: "Maker must be forbidden from checking an own proposal",
     expectedRevision: proposal.revision,
   }), [403], "Maker-checker separation");
-  denied(await request(finance, "POST", `/api/v1/banking-cases/${created.id}/handoff`, {
+  denied(await request(finance, "POST", `/api/v1/banking-cases/${created.id}/transfer`, {
+    action: "request",
     recipientUserId: "user-stage10-operations",
     expectedRevision: proposal.revision,
     reason: "Pending review must lock ownership against transfer",
-  }), [409], "Pending handoff lock");
+  }), [409], "Pending transfer lock");
   report("Finance links only existing synthetic metadata, proposes review, cannot self-approve or reassign locked case");
 
   await checker.goto(`${baseUrl}/reviews`, { waitUntil: "domcontentloaded" });
@@ -286,7 +328,7 @@ try {
   assert.equal(final.status, "open");
   assert.equal(final.evidenceState, "unverified");
   assert.deepEqual(final.timeline.map((item) => item.type), [
-    "created", "handed_off", "evidence_linked", "decision_proposed", "decision_reviewed",
+    "created", "transfer_requested", "handed_off", "evidence_linked", "decision_proposed", "decision_reviewed",
   ]);
   denied(await request(checker, "POST", `/api/v1/banking-cases/${created.id}/decision`, {
     decisionId: proposal.decision.id,
@@ -308,12 +350,12 @@ try {
   const audits = ok(await request(checker, "GET", "/api/v1/audit?limit=100"), 200, "Authorized audit");
   const events = audits.filter((event) => event.resourceId === created.id);
   for (const action of [
-    "banking_case:create", "banking_case:handoff", "banking_case:evidence_linked",
+    "banking_case:create", "banking_case:transfer_requested", "banking_case:transfer_accepted", "banking_case:evidence_linked",
     "banking_case:decision_proposed", "banking_case:decision_reviewed",
   ]) {
     assert(events.some((event) => event.action === action), "Missing auditable action: " + action);
   }
-  report("checker reads durable audit trail, with all five state transitions recorded");
+  report("checker reads durable audit trail, including request and independently accepted ownership");
 
   console.log("CORTEX STAGE 10 HTTP BROWSER BANKING UAT: ALL CHECKS PASSED (isolated synthetic data)");
 } finally {

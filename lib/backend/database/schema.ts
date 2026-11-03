@@ -564,7 +564,7 @@ export interface UpdateWorkflowRunInput {
 /** Bank-controlled, append-only-at-service-boundary case chronology. */
 export interface BankingCaseTimelineEvent {
   id: string;
-  type: "created" | "handed_off" | "evidence_linked" | "decision_proposed" | "decision_reviewed";
+  type: "created" | "handed_off" | "transfer_requested" | "transfer_declined" | "transfer_cancelled" | "evidence_linked" | "decision_proposed" | "decision_reviewed";
   actorUserId: string;
   occurredAt: string;
   note: string;
@@ -640,6 +640,17 @@ export interface BankingWorkTaskRecord {
   updatedAt: string;
 }
 
+/** Minimal incoming transfer invitation: no case title, description, evidence or source links. */
+export interface BankingCaseTransferInvitation {
+  caseId: string;
+  transferId: string;
+  fromDepartment: "Operations" | "Finance";
+  targetDepartment: "Operations" | "Finance";
+  requestedAt: string;
+  revision: number;
+  priority: "normal" | "high";
+}
+
 export interface BankingCaseRecord {
   id: string;
   organizationId: string;
@@ -656,6 +667,17 @@ export interface BankingCaseRecord {
   /** Optimistic revision of case ownership state; historical cases default to 1. */
   revision?: number;
   lastHandoffAt?: string;
+  /** An offered case remains with the sender until the named recipient accepts. */
+  pendingTransfer?: {
+    id: string;
+    requestedByUserId: string;
+    recipientUserId: string;
+    fromDepartment: "Operations" | "Finance";
+    targetDepartment: "Operations" | "Finance";
+    requestedAt: string;
+    /** Reason stays case-private. Invitations expose only safe metadata. */
+    reason: string;
+  } | null;
   timeline?: BankingCaseTimelineEvent[];
   evidenceLinks?: BankingCaseEvidenceLink[];
   decision?: BankingCaseDecision;

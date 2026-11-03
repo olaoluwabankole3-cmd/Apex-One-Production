@@ -10,6 +10,7 @@ import type { BankingCaseRecord } from "@/lib/backend/database/schema";
 import type { BankingCaseAssigneeList } from "@/lib/backend/domains/banking-cases/bankingCaseService";
 import BankingCaseReviewPanel from "@/components/banking-cases/BankingCaseReviewPanel";
 import { BankingTaskWorkspace, BankingCaseTaskRequest } from "@/components/banking-cases/BankingTaskWorkspace";
+import { BankingCaseTransferInbox } from "@/components/banking-cases/BankingCaseTransferInbox";
 import { readCaseDraft } from "@/lib/financialCaseDraft";
 
 function CaseInbox() {
@@ -89,20 +90,39 @@ function CaseInbox() {
     setNotice(null);
     try {
       await apiClient.postData<BankingCaseRecord>(
-        `/api/v1/banking-cases/${encodeURIComponent(record.id)}/handoff`,
-        { recipientUserId: handoffRecipientId, expectedRevision: record.revision ?? 1,
-          reason: handoffReason }
+        `/api/v1/banking-cases/${encodeURIComponent(record.id)}/transfer`,
+        { action: "request", recipientUserId: handoffRecipientId,
+          expectedRevision: record.revision ?? 1, reason: handoffReason }
       );
       setHandoffCaseId(null);
       setHandoffRecipientId("");
       setHandoffReason("");
-      setNotice("Ownership handoff recorded. The case remains open and unverified; no approval or financial result was recorded.");
+      setNotice("Ownership transfer requested. You remain accountable until the named recipient explicitly accepts.");
       await refresh();
     } catch {
-      setError("Handoff was not confirmed. Case ownership may have changed; refresh the queue before retrying.");
+      setError("Transfer request was not confirmed. Refresh the case and check whether another request is pending.");
     } finally {
       setSendingHandoff(false);
     }
+  }
+
+  async function cancelPendingTransfer(record: BankingCaseRecord) {
+    if (!record.pendingTransfer || sendingHandoff) return;
+    setSendingHandoff(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await apiClient.postData<BankingCaseRecord>(
+        "/api/v1/banking-cases/" + encodeURIComponent(record.id) + "/transfer",
+        { action: "cancel", transferId: record.pendingTransfer.id,
+          expectedRevision: record.revision ?? 1 }
+      );
+      setNotice("Transfer request cancelled. The original case owner remains accountable.");
+      await refresh();
+    } catch {
+      setError("Cancellation not confirmed. Refresh to check whether the receiver accepted first.");
+      await refresh();
+    } finally { setSendingHandoff(false); }
   }
 
   function clearPreviewDraft() {
@@ -163,6 +183,7 @@ function CaseInbox() {
           <span className="rounded-md border border-white/10 px-3 py-2">04 · Audit</span>
         </div>
       </header>
+      <BankingCaseTransferInbox />
       <BankingTaskWorkspace key={taskRefreshKey} />
       {mayCreate && (
         <section className="rounded-xl border border-[#785D46]/30 bg-[#302D29] p-5 text-[#F5F1E8] sm:p-6">
@@ -270,22 +291,36 @@ function CaseInbox() {
                   <BankingCaseTaskRequest record={item} assignees={assignees}
                     onCreated={() => setTaskRefreshKey(value => value + 1)} />
                 )}
-                {mayAssign && (administrator || item.ownerUserId === user?.id) && assignees && item.decision?.state !== "pending" && (
+                {item.pendingTransfer && (administrator || item.ownerUserId === user?.id) && (
+                  <div className="mt-4 rounded-lg border border-[#C58D5F]/35 bg-[#C58D5F]/[0.05] p-4 text-xs leading-6 text-[#D9A06F]">
+                    <p className="font-semibold">Ownership offer awaiting recipient acceptance</p>
+                    <p className="mt-1 text-[#D3C9BD]/75">
+                      Sent to {assignees?.members.find(member => member.userId === item.pendingTransfer?.recipientUserId)?.name ?? "named employee"} in {item.pendingTransfer.targetDepartment}.
+                      Current owner is still responsible. No transfer has occurred.
+                    </p>
+                    <button type="button" disabled={sendingHandoff}
+                      onClick={() => void cancelPendingTransfer(item)}
+                      className="mt-3 rounded-lg border border-[#C58D5F]/40 px-3 py-2 font-semibold disabled:opacity-40">
+                      Withdraw transfer request
+                    </button>
+                  </div>
+                )}
+                {mayAssign && (administrator || item.ownerUserId === user?.id) && assignees && item.decision?.state !== "pending" && !item.pendingTransfer && (
                   <div className="mt-4 border-t border-white/10 pt-4">
                     {handoffCaseId !== item.id ? (
                       <button type="button" disabled={sendingHandoff} onClick={() => {
                         setHandoffCaseId(item.id); setHandoffRecipientId(""); setHandoffReason("");
                       }} className="rounded-lg border border-[#C58D5F]/40 px-3 py-2 text-xs font-semibold text-[#D9A06F]">
-                        Hand off to a colleague
+                        Request accepted ownership transfer
                       </button>
                     ) : (
                       <form onSubmit={(event) => void sendHandoff(event, item)} className="space-y-3">
-                        <p className="text-sm font-semibold">Record an accountable handoff</p>
+                        <p className="text-sm font-semibold">Request a receiving employee to accept the case</p>
                         <label className="block text-xs text-ivory/65">Recipient
                           <select required value={handoffRecipientId} onChange={(event) => setHandoffRecipientId(event.target.value)}
                             className="mt-2 w-full rounded-lg border border-white/15 bg-[#24231F] p-3 text-sm text-ivory">
                             <option value="">Select an active employee…</option>
-                            {assignees.members.filter((candidate) => candidate.userId !== item.ownerUserId).map((candidate) => (
+                            {assignees.members.filter((candidate) => candidate.userId !== item.ownerUserId && candidate.department !== item.department).map((candidate) => (
                               <option key={candidate.userId} value={candidate.userId}>{candidate.name} · {candidate.department}</option>
                             ))}
                           </select>
@@ -296,11 +331,11 @@ function CaseInbox() {
                             placeholder="Explain what the receiving department needs to investigate…"
                             className="mt-2 w-full rounded-lg border border-white/15 bg-[#24231F] p-3 text-sm text-ivory" />
                         </label>
-                        <p className="text-xs text-ivory/45">Ownership transfers only after server validation. This does not approve or close the case.</p>
+                        <p className="text-xs text-ivory/45">You retain full case ownership until the recipient accepts. The invitation does not expose private case evidence or verify an external outcome.</p>
                         <div className="flex gap-2">
                           <button type="submit" disabled={sendingHandoff || !handoffRecipientId}
                             className="rounded-lg bg-[#C58D5F] px-4 py-2 text-xs font-bold text-[#171715] disabled:opacity-40">
-                            {sendingHandoff ? "Submitting…" : "Confirm handoff"}
+                            {sendingHandoff ? "Submitting…" : "Request transfer acceptance"}
                           </button>
                           <button type="button" disabled={sendingHandoff} onClick={() => setHandoffCaseId(null)}
                             className="rounded-lg border border-white/15 px-4 py-2 text-xs text-ivory/70">Cancel</button>

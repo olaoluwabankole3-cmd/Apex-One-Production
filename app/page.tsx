@@ -11,6 +11,7 @@ import { apiClient } from "@/lib/apiClient";
 import type { BankingCaseRecord } from "@/lib/backend/database/schema";
 import { describeCaseAttention } from "@/lib/cortexCaseAttention";
 import { BankingTaskWorkspace } from "@/components/banking-cases/BankingTaskWorkspace";
+import { BankingCaseTransferInbox } from "@/components/banking-cases/BankingCaseTransferInbox";
 
 const journeys = [
   {
@@ -100,6 +101,7 @@ export default function FinancialOperationsOverview() {
         </div>
       </header>
 
+      {canReadCases && <BankingCaseTransferInbox />}
       {canReadCases && <BankingTaskWorkspace />}
 
       {canReadCases && (
