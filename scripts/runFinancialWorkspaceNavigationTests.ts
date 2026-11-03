@@ -37,6 +37,14 @@ assert(overview.indexOf('href: "/documents"') < overview.indexOf('href: "/review
 assert(overview.includes("const allowedJourneys = journeys.filter(item => hasPermission(item.permission))"),
   "Home task actions must be filtered by the authenticated role");
 assert.match(overview, /not an institution-wide total/);
+assert(overview.includes('id="cortex-my-work"'), "Home must show work needing attention");
+assert(overview.indexOf('id="cortex-my-work"') < overview.indexOf('aria-labelledby="cortex-start-heading"'),
+  "My Work must appear ahead of the workspace/tool menu");
+assert(overview.includes("describeCaseAttention(item"), "Case list must derive truthful next actions");
+const caseDetail = load("components/banking-cases/BankingCaseReviewPanel.tsx");
+assert(caseDetail.includes("Outcome checkpoint"), "Case investigations must show the missing outcome checkpoint");
+assert(caseDetail.includes("No authoritative outcome-confirmation feed"),
+  "Case detail must disclose that real outcome verification is not yet available");
 for (const obsolete of ["RevenueChart", "KpiGrid", "PortfolioBreakdown", "ExecutiveSummary"]) {
   assert(!overview.includes(obsolete), `Obsolete or unverified dashboard item: ${obsolete}`);
 }
