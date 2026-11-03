@@ -48,8 +48,8 @@ const sourceFree = {
   department: "Operations" as const, priority: "normal" as const,
 };
 
-async function rejects(work: () => Promise<unknown>, pattern: RegExp) {
-  await assert.rejects(work, pattern);
+async function rejects(work: () => Promise<unknown>, pattern: RegExp, message?: string) {
+  await assert.rejects(work, pattern, message);
 }
 
 async function main() {
