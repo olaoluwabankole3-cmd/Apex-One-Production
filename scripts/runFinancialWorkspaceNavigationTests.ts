@@ -40,6 +40,21 @@ assert.match(overview, /not an institution-wide total/);
 assert(overview.includes('id="cortex-my-work"'), "Home must show work needing attention");
 assert(overview.includes('<BankingTaskWorkspace />'),
   "Home must show the same bounded, authenticated My Tasks and Waiting on Others work queues");
+assert(overview.includes('<BankingCaseTransferInbox />'),
+  "Home must expose the scoped incoming ownership transfer invitation inbox");
+assert(overview.indexOf('<BankingCaseTransferInbox />') < overview.indexOf('<BankingTaskWorkspace />'),
+  "Incoming case ownership offers must appear ahead of general task queues");
+const transferInbox = load("components/banking-cases/BankingCaseTransferInbox.tsx");
+assert(transferInbox.includes("Incoming Case Transfers") &&
+  transferInbox.includes("Accept case ownership") &&
+  transferInbox.includes("Decline with reason"),
+  "Receiving employees must have explicit accept and decline controls");
+assert(!transferInbox.includes("item.description") && !transferInbox.includes("item.title"),
+  "Before acceptance, incoming invitations must not expose private case details");
+const transferRoute = load("app/api/v1/banking-cases/[id]/transfer/route.ts");
+assert(transferRoute.includes("resolveTenantContext") &&
+  transferRoute.includes('"request", "accept", "decline", "cancel"'),
+  "Transfer lifecycle must be authenticated and action-validated on the server");
 assert(overview.indexOf('<BankingTaskWorkspace />') < overview.indexOf('id="cortex-my-work"'),
   "Actual assigned work must appear ahead of the case and specialist lists");
 const taskWorkspace = load("components/banking-cases/BankingTaskWorkspace.tsx");
