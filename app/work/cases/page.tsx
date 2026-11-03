@@ -9,6 +9,7 @@ import { apiClient } from "@/lib/apiClient";
 import type { BankingCaseRecord } from "@/lib/backend/database/schema";
 import type { BankingCaseAssigneeList } from "@/lib/backend/domains/banking-cases/bankingCaseService";
 import BankingCaseReviewPanel from "@/components/banking-cases/BankingCaseReviewPanel";
+import { BankingTaskWorkspace, BankingCaseTaskRequest } from "@/components/banking-cases/BankingTaskWorkspace";
 import { readCaseDraft } from "@/lib/financialCaseDraft";
 
 function CaseInbox() {
@@ -21,6 +22,7 @@ function CaseInbox() {
   const [handoffRecipientId, setHandoffRecipientId] = useState("");
   const [handoffReason, setHandoffReason] = useState("");
   const [sendingHandoff, setSendingHandoff] = useState(false);
+  const [taskRefreshKey, setTaskRefreshKey] = useState(0);
   const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -161,6 +163,7 @@ function CaseInbox() {
           <span className="rounded-md border border-white/10 px-3 py-2">04 · Audit</span>
         </div>
       </header>
+      <BankingTaskWorkspace key={taskRefreshKey} />
       {mayCreate && (
         <section className="rounded-xl border border-[#785D46]/30 bg-[#302D29] p-5 text-[#F5F1E8] sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -262,6 +265,10 @@ function CaseInbox() {
                   <p role="status" className="mt-3 rounded-lg border border-[#C58D5F]/25 bg-[#C58D5F]/[0.06] p-3 text-xs leading-5 text-[#D9A06F]">
                     Independent checker review is pending. Ownership and evidence are locked until an authorized checker responds.
                   </p>
+                )}
+                {mayAssign && (administrator || item.ownerUserId === user?.id) && assignees && item.decision?.state !== "pending" && (
+                  <BankingCaseTaskRequest record={item} assignees={assignees}
+                    onCreated={() => setTaskRefreshKey(value => value + 1)} />
                 )}
                 {mayAssign && (administrator || item.ownerUserId === user?.id) && assignees && item.decision?.state !== "pending" && (
                   <div className="mt-4 border-t border-white/10 pt-4">
