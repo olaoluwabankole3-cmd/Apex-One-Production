@@ -806,7 +806,10 @@ export class DatabaseStore implements IUnitOfWorkProvider {
         existing.revision !== expectedRevision) {
       throw new ConflictError("Department request already claimed or changed; refresh the team queue");
     }
-    return this.bankingWorkTasksRepo.update(taskId, changes, ctx, "BankingWorkTask");
+    // The generic repository owns updatedAt and rejects caller-authored
+    // timestamps as immutable. The Postgres CAS above writes its own receipt.
+    const { updatedAt: _repositoryOwnedTimestamp, ...safeChanges } = changes;
+    return this.bankingWorkTasksRepo.update(taskId, safeChanges, ctx, "BankingWorkTask");
   }
 
   public async runInTransaction<T>(ctx: TenantContext, work: (uow: IUnitOfWork) => Promise<T>): Promise<T> {
