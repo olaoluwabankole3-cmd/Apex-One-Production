@@ -24,7 +24,10 @@ type AssigneeDepartment = BankingWorkTaskRecord["targetDepartment"];
 
 export interface RequestBankingTaskInput {
   caseId: string;
-  recipientUserId: string;
+  recipientUserId?: string;
+  /** An explicitly department-shared request has no initial named recipient. */
+  deliveryMode?: "named" | "department";
+  targetDepartment?: AssigneeDepartment;
   title: string;
   question: string;
   expectedResponse: string;
@@ -69,7 +72,21 @@ export class BankingWorkTaskService {
    */
   async request(ctx: TenantContext, input: RequestBankingTaskInput): Promise<BankingWorkTaskRecord> {
     const caseId = Validator.requireId(input.caseId, "caseId");
-    const recipientUserId = Validator.requireId(input.recipientUserId, "recipientUserId");
+    const deliveryMode = input.deliveryMode ?? "named";
+    if (deliveryMode !== "named" && deliveryMode !== "department") {
+      throw new ValidationError("Unknown task delivery mode");
+    }
+    if (deliveryMode === "department" && input.recipientUserId !== undefined) {
+      throw new ValidationError("Department queue requests must not name a recipient");
+    }
+    if (deliveryMode === "named" && input.targetDepartment !== undefined) {
+      throw new ValidationError("Named requests derive their department from the recipient");
+    }
+    const recipientUserId = deliveryMode === "named"
+      ? Validator.requireId(input.recipientUserId, "recipientUserId") : "";
+    const targetDepartment = deliveryMode === "department"
+      ? Validator.requireEnum(input.targetDepartment, ["Operations", "Finance"] as const, "targetDepartment")
+      : undefined;
     const title = Validator.requireString(input.title, "title", { minLength: 8, maxLength: 120 });
     const question = Validator.requireString(input.question, "question", { minLength: 15, maxLength: 600 });
     const expectedResponse = Validator.requireString(input.expectedResponse, "expectedResponse", { minLength: 15, maxLength: 300 });
@@ -83,21 +100,45 @@ export class BankingWorkTaskService {
       if ((parent.revision ?? 1) !== expectedCaseRevision) {
         throw new ConflictError("Case changed; refresh before requesting a task");
       }
-      if (recipientUserId === ctx.userId) {
+      if (deliveryMode === "named" && recipientUserId === ctx.userId) {
         throw new ValidationError("A cross-department task must be assigned to a different employee");
       }
 
-      // Resolve eligibility inside the same tenant transaction. Never reveal a
-      // target user's actual organization or active status on failure.
-      const membership = await this.database.findUserMembership(recipientUserId, ctx.organizationId);
-      const recipient = await this.database.findUserById(recipientUserId);
-      const department = membership ? recipientDepartment(membership.role) : null;
-      if (!membership || membership.organizationId !== ctx.organizationId ||
-          !recipient || recipient.status !== "active" || !department ||
-          department === parent.department ||
-          (membership.department && membership.department !== department) ||
-          !getPermissionsForRole(membership.role).includes("case:read")) {
-        throw new NotFoundError("Eligible departmental task recipient");
+      // A department queue is an *explicit opt-in* distribution of just the
+      // task question, NOT the parent case, its documents or transaction details.
+      // Current pilot permits only Operations <-> Finance, and fails closed if
+      // the destination has no eligible active institutional team member.
+      let department: AssigneeDepartment;
+      if (deliveryMode === "department") {
+        if (!targetDepartment || targetDepartment === parent.department) {
+          throw new ValidationError("Choose a different eligible task department");
+        }
+        const memberships = await this.database.findMembershipsForOrganization(ctx.organizationId);
+        let eligible = false;
+        for (const member of memberships) {
+          if (member.organizationId !== ctx.organizationId ||
+              recipientDepartment(member.role) !== targetDepartment ||
+              (member.department && member.department !== targetDepartment) ||
+              !getPermissionsForRole(member.role).includes("case:read")) continue;
+          const colleague = await this.database.findUserById(member.userId);
+          if (colleague?.status === "active") { eligible = true; break; }
+        }
+        if (!eligible) throw new NotFoundError("Eligible departmental task queue");
+        department = targetDepartment;
+      } else {
+        // Resolve named-recipient eligibility inside the same tenant transaction.
+        // Never reveal cross-tenant membership or disabled account existence.
+        const membership = await this.database.findUserMembership(recipientUserId, ctx.organizationId);
+        const recipient = await this.database.findUserById(recipientUserId);
+        const permittedDepartment = membership ? recipientDepartment(membership.role) : null;
+        if (!membership || membership.organizationId !== ctx.organizationId ||
+            !recipient || recipient.status !== "active" || !permittedDepartment ||
+            permittedDepartment === parent.department ||
+            (membership.department && membership.department !== permittedDepartment) ||
+            !getPermissionsForRole(membership.role).includes("case:read")) {
+          throw new NotFoundError("Eligible departmental task recipient");
+        }
+        department = permittedDepartment;
       }
       const prior = await this.database.bankingWorkTasksRepo.findMany(ctx, {
         where: { caseId: { eq: caseId } }, limit: MAX_CASE_TASKS + 1,
@@ -111,6 +152,7 @@ export class BankingWorkTaskService {
         id: randomUUID(), caseId,
         requestedByUserId: ctx.userId, recipientUserId,
         targetDepartment: department,
+        ...(deliveryMode === "department" ? { deliveryMode: "department" as const } : {}),
         title, question, expectedResponse,
         status: "requested", revision: 1,
         requestedAt: now, createdAt: now, updatedAt: now,
@@ -123,6 +165,7 @@ export class BankingWorkTaskService {
         resourceId: task.id, requestId: ctx.requestId,
         status: "success", timestamp: now,
         metadata: { caseId, recipientUserId, targetDepartment: department,
+          deliveryMode, departmentShared: deliveryMode === "department",
           caseOwnerUnchanged: true, financialOutcomeVerified: false },
       });
       return task;
@@ -134,13 +177,32 @@ export class BankingWorkTaskService {
    * explicitly assigned to/requested by the currently authenticated member.
    */
   async listMine(
-    ctx: TenantContext, view: "received" | "requested",
+    ctx: TenantContext, view: "received" | "requested" | "team",
     options: ListBankingTaskOptions = {}
   ): Promise<PaginatedResult<BankingWorkTaskRecord>> {
     await verifyCurrentAccess(ctx, this.database, "case:read");
-    if (view !== "received" && view !== "requested") throw new ValidationError("Invalid task inbox view");
+    if (view !== "received" && view !== "requested" && view !== "team") {
+      throw new ValidationError("Invalid task inbox view");
+    }
     if (options.limit !== undefined && (!Number.isSafeInteger(options.limit) || options.limit < 1 ||
         options.limit > MAX_PAGE)) throw new ValidationError("Invalid task inbox page size");
+    if (view === "team") {
+      const department = recipientDepartment(ctx.userRole);
+      const membership = await this.database.findUserMembership(ctx.userId, ctx.organizationId);
+      if (!department || !membership ||
+          (membership.department && membership.department !== department)) {
+        throw new ForbiddenError("A current Operations or Finance team membership is required");
+      }
+      return this.database.bankingWorkTasksRepo.findMany(ctx, {
+        where: {
+          targetDepartment: { eq: department },
+          deliveryMode: { eq: "department" },
+          recipientUserId: { eq: "" },
+          status: { eq: "requested" },
+        },
+        limit: options.limit ?? 25, cursor: options.cursor,
+      });
+    }
     const field = view === "received" ? "recipientUserId" : "requestedByUserId";
     return this.database.bankingWorkTasksRepo.findMany(ctx, {
       where: { [field]: { eq: ctx.userId } },
@@ -176,10 +238,25 @@ export class BankingWorkTaskService {
     return this.database.runInTransaction(ctx, async () => {
       await verifyCurrentAccess(ctx, this.database, "case:read");
       const task = await this.database.bankingWorkTasksRepo.findById(id, ctx, "BankingWorkTask");
-      // A known but unassigned task must remain indistinguishable from an
-      // unknown task. Assignment does not grant access to the parent case.
-      if (task.recipientUserId !== ctx.userId ||
-          task.targetDepartment !== recipientDepartment(ctx.userRole)) {
+      // Explicit team-queue claims can be accepted by ANY *currently active*
+      // member of that department, but exactly one claim may commit. Named
+      // tasks remain private to their specifically designated recipient.
+      const department = recipientDepartment(ctx.userRole);
+      const isTeamClaim = to === "accepted" &&
+        task.deliveryMode === "department" && task.recipientUserId === "";
+      const membership = await this.database.findUserMembership(ctx.userId, ctx.organizationId);
+      if (!department || task.targetDepartment !== department || !membership ||
+          (membership.department && membership.department !== department)) {
+        throw new NotFoundError("BankingWorkTask");
+      }
+      // Team members previously eligible to claim this request receive a
+      // generic conflict after another member succeeds, with NO task details.
+      // Other departments and named-task strangers still receive 404.
+      if (to === "accepted" && task.deliveryMode === "department" &&
+          task.recipientUserId !== "") {
+        throw new ConflictError("Department request already claimed; refresh the team queue");
+      }
+      if (!isTeamClaim && task.recipientUserId !== ctx.userId) {
         throw new NotFoundError("BankingWorkTask");
       }
       if (task.revision !== expectedRevision || task.status !== from) {
@@ -192,7 +269,9 @@ export class BankingWorkTaskService {
         ...(to === "responded" ? { respondedAt: now, responseNote: note! } : {}),
         ...(to === "declined" ? { declinedAt: now, responseNote: note! } : {}),
       };
-      const updated = await this.database.bankingWorkTasksRepo.update(id, changes, ctx, "BankingWorkTask");
+      const updated = isTeamClaim
+        ? await this.database.claimUnassignedBankingTask(ctx, id, department, expectedRevision, now)
+        : await this.database.bankingWorkTasksRepo.update(id, changes, ctx, "BankingWorkTask");
       await this.database.recordAuditLog({
         organizationId: ctx.organizationId,
         actorId: ctx.userId, actorEmail: ctx.userEmail,
@@ -201,6 +280,7 @@ export class BankingWorkTaskService {
         status: "success", timestamp: now,
         metadata: { caseId: task.caseId, from, to, recipientUserId: ctx.userId,
           caseOwnerUnchanged: true, financialOutcomeVerified: false,
+          claimedFromTeamQueue: isTeamClaim,
           revision: expectedRevision + 1 },
       });
       return updated;

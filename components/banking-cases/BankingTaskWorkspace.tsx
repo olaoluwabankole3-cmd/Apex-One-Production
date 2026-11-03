@@ -13,8 +13,13 @@ import type { BankingCaseAssigneeList } from "@/lib/backend/domains/banking-case
  * detail is fetched for the task recipient without separate case permission.
  */
 export function BankingTaskWorkspace() {
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
   const permitted = hasPermission("case:read");
+  const eligibleTeam = permitted && (user?.role === "Operations" || user?.role === "Finance");
+  const [team, setTeam] = useState<BankingWorkTaskRecord[]>([]);
+  const [teamError, setTeamError] = useState(false);
+  const [moreTeam, setMoreTeam] = useState(false);
+  const [cursorTeam, setCursorTeam] = useState<string | null>(null);
   const [received, setReceived] = useState<BankingWorkTaskRecord[]>([]);
   const [requested, setRequested] = useState<BankingWorkTaskRecord[]>([]);
   const [busy, setBusy] = useState(false);
@@ -45,14 +50,32 @@ export function BankingTaskWorkspace() {
       setCursorRequested(waiting.pagination.nextCursor);
     } catch {
       setReceived([]); setRequested([]); setError(true);
-    } finally {
-      setBusy(false);
     }
-  }, [permitted]);
+    // Team read failure never hides the user's own named tasks. Only explicit
+    // Operations/Finance membership is eligible; the server checks membership
+    // and department again rather than trusting this frontend role hint.
+    if (eligibleTeam) {
+      try {
+        const queue = await apiClient.requestCollection<BankingWorkTaskRecord>(
+          "/api/v1/banking-tasks?view=team&limit=25"
+        );
+        setTeam(queue.data);
+        setMoreTeam(queue.pagination.hasMore);
+        setCursorTeam(queue.pagination.nextCursor);
+        setTeamError(false);
+      } catch {
+        setTeam([]); setMoreTeam(false); setCursorTeam(null); setTeamError(true);
+      }
+    } else {
+      setTeam([]); setMoreTeam(false); setCursorTeam(null); setTeamError(false);
+    }
+    setBusy(false);
+  }, [permitted, eligibleTeam]);
   useEffect(() => { void refresh(); }, [refresh]);
 
-  async function more(view: "received" | "requested") {
-    const cursor = view === "received" ? cursorReceived : cursorRequested;
+  async function more(view: "received" | "requested" | "team") {
+    const cursor = view === "received" ? cursorReceived :
+      view === "requested" ? cursorRequested : cursorTeam;
     if (!cursor || operating) return;
     setOperating("page-" + view);
     try {
@@ -63,10 +86,14 @@ export function BankingTaskWorkspace() {
         setReceived(previous => [...previous, ...result.data.filter(x => !previous.some(p => p.id === x.id))]);
         setCursorReceived(result.pagination.nextCursor);
         setMoreReceived(result.pagination.hasMore);
-      } else {
+      } else if (view === "requested") {
         setRequested(previous => [...previous, ...result.data.filter(x => !previous.some(p => p.id === x.id))]);
         setCursorRequested(result.pagination.nextCursor);
         setMoreRequested(result.pagination.hasMore);
+      } else {
+        setTeam(previous => [...previous, ...result.data.filter(x => !previous.some(p => p.id === x.id))]);
+        setCursorTeam(result.pagination.nextCursor);
+        setMoreTeam(result.pagination.hasMore);
       }
     } catch { setNotice("A later page could not be loaded; the tasks already shown are unchanged."); }
     finally { setOperating(null); }
@@ -103,11 +130,11 @@ export function BankingTaskWorkspace() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.17em] text-[#D9A06F]">Department collaboration</p>
-          <h2 className="mt-2 font-display text-xl font-semibold text-[#F5F1E8]">My Tasks & Waiting on Others</h2>
+          <h2 className="mt-2 font-display text-xl font-semibold text-[#F5F1E8]">My Tasks · Team Queue · Waiting on Others</h2>
           <p className="mt-2 max-w-3xl text-xs leading-5 text-[#D3C9BD]/75">
-            A named employee can help on a specific request without becoming the parent case owner.
-            These are your assigned/requested tasks only, not a whole-bank or team-wide queue.
-            Task replies and internal approvals do not verify external outcomes.
+            Work is routed either privately to a named employee or explicitly to your permitted department queue.
+            Claiming a shared task does not transfer its parent case or reveal confidential case records.
+            Task replies and internal approvals do not verify external banking outcomes.
           </p>
         </div>
         <button type="button" disabled={busy || Boolean(operating)} onClick={() => void refresh()}
@@ -117,7 +144,7 @@ export function BankingTaskWorkspace() {
       </div>
       {error && <p role="alert" className="mt-4 text-xs text-amber-200">Task inbox is unavailable. No results have been inferred.</p>}
       {notice && <p role="status" className="mt-4 rounded-lg border border-[#C58D5F]/20 p-3 text-xs text-[#D9A06F]">{notice}</p>}
-      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+      <div className="mt-5 grid gap-4 xl:grid-cols-3">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-semibold text-[#F5F1E8]"><ArrowRightLeft size={15}/> My assigned requests</h3>
           <p className="mt-1 text-[11px] text-[#D3C9BD]/50">Up to 25 on the current page</p>
@@ -168,6 +195,55 @@ export function BankingTaskWorkspace() {
               className="text-xs text-[#D9A06F] disabled:opacity-40">Load more assigned requests</button>}
           </div>
         </div>
+        {eligibleTeam && (
+          <div aria-label="Team Queue" id="cortex-department-team-queue">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-[#F5F1E8]">
+              <ArrowRightLeft size={15}/> Team Queue
+            </h3>
+            <p className="mt-1 text-[11px] text-[#D3C9BD]/50">
+              Unclaimed requests explicitly shared with your department; up to 25 on the current page
+            </p>
+            {teamError && (
+              <p role="alert" className="mt-3 rounded-lg border border-amber-300/20 p-3 text-xs text-amber-200">
+                Team Queue cannot be loaded. Your own tasks remain available.
+              </p>
+            )}
+            <div className="mt-3 space-y-3">
+              {!busy && team.length === 0 && !teamError && (
+                <p className="rounded-lg border border-dashed border-white/10 p-4 text-xs text-[#D3C9BD]/65">
+                  No unclaimed department requests are currently visible.
+                </p>
+              )}
+              {team.map(task => (
+                <article key={task.id} className="rounded-lg border border-[#C58D5F]/20 bg-[#2E2B26] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <h4 className="text-sm font-medium text-[#F5F1E8]">{task.title}</h4>
+                    <span className="rounded-full border border-[#C58D5F]/30 px-2 py-1 text-[10px] text-[#D9A06F]">
+                      Unclaimed
+                    </span>
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-[#D3C9BD]/80">{task.question}</p>
+                  <p className="mt-2 text-xs leading-5 text-[#D3C9BD]/55">
+                    <strong>Requested output:</strong> {task.expectedResponse}
+                  </p>
+                  <p className="mt-3 text-[11px] leading-5 text-[#D3C9BD]/55">
+                    This task is shared only with eligible members of {task.targetDepartment}.
+                    The parent case and documents are not shared.
+                  </p>
+                  <button type="button" disabled={Boolean(operating)}
+                    onClick={() => void transition(task, "accept")}
+                    className="mt-4 inline-flex items-center gap-2 rounded-lg border border-[#C58D5F]/40 px-3 py-2 text-xs text-[#D9A06F] disabled:opacity-40">
+                    <CheckCircle2 size={13}/> Accept for me
+                  </button>
+                </article>
+              ))}
+              {moreTeam && (
+                <button type="button" disabled={Boolean(operating)} onClick={() => void more("team")}
+                  className="text-xs text-[#D9A06F] disabled:opacity-40">Load more team requests</button>
+              )}
+            </div>
+          </div>
+        )}
         <div>
           <h3 className="flex items-center gap-2 text-sm font-semibold text-[#F5F1E8]"><Clock3 size={15}/> Waiting on Others</h3>
           <p className="mt-1 text-[11px] text-[#D3C9BD]/50">Requests you initiated; up to 25 on the current page</p>
@@ -179,7 +255,9 @@ export function BankingTaskWorkspace() {
                   <h4 className="text-sm font-medium text-[#F5F1E8]">{task.title}</h4>
                   <span className="rounded-full border border-[#C58D5F]/30 px-2 py-1 text-[10px] text-[#D9A06F]">{task.status}</span>
                 </div>
-                <p className="mt-2 text-xs leading-5 text-[#D3C9BD]/75">Sent to {task.targetDepartment} · {task.recipientUserId === "" ? "Colleague" : "Named colleague"}</p>
+                <p className="mt-2 text-xs leading-5 text-[#D3C9BD]/75">Sent to {task.targetDepartment} · {task.deliveryMode === "department"
+                  ? (task.recipientUserId ? "Claimed by colleague" : "Team Queue — awaiting acceptance")
+                  : "Named colleague"}</p>
                 <p className="mt-2 text-xs text-[#D3C9BD]/65">{task.expectedResponse}</p>
                 {task.responseNote && <p className="mt-3 text-xs leading-5 text-[#D3C9BD]/90">Response: {task.responseNote}</p>}
                 <p className="mt-3 text-[11px] text-[#D3C9BD]/50">Case remains open and unverified until independent outcome confirmation.</p>
@@ -204,6 +282,10 @@ export function BankingCaseTaskRequest({
   const { user, hasPermission } = useAuth();
   const [expanded, setExpanded] = useState(false);
   const [recipientUserId, setRecipientUserId] = useState("");
+  const [deliveryMode, setDeliveryMode] = useState<"named" | "department">("named");
+  const [targetDepartment, setTargetDepartment] = useState<"Finance" | "Operations">(
+    record.department === "Operations" ? "Finance" : "Operations"
+  );
   const [title, setTitle] = useState("");
   const [question, setQuestion] = useState("");
   const [expectedResponse, setExpectedResponse] = useState("");
@@ -216,7 +298,7 @@ export function BankingCaseTaskRequest({
   const recipients = assignees.members.filter(member =>
     member.userId !== user?.id && member.department !== record.department
   );
-  if (!mayRequest || recipients.length === 0) return null;
+  if (!mayRequest) return null;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -224,10 +306,12 @@ export function BankingCaseTaskRequest({
     setSaving(true); setError(false); setNotice(false);
     try {
       await apiClient.postData<BankingWorkTaskRecord>("/api/v1/banking-tasks", {
-        caseId: record.id, recipientUserId, title, question, expectedResponse,
+        caseId: record.id,
+        ...(deliveryMode === "department" ? { deliveryMode: "department", targetDepartment } : { recipientUserId }),
+        title, question, expectedResponse,
         expectedCaseRevision: record.revision ?? 1,
       });
-      setExpanded(false); setRecipientUserId(""); setTitle("");
+      setExpanded(false); setRecipientUserId(""); setDeliveryMode("named"); setTitle("");
       setQuestion(""); setExpectedResponse(""); setNotice(true);
       onCreated();
     } catch { setError(true); }
@@ -249,15 +333,43 @@ export function BankingCaseTaskRequest({
       {notice && <p role="status" className="mt-3 text-xs text-[#D9A06F]">Task requested. The case owner remains unchanged; check Waiting on Others for progress.</p>}
       {error && <p role="alert" className="mt-3 text-xs text-amber-200">Task request not confirmed. Review the case and retry; do not duplicate requests.</p>}
       {expanded && <form onSubmit={(event) => void submit(event)} className="mt-4 grid gap-3">
-        <label className="text-xs text-[#D3C9BD]">Named recipient
-          <select required value={recipientUserId} onChange={event => setRecipientUserId(event.target.value)}
+        <label className="text-xs text-[#D3C9BD]">How to send this task
+          <select value={deliveryMode}
+            onChange={event => setDeliveryMode(event.target.value as "named" | "department")}
             className="mt-1 w-full rounded-lg border border-white/15 bg-[#24231F] p-3 text-sm text-[#F5F1E8]">
-            <option value="">Select an authorized employee in the other department</option>
-            {recipients.map(member =>
-              <option key={member.userId} value={member.userId}>{member.name} · {member.department}</option>
-            )}
+            <option value="named">Private request to a named employee</option>
+            <option value="department">Share request with the receiving department queue</option>
           </select>
         </label>
+        {deliveryMode === "named" ? (
+          <label className="text-xs text-[#D3C9BD]">Named recipient
+            <select required value={recipientUserId} onChange={event => setRecipientUserId(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-white/15 bg-[#24231F] p-3 text-sm text-[#F5F1E8]">
+              <option value="">Select an authorized employee in the other department</option>
+              {recipients.map(member =>
+                <option key={member.userId} value={member.userId}>{member.name} · {member.department}</option>
+              )}
+            </select>
+          </label>
+        ) : (
+          <>
+            <label className="text-xs text-[#D3C9BD]">Receiving department
+              <select required value={targetDepartment}
+                onChange={event => setTargetDepartment(event.target.value as "Finance" | "Operations")}
+                className="mt-1 w-full rounded-lg border border-white/15 bg-[#24231F] p-3 text-sm text-[#F5F1E8]">
+                {(["Finance", "Operations"] as const)
+                  .filter(department => department !== record.department)
+                  .map(department => <option key={department} value={department}>{department} Team Queue</option>)}
+              </select>
+            </label>
+            <p className="rounded-lg border border-amber-300/25 bg-amber-300/[0.04] p-3 text-xs leading-5 text-amber-100/80">
+              Department sharing is explicit: every eligible employee in the receiving team
+              may read the task title, question and requested output before someone claims it.
+              Never include customer names, account numbers, transaction details, case documents
+              or restricted information. The parent case stays private.
+            </p>
+          </>
+        )}
         <label className="text-xs text-[#D3C9BD]">Task title
           <input required minLength={8} maxLength={120} value={title} onChange={event => setTitle(event.target.value)}
             className="mt-1 w-full rounded-lg border border-white/15 bg-[#24231F] p-3 text-sm text-[#F5F1E8]"

@@ -619,8 +619,11 @@ export interface BankingWorkTaskRecord {
   organizationId: string;
   caseId: string;
   requestedByUserId: string;
+  /** Empty only while an explicitly department-shared task is unclaimed. */
   recipientUserId: string;
   targetDepartment: "Operations" | "Finance";
+  /** Absent for existing private named-recipient tasks. */
+  deliveryMode?: "department";
   title: string;
   question: string;
   expectedResponse: string;

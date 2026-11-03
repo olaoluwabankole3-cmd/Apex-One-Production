@@ -78,6 +78,7 @@ try {
   report("anonymous preview and banking case endpoints reject unauthenticated browsers");
 
   const finance = await login("finance");
+  const financeColleague = await login("finance-colleague");
   const ops = await login("operations");
   const checker = await login("checker");
   report("three distinct HttpOnly-authenticated Finance, Operations and checker browser sessions");
@@ -163,6 +164,69 @@ try {
   assert(finishedTask && finishedTask.status === "responded");
   assert.equal(finishedTask.financialOutcomeVerified, false);
   report("real browser: Operations requests Finance task without case transfer; recipient accepts/responds; original owner sees result but outcome stays unverified");
+
+  // Real PostgreSQL CAS: two independent authenticated Finance browsers race
+  // to claim one explicitly shared team request. Exactly one may own it, and
+  // the restricted parent case stays invisible to both until owner handoff.
+  const teamTitle = "Finance team synthetic source check";
+  const shared = ok(await request(ops, "POST", "/api/v1/banking-tasks", {
+    caseId: created.id, expectedCaseRevision: created.revision,
+    deliveryMode: "department", targetDepartment: "Finance",
+    title: teamTitle,
+    question: "Identify the authorization and provenance steps required for a synthetic source review.",
+    expectedResponse: "Return a procedural source-verification checklist without financial conclusions.",
+  }), 201, "Department queue creation");
+  assert.equal(shared.deliveryMode, "department");
+  assert.equal(shared.recipientUserId, "");
+  assert.equal(shared.financialOutcomeVerified, false);
+  await finance.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
+  await financeColleague.goto(`${baseUrl}/`, { waitUntil: "domcontentloaded" });
+  await finance.locator("#cortex-department-team-queue").waitFor({ state: "visible" });
+  await financeColleague.locator("#cortex-department-team-queue").waitFor({ state: "visible" });
+  await finance.locator("#cortex-department-team-queue").getByText(teamTitle, { exact: true })
+    .waitFor({ state: "visible", timeout: 20000 });
+  await financeColleague.locator("#cortex-department-team-queue").getByText(teamTitle, { exact: true })
+    .waitFor({ state: "visible", timeout: 20000 });
+  denied(await request(checker, "GET", "/api/v1/banking-tasks?view=team&limit=1"),
+    [403], "Administrator cannot read department-only shared task questions");
+  denied(await request(financeColleague, "GET", `/api/v1/banking-cases/${created.id}`),
+    [404], "Team member cannot see parent confidential case");
+  const claimPath = `/api/v1/banking-tasks/${shared.id}/accept`;
+  const claims = await Promise.all([
+    request(finance, "POST", claimPath, { expectedRevision: shared.revision }),
+    request(financeColleague, "POST", claimPath, { expectedRevision: shared.revision }),
+  ]);
+  assert.equal(claims.filter(x => x.status === 200).length, 1,
+    "Only one concurrent team claim may succeed on real PostgreSQL");
+  assert.equal(claims.filter(x => x.status === 409).length, 1,
+    "Loser must receive a conflict, not silent reassignment");
+  const claimedByFinance = claims[0].status === 200;
+  const teamWinner = claimedByFinance ? finance : financeColleague;
+  const teamLoser = claimedByFinance ? financeColleague : finance;
+  const teamOwnerId = claimedByFinance ? "user-stage10-finance" : "user-stage10-finance-colleague";
+  const claimed = ok(claims.find(x => x.status === 200), 200, "Atomic claim response");
+  assert.equal(claimed.recipientUserId, teamOwnerId);
+  assert.equal(claimed.status, "accepted");
+  const remaining = ok(await request(finance, "GET", "/api/v1/banking-tasks?view=team&limit=25"),
+    200, "Team queue after claim");
+  assert(!remaining.some(x => x.id === shared.id));
+  denied(await request(teamLoser, "POST", `/api/v1/banking-tasks/${shared.id}/respond`, {
+    expectedRevision: claimed.revision,
+    note: "Someone else claimed the task; I must not be able to reply on their behalf.",
+  }), [404], "Non-claimant cannot answer");
+  const teamAnswer = "One Finance employee supplied a synthetic source-check checklist; external outcome remains unverified.";
+  const finalTeam = ok(await request(teamWinner, "POST", `/api/v1/banking-tasks/${shared.id}/respond`, {
+    expectedRevision: claimed.revision, note: teamAnswer,
+  }), 200, "Claimed team response");
+  assert.equal(finalTeam.status, "responded");
+  assert.equal(finalTeam.financialOutcomeVerified, false);
+  const parentAfterTeam = ok(await request(ops, "GET", `/api/v1/banking-cases/${created.id}`),
+    200, "Parent case after department claim");
+  assert.equal(parentAfterTeam.ownerUserId, "user-stage10-operations");
+  const requestedTeam = ok(await request(ops, "GET", "/api/v1/banking-tasks?view=requested&limit=25"),
+    200, "Task requester review after team response");
+  assert(requestedTeam.some(x => x.id === shared.id && x.status === "responded"));
+  report("real PostgreSQL: department shared task visible to two Finance users; exactly one atomic claimant; response audited without case disclosure or ownership transfer");
 
   const handoff = ok(await request(ops, "POST", `/api/v1/banking-cases/${created.id}/handoff`, {
     recipientUserId: "user-stage10-finance",
