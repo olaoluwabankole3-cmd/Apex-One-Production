@@ -58,8 +58,8 @@ assert(teamTaskRoute.includes('view !== "team"') &&
 const teamTaskService = load("lib/backend/domains/banking-tasks/bankingWorkTaskService.ts");
 assert(teamTaskService.includes("claimUnassignedBankingTask"),
   "Claiming a department task must use the atomic tenant-bound persistence operation");
-assert(taskWorkspace.includes('A named employee can help on a specific request'),
-  "Task inbox must distinguish subtask responsibility from case ownership");
+assert(taskWorkspace.includes("Claiming a shared task does not transfer its parent case"),
+  "Department task inbox must distinguish work assignment from parent-case ownership");
 assert(overview.indexOf('id="cortex-my-work"') < overview.indexOf('aria-labelledby="cortex-start-heading"'),
   "My Work must appear ahead of the workspace/tool menu");
 assert(overview.includes("describeCaseAttention(item"), "Case list must derive truthful next actions");
