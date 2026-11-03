@@ -640,6 +640,17 @@ export interface BankingWorkTaskRecord {
   updatedAt: string;
 }
 
+/** Minimal incoming transfer invitation: no case title, description, evidence or source links. */
+export interface BankingCaseTransferInvitation {
+  caseId: string;
+  transferId: string;
+  fromDepartment: "Operations" | "Finance";
+  targetDepartment: "Operations" | "Finance";
+  requestedAt: string;
+  revision: number;
+  priority: "normal" | "high";
+}
+
 export interface BankingCaseRecord {
   id: string;
   organizationId: string;
