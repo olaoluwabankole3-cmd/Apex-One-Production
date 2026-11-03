@@ -98,6 +98,10 @@ async function main(): Promise<void> {
     "user-stage10-finance", "stage10.finance@example.test",
     "Stage 10 Finance Operator", "Stage10Enterprise!2026"
   );
+  const financeColleague = user(
+    "user-stage10-finance-colleague", "stage10.finance-colleague@example.test",
+    "Stage 10 Finance Team Member", "Stage10Enterprise!2026"
+  );
   const checker = user(
     "user-stage10-checker", "stage10.checker@example.test",
     "Stage 10 Independent Checker", "Stage10Enterprise!2026"
@@ -137,6 +141,14 @@ async function main(): Promise<void> {
       joinedAt: timestamp(),
     },
     {
+      id: "membership-stage10-finance-colleague",
+      organizationId: org.id,
+      userId: financeColleague.id,
+      role: "Finance",
+      department: "Finance",
+      joinedAt: timestamp(),
+    },
+    {
       id: "membership-stage10-checker",
       organizationId: org.id,
       userId: checker.id,
@@ -150,6 +162,7 @@ async function main(): Promise<void> {
   await store.createUserRecord(relationshipManager);
   await store.createUserRecord(operations);
   await store.createUserRecord(finance);
+  await store.createUserRecord(financeColleague);
   await store.createUserRecord(checker);
   for (const membership of memberships) await store.createMembershipRecord(membership);
 
