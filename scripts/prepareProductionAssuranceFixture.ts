@@ -44,6 +44,18 @@ async function main(): Promise<void> {
   const databaseUrl = required("DATABASE_URL");
   const redisUrl = required("REDIS_URL");
 
+  // This fixture deliberately resets its test database and Redis. Never
+  // allow a developer or operator to run it against institutional authorities.
+  const databaseTarget = new URL(databaseUrl);
+  const redisTarget = new URL(redisUrl);
+  if (process.env.CI !== "true" || process.env.TEST_ENV !== "true" ||
+      process.env.ASSURANCE_BASE_URL !== "http://localhost:3000" ||
+      databaseTarget.hostname !== "127.0.0.1" || databaseTarget.port !== "11543" ||
+      databaseTarget.pathname !== "/apex_stage10_test" ||
+      redisTarget.hostname !== "127.0.0.1" || redisTarget.port !== "11679") {
+    throw new Error("Stage 10 destructive fixture is restricted to isolated local CI services");
+  }
+
   const store = DatabaseStore.createPostgresStore(databaseUrl);
   await store.bootstrapPersistence();
   await ensureDurableAuditConstraints(databaseUrl);
