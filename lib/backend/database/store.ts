@@ -12,6 +12,7 @@ import {
   UserRecord,
   OrganizationMembershipRecord,
   BankingCaseRecord,
+  BankingCaseTransferInvitation,
   BankingWorkTaskRecord,
   FinancialSourceRegistryRecord,
   FinancialSignerOnboardingRecord,
@@ -746,6 +747,120 @@ export class DatabaseStore implements IUnitOfWorkProvider {
     this.restoreMap(this.financialSourceSnapshots, snapshot.financialSourceSnapshots);
     this.restoreMap(this.financialSourceImports, snapshot.financialSourceImports);
     if (this.auditLogsRepo instanceof InMemoryAuditLogRepository) this.auditLogsRepo.restoreSnapshot(snapshot.auditLogs);
+  }
+
+  /**
+   * Case ownership transfer control uses one compare-and-update of the SAME
+   * parent case row. A read/check/update at PostgreSQL READ COMMITTED would
+   * permit competing offers, declines or accepts to overwrite one another.
+   * The receipt and the caller's audit are in the same tenant transaction.
+   */
+  public async commitBankingCaseTransfer(
+    ctx: TenantContext,
+    existing: BankingCaseRecord,
+    phase: "offer" | "accept" | "decline" | "cancel",
+    updates: Partial<BankingCaseRecord>,
+    transferId?: string
+  ): Promise<BankingCaseRecord> {
+    const revision = existing.revision ?? 1;
+    if (!Number.isSafeInteger(revision) || revision < 1 ||
+        updates.revision !== revision + 1 ||
+        existing.organizationId !== ctx.organizationId ||
+        (existing.status !== "open") ||
+        (existing.decision?.state === "pending")) {
+      throw new ConflictError("Case cannot enter this transfer transition");
+    }
+    const expectedPending = phase === "offer" ? undefined : transferId;
+    if (phase === "offer" ? !!existing.pendingTransfer :
+        !expectedPending || existing.pendingTransfer?.id !== expectedPending) {
+      throw new ConflictError("Transfer request was changed; refresh the case");
+    }
+    const timestamp = new Date().toISOString();
+    if (this.postgresPersistence) {
+      const sql = JSON.stringify({ ...updates, updatedAt: timestamp });
+      const pendingPredicate = phase === "offer"
+        ? "(record->'pendingTransfer' IS NULL OR record->'pendingTransfer' = 'null'::jsonb)"
+        : "record#>>'{pendingTransfer,id}' = " + quotePostgresLiteral(expectedPending!);
+      return this.postgresPersistence.manager.withConnection(async connection => {
+        const output = await connection.query(
+          `UPDATE apex_domain_records
+             SET record = record || ${quotePostgresLiteral(sql)}::jsonb,
+                 updated_at = NOW()
+           WHERE entity_type = 'BankingCase'
+             AND organization_id = ${quotePostgresLiteral(ctx.organizationId)}
+             AND id = ${quotePostgresLiteral(existing.id)}
+             AND record->>'ownerUserId' = ${quotePostgresLiteral(existing.ownerUserId)}
+             AND COALESCE((record->>'revision')::integer, 1) = ${revision}
+             AND record->>'status' = 'open'
+             AND COALESCE(record#>>'{decision,state}', '') <> 'pending'
+             AND ${pendingPredicate}
+          RETURNING record::text AS record`
+        );
+        if (output.rows.length !== 1) {
+          throw new ConflictError("Transfer or case revision changed; refresh before retrying");
+        }
+        return JSON.parse(output.rows[0].record!) as BankingCaseRecord;
+      });
+    }
+    const fresh = await this.bankingCasesRepo.findById(existing.id, ctx, "BankingCase");
+    if ((fresh.revision ?? 1) !== revision ||
+        fresh.ownerUserId !== existing.ownerUserId ||
+        fresh.status !== "open" || fresh.decision?.state === "pending" ||
+        (phase === "offer" ? !!fresh.pendingTransfer : fresh.pendingTransfer?.id !== expectedPending)) {
+      throw new ConflictError("Transfer or case revision changed; refresh before retrying");
+    }
+    return this.bankingCasesRepo.update(existing.id, updates, ctx, "BankingCase");
+  }
+
+  /**
+   * Fetch ONLY a private, fixed-size invitation projection, not full case
+   * details. The invite recipient has no parent-case read access until accept.
+   * A backlog above 50 is flagged rather than silently inventing pagination.
+   */
+  public async listPendingCaseTransferInvitations(
+    ctx: TenantContext
+  ): Promise<{ items: BankingCaseTransferInvitation[]; hasMore: boolean }> {
+    if (this.postgresPersistence) {
+      return this.postgresPersistence.manager.withConnection(async connection => {
+        const rows = await connection.query(
+          `SELECT jsonb_build_object(
+             'caseId', id,
+             'transferId', record#>>'{pendingTransfer,id}',
+             'fromDepartment', record#>>'{pendingTransfer,fromDepartment}',
+             'targetDepartment', record#>>'{pendingTransfer,targetDepartment}',
+             'requestedAt', record#>>'{pendingTransfer,requestedAt}',
+             'revision', COALESCE((record->>'revision')::integer,1),
+             'priority', record->>'priority'
+            )::text AS record
+           FROM apex_domain_records
+           WHERE entity_type = 'BankingCase'
+             AND organization_id = ${quotePostgresLiteral(ctx.organizationId)}
+             AND record#>>'{pendingTransfer,recipientUserId}' = ${quotePostgresLiteral(ctx.userId)}
+             AND record->>'status' = 'open'
+           ORDER BY updated_at DESC, id DESC LIMIT 51`
+        );
+        const items = rows.rows.slice(0, 50).map(row =>
+          JSON.parse(row.record!) as BankingCaseTransferInvitation);
+        return { items, hasMore: rows.rows.length > 50 };
+      });
+    }
+    const matching = Array.from(this.bankingCases.values())
+      .filter(record => record.organizationId === ctx.organizationId &&
+        record.pendingTransfer?.recipientUserId === ctx.userId &&
+        record.status === "open")
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.id.localeCompare(a.id));
+    return {
+      items: matching.slice(0, 50).map(record => ({
+        caseId: record.id,
+        transferId: record.pendingTransfer!.id,
+        fromDepartment: record.pendingTransfer!.fromDepartment,
+        targetDepartment: record.pendingTransfer!.targetDepartment,
+        requestedAt: record.pendingTransfer!.requestedAt,
+        revision: record.revision ?? 1,
+        priority: record.priority,
+      })),
+      hasMore: matching.length > 50,
+    };
   }
 
   /**
