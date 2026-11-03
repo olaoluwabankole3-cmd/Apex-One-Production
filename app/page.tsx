@@ -10,6 +10,7 @@ import { useAuth } from "@/components/auth/AuthContext";
 import { apiClient } from "@/lib/apiClient";
 import type { BankingCaseRecord } from "@/lib/backend/database/schema";
 import { describeCaseAttention } from "@/lib/cortexCaseAttention";
+import { BankingTaskWorkspace } from "@/components/banking-cases/BankingTaskWorkspace";
 
 const journeys = [
   {
@@ -98,6 +99,8 @@ export default function FinancialOperationsOverview() {
           </div>
         </div>
       </header>
+
+      {canReadCases && <BankingTaskWorkspace />}
 
       {canReadCases && (
         <section className="rounded-xl border border-[#C58D5F]/25 bg-[#24231F] p-5 sm:p-7"
