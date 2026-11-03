@@ -120,6 +120,49 @@ try {
   assert.equal(created.sourceId, undefined);
   report("Operations manually creates an unverified case from classification-only draft; no source is transferred");
 
+  // Real UI: request a narrow Finance task while Operations retains the case.
+  const taskTitle = "Inspect synthetic settlement support question";
+  const requestTask = ops.getByRole("button", { name: "Request department task" });
+  await requestTask.waitFor({ state: "visible", timeout: 20000 });
+  await requestTask.click();
+  const taskForm = ops.getByRole("region", { name: "Cross-department task request" });
+  await taskForm.getByLabel("Named recipient").selectOption("user-stage10-finance");
+  await taskForm.getByLabel("Task title").fill(taskTitle);
+  await taskForm.getByLabel("Specific question (no confidential account details)")
+    .fill("Please check which approved source metadata would be required for this synthetic exception.");
+  await taskForm.getByLabel("Expected response or proof")
+    .fill("Report what internal source validation remains necessary without certifying posting.");
+  await taskForm.getByRole("button", { name: "Send task request" }).click();
+  await ops.getByText("Task requested. The case owner remains unchanged", { exact: false })
+    .waitFor({ state: "visible", timeout: 20000 });
+  const parentBeforeHandoff = ok(await request(ops, "GET", `/api/v1/banking-cases/${created.id}`),
+    200, "Task does not transfer parent case");
+  assert.equal(parentBeforeHandoff.ownerUserId, "user-stage10-operations");
+
+  await finance.goto(`${baseUrl}/work/cases`, { waitUntil: "domcontentloaded" });
+  await finance.locator("#cortex-banking-task-workspace").waitFor({ state: "visible" });
+  await finance.getByText(taskTitle, { exact: true }).waitFor({ state: "visible", timeout: 20000 });
+  denied(await request(finance, "GET", `/api/v1/banking-cases/${created.id}`),
+    [404], "Finance task assignee cannot read original confidential case");
+  await finance.getByRole("button", { name: "Accept task" }).click();
+  await finance.getByRole("button", { name: "Record response", exact: true })
+    .waitFor({ state: "visible", timeout: 20000 });
+  await finance.getByRole("button", { name: "Record response", exact: true }).click();
+  const taskResponse = "This is synthetic only; no authentic external settlement posting can be inferred from these records.";
+  await finance.getByRole("textbox", { name: "Your response" }).fill(taskResponse);
+  await finance.getByRole("button", { name: "Record response", exact: true }).last().click();
+  await finance.getByText("Task response recorded", { exact: false })
+    .waitFor({ state: "visible", timeout: 20000 });
+
+  await ops.goto(`${baseUrl}/work/cases`, { waitUntil: "domcontentloaded" });
+  await ops.getByText(taskResponse, { exact: true }).waitFor({ state: "visible", timeout: 20000 });
+  const taskList = ok(await request(ops, "GET", "/api/v1/banking-tasks?view=requested&limit=25"),
+    200, "Task requester scoped queue");
+  const finishedTask = taskList.find(x => x.title === taskTitle);
+  assert(finishedTask && finishedTask.status === "responded");
+  assert.equal(finishedTask.financialOutcomeVerified, false);
+  report("real browser: Operations requests Finance task without case transfer; recipient accepts/responds; original owner sees result but outcome stays unverified");
+
   const handoff = ok(await request(ops, "POST", `/api/v1/banking-cases/${created.id}/handoff`, {
     recipientUserId: "user-stage10-finance",
     expectedRevision: created.revision,
