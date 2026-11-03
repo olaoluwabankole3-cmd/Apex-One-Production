@@ -627,6 +627,8 @@ export interface BankingWorkTaskRecord {
   title: string;
   question: string;
   expectedResponse: string;
+  /** Optional UTC target, not proof of completion or an automated escalation. */
+  dueAt?: string;
   status: "requested" | "accepted" | "responded" | "declined";
   revision: number;
   requestedAt: string;
